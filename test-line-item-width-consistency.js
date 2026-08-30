@@ -56,7 +56,7 @@ async function main() {
   await wait(10);
   doc.getElementById('btnEditDetails').click();
   await wait(10);
-  console.log('STEP 12: Sales Order so-desc width = 160px (matches reference):', doc.querySelector('.so-desc').getAttribute('style').includes('width:160px'));
+  console.log('STEP 12: Sales Order description is now locked (not an editable width-constrained field) — confirms the newer locking fix took over this cell:', !doc.querySelector('.so-desc') && !!doc.querySelector('.line-desc-locked'));
   console.log('STEP 13: Sales Order so-qty width = 55px (matches reference):', doc.querySelector('.so-qty').getAttribute('style').includes('width:55px'));
   console.log('STEP 14: Sales Order so-uom width = 45px (matches reference):', doc.querySelector('.so-uom').getAttribute('style').includes('width:45px'));
   console.log('STEP 15: Sales Order so-price width = 80px (matches reference):', doc.querySelector('.so-price').getAttribute('style').includes('width:80px'));
@@ -84,7 +84,7 @@ async function main() {
   await wait(10);
   doc.getElementById('btnEditHeader').click();
   await wait(10);
-  console.log('STEP 21: Supplier PO spo-desc width = 160px (matches reference):', doc.querySelector('.spo-desc').getAttribute('style').includes('width:160px'));
+  console.log('STEP 21: Supplier PO description is now locked too (not an editable width-constrained field):', !doc.querySelector('.spo-desc') && !!doc.querySelector('.line-desc-locked'));
   console.log('STEP 22: Supplier PO spo-qty width = 55px (matches reference):', doc.querySelector('.spo-qty').getAttribute('style').includes('width:55px'));
   console.log('STEP 23: Supplier PO spo-cost width = 75px (matches reference):', doc.querySelector('.spo-cost').getAttribute('style').includes('width:75px'));
   console.log('STEP 24: Supplier PO correctly has NO internal-only highlighting anywhere:', doc.querySelectorAll('.internal-only-col').length === 0);

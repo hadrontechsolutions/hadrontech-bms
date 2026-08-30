@@ -124,11 +124,10 @@ async function main() {
   await wait(10);
   console.log('STEP 19: Amount recalculates live as cost is revised:', doc.querySelector('.spo-amount').textContent.includes('7,200.00'));
 
+  win.prompt = () => 'Additional handling fee item';
   doc.getElementById('btnAddSpoLine').click();
   await wait(10);
   const newRow = doc.querySelectorAll('#spoLinesBody tr')[1];
-  newRow.querySelector('.spo-desc').value = 'Additional handling fee item';
-  newRow.querySelector('.spo-desc').dispatchEvent(new win.Event('input'));
   newRow.querySelector('.spo-qty').value = '1';
   newRow.querySelector('.spo-qty').dispatchEvent(new win.Event('input'));
   newRow.querySelector('.spo-cost').value = '500';

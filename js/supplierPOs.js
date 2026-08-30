@@ -220,7 +220,7 @@ function renderSPOHeaderEdit(po) {
       const amount = r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0));
       l.amount = amount;
       return `<tr data-idx="${i}">
-        <td><textarea class="spo-desc" rows="1" style="width:160px;">${escapeHtml(l.description || '')}</textarea></td>
+        <td class="line-desc-locked" title="Description is locked to keep it consistent across the Quotation/Customer PO/Sales Order/Supplier PO chain — use a Note for any clarification.">${escapeHtml(l.description || '')}</td>
         <td><input class="spo-qty" type="number" min="0" step="any" value="${l.qty || 0}" style="width:55px;"></td>
         <td><input class="spo-uom" value="${escapeHtml(l.uom || 'pc')}" style="width:45px;"></td>
         <td><input class="spo-cost" type="number" min="0" step="0.01" value="${l.unitCost || 0}" style="width:75px;"></td>
@@ -237,7 +237,7 @@ function renderSPOHeaderEdit(po) {
         tr.querySelector('.spo-amount').textContent = formatMoney(amt, po.currency);
         markDirty();
       });
-      bind('.spo-desc', 'description'); bind('.spo-qty', 'qty', true); bind('.spo-uom', 'uom'); bind('.spo-cost', 'unitCost', true);
+      bind('.spo-qty', 'qty', true); bind('.spo-uom', 'uom'); bind('.spo-cost', 'unitCost', true);
     });
     body.querySelectorAll('[data-spodel]').forEach(btn => btn.addEventListener('click', () => {
       if (editLines.length === 1) { toast('A supplier PO needs at least one line item.', 'err'); return; }
@@ -247,7 +247,9 @@ function renderSPOHeaderEdit(po) {
   }
   drawSpoLines();
   document.getElementById('btnAddSpoLine').onclick = () => {
-    editLines.push({ lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', description: '', brand: '', modelNo: '', qty: 1, uom: 'pc', unitCost: 0, discountPercent: 0, receivedQty: 0, amount: 0 });
+    const description = prompt('Description for this new line item:');
+    if (!description || !description.trim()) return;
+    editLines.push({ lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', description: description.trim(), brand: '', modelNo: '', qty: 1, uom: 'pc', unitCost: 0, discountPercent: 0, receivedQty: 0, amount: 0 });
     drawSpoLines(); markDirty();
   };
 

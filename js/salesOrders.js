@@ -442,7 +442,7 @@ async function renderSOHeaderEdit(so) {
     body.innerHTML = editLines.map((l, i) => {
       const c = QuoteCalc.computeLine(l);
       return `<tr data-idx="${i}">
-        <td><textarea class="so-desc" rows="1" style="width:160px;">${escapeHtml(l.description || '')}</textarea></td>
+        <td class="line-desc-locked" title="Description is locked to keep it consistent across the Quotation/Customer PO/Sales Order/Supplier PO chain — use Internal Notes above for any clarification.">${escapeHtml(l.description || '')}</td>
         <td><input class="so-qty" type="number" min="0" step="any" value="${l.qty || 0}" style="width:55px;"></td>
         <td><input class="so-uom" value="${escapeHtml(l.uom || 'pc')}" style="width:45px;"></td>
         <td><input class="so-price" type="number" min="0" step="0.01" value="${l.unitPrice || 0}" style="width:80px;"></td>
@@ -462,7 +462,7 @@ async function renderSOHeaderEdit(so) {
         tr.querySelector('.so-amount-vat').textContent = formatMoney(c.lineTotal, so.currency);
         markDirty();
       });
-      bind('.so-desc', 'description'); bind('.so-qty', 'qty', true); bind('.so-uom', 'uom');
+      bind('.so-qty', 'qty', true); bind('.so-uom', 'uom');
       bind('.so-price', 'unitPrice', true); bind('.so-cost', 'unitCost', true); bind('.so-vat', 'vatRate', true);
     });
     body.querySelectorAll('[data-sodel]').forEach(btn => btn.addEventListener('click', () => {
@@ -473,7 +473,9 @@ async function renderSOHeaderEdit(so) {
   }
   drawSoLines();
   document.getElementById('btnAddSoLine').onclick = () => {
-    editLines.push({ lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', brand: '', modelNo: '', description: '', qty: 1, uom: 'pc', unitCost: 0, unitPrice: 0, discountPercent: 0, vatRate: 12, supplierId: '', deliveredQty: 0 });
+    const description = prompt('Description for this new line item:');
+    if (!description || !description.trim()) return; // no blank/locked-forever lines
+    editLines.push({ lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', brand: '', modelNo: '', description: description.trim(), qty: 1, uom: 'pc', unitCost: 0, unitPrice: 0, discountPercent: 0, vatRate: 12, supplierId: '', deliveredQty: 0 });
     drawSoLines(); markDirty();
   };
 

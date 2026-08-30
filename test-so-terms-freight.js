@@ -71,12 +71,11 @@ async function main() {
   console.log('STEP 9: VAT% column present on line editor:', !!doc.querySelector('.so-vat'));
   console.log('STEP 10: Existing line correctly defaults to 12% VAT, matching original quotation line:', doc.querySelector('.so-vat').value === '12');
 
+  win.prompt = () => 'Delivery via lalamove';
   doc.getElementById('btnAddSoLine').click();
   await wait(10);
   const rows2 = doc.querySelectorAll('#soLinesBody tr');
   const deliveryRow = rows2[1];
-  deliveryRow.querySelector('.so-desc').value = 'Delivery via lalamove';
-  deliveryRow.querySelector('.so-desc').dispatchEvent(new win.Event('input'));
   deliveryRow.querySelector('.so-qty').value = '1';
   deliveryRow.querySelector('.so-qty').dispatchEvent(new win.Event('input'));
   deliveryRow.querySelector('.so-price').value = '346';

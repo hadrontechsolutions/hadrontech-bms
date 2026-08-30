@@ -175,6 +175,7 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
 .internal-only-col{background:rgba(217,122,6,.05);}
 th.internal-only-col{color:var(--amber) !important;}
 .cell-needs-input{background:var(--danger-lt); color:var(--danger); font-weight:700; border-radius:4px; padding:3px 8px; display:inline-block;}
+.line-desc-locked{background:#f5f6f8; color:var(--ink); cursor:not-allowed;}
 
 .status-actions{display:flex; gap:8px; flex-wrap:wrap;}
 .supplier-group{display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid var(--line); border-radius:5px; margin-bottom:8px; font-size:13px;}
