@@ -4,7 +4,7 @@
    One Sales Order can spawn multiple Supplier POs (grouped by supplier).
    ============================================================ */
 
-const SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery', 'Delivered', 'Cancelled'];
+const SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery', 'Partially Delivered', 'Delivered', 'Cancelled'];
 
 /** Called from the Customer PO detail page. Builds a Sales Order from quotation lines (if any) or the PO amount alone. */
 async function createFromCustomerPO(po, quotation) {
@@ -301,27 +301,41 @@ async function renderSODetail(id) {
 
 /* ---------- RECORD DELIVERY ---------- */
 
-function renderRecordDeliveryForm(so, id) {
+async function renderRecordDeliveryForm(so, id) {
   const host = document.getElementById('recordDeliveryHost');
   const deliverableLines = (so.lines || []).filter(l => (l.deliveredQty || 0) < l.qty);
   if (deliverableLines.length === 0) {
     host.innerHTML = `<div class="card"><div class="empty-inline">Everything on this order has already been delivered. Nothing left to record.</div></div>`;
     return;
   }
+  // You can't hand a customer stock you don't actually have — cap what can be entered here to
+  // what's really On Hand right now, the same number shown on the product's own Stock panel.
+  const getOnHand = async (productId) => {
+    const movements = await DB.dbQueryIndex('stockMovements', 'productId', Number(productId));
+    return r2(movements.reduce((s, m) => s + m.qty, 0));
+  };
+  const onHandByLine = {};
+  for (const l of deliverableLines) {
+    if (l.itemId) onHandByLine[l.lineId] = await getOnHand(l.itemId);
+  }
   host.innerHTML = `
     <div class="card">
       <h3 class="section-title">Record Delivery</h3>
-      <p class="muted-text">Enter how many units actually went out to the customer for each line. This can be done more than once for partial shipments — only the quantity entered here leaves stock.</p>
+      <p class="muted-text">Enter how many units actually went out to the customer for each line. This can be done more than once for partial shipments — only the quantity entered here leaves stock. You can't deliver more than what's actually On Hand — if a supplier order hasn't been received yet, receive it first.</p>
       <table class="data-table compact">
         <thead><tr><th>Description</th><th>Ordered</th><th>Delivered So Far</th><th>Delivering Now</th></tr></thead>
         <tbody>
           ${deliverableLines.map(l => {
             const remaining = r2(l.qty - (l.deliveredQty || 0));
-            return `<tr data-lineid="${l.lineId}">
-              <td>${escapeHtml(l.description)}${!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : ''}</td>
+            const onHand = l.itemId ? (onHandByLine[l.lineId] ?? 0) : null;
+            const cap = onHand === null ? remaining : Math.min(remaining, Math.max(onHand, 0));
+            const stockNote = onHand !== null && onHand < remaining
+              ? `<br><span class="cell-needs-input">Only ${onHand} in stock — receive more from the supplier first</span>` : '';
+            return `<tr data-lineid="${l.lineId}" data-onhand="${onHand === null ? '' : onHand}">
+              <td>${escapeHtml(l.description)}${!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : ''}${stockNote}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
               <td>${l.deliveredQty || 0} ${escapeHtml(l.uom)}</td>
-              <td><input type="number" min="0" max="${remaining}" step="any" class="deliv-qty" value="${remaining}" style="width:90px;"></td>
+              <td><input type="number" min="0" max="${cap}" step="any" class="deliv-qty" value="${cap}" style="width:90px;"></td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -349,6 +363,14 @@ function renderRecordDeliveryForm(so, id) {
       const remaining = r2(line.qty - (line.deliveredQty || 0));
       if (qtyNow > remaining) { toast(`Cannot deliver more than the remaining ${remaining} for "${line.description}".`, 'err'); return; }
 
+      if (line.itemId) {
+        const currentOnHand = await getOnHand(line.itemId);
+        if (qtyNow > currentOnHand) {
+          toast(`Cannot deliver ${qtyNow} of "${line.description}" — only ${currentOnHand} actually in stock. Receive the supplier order first, or reduce the quantity.`, 'err');
+          return;
+        }
+      }
+
       line.deliveredQty = r2((line.deliveredQty || 0) + qtyNow);
       anyDelivered = true;
 
@@ -363,10 +385,12 @@ function renderRecordDeliveryForm(so, id) {
 
     if (!anyDelivered) { toast('Enter a quantity greater than 0 for at least one line.', 'err'); return; }
 
+    // Mirrors exactly how Supplier PO already auto-reflects receiving progress — a partial
+    // delivery is a real, meaningful state, not silently invisible until everything's out.
     const allDelivered = so.lines.every(l => (l.deliveredQty || 0) >= l.qty);
-    if (allDelivered && so.status !== 'Cancelled') {
-      so.status = 'Delivered';
-      so.statusHistory = (so.statusHistory || []).concat([{ status: 'Delivered', date: now }]);
+    if (so.status !== 'Cancelled') {
+      so.status = allDelivered ? 'Delivered' : 'Partially Delivered';
+      so.statusHistory = (so.statusHistory || []).concat([{ status: so.status, date: now }]);
     }
     so.updatedAt = now; so.modifiedBy = settings.userName;
     await DB.dbPut('salesOrders', so);

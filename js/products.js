@@ -55,7 +55,7 @@ Entities.defineEntity({
       DB.dbGetAll('salesOrders')
     ]);
     const onHand = r2(movements.reduce((s, m) => s + m.qty, 0));
-    const OPEN_SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery'];
+    const OPEN_SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery', 'Partially Delivered'];
     let committed = 0;
     salesOrders.forEach(so => {
       if (!OPEN_SO_STATUSES.includes(so.status)) return;

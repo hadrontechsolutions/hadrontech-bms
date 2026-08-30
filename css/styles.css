@@ -126,7 +126,7 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
    green — confirming an order is the START of fulfillment, not the finish. */
 .badge-sent,.badge-sourcing,.badge-in-production,.badge-ready-for-shipment,.badge-ready-for-delivery,.badge-shipped,.badge-open,.badge-confirmed,.badge-ordered-from-supplier{background:var(--info-lt); color:var(--info);}
 /* AMBER — needs a decision or is only partially done */
-.badge-under-review,.badge-awaiting-confirmation,.badge-partially-received,.badge-prospect{background:var(--amber-lt); color:var(--amber);}
+.badge-under-review,.badge-awaiting-confirmation,.badge-partially-received,.badge-prospect,.badge-partially-delivered{background:var(--amber-lt); color:var(--amber);}
 .badge-lost,.badge-expired{background:var(--danger-lt); color:var(--danger);}
 .badge-info{background:var(--info-lt); color:var(--info);}
 .badge-expires-today{background:var(--amber-lt); color:var(--amber);}
