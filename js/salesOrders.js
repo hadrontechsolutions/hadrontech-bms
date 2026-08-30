@@ -213,7 +213,10 @@ async function renderSODetail(id) {
               supplierCell = escapeHtml(supMap[l.supplierId]?.companyName || '—');
               sourcingCell = '<span class="badge badge-pending">Pending</span>';
             }
-            return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${l.deliveredQty || 0} ${escapeHtml(l.uom)}${(l.deliveredQty || 0) >= l.qty ? ' ✓' : ''}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
+            const deliveredCell = (l.deliveredQty || 0) >= l.qty
+              ? `${l.deliveredQty || 0} ${escapeHtml(l.uom)} ✓`
+              : `<span class="cell-needs-input">${l.deliveredQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
+            return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
           }).join('')}
         </tbody>
       </table>

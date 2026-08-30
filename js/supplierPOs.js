@@ -118,7 +118,12 @@ async function renderSPODetail(id) {
       <h3 class="section-title">Items</h3>
       <table class="data-table compact">
         <thead><tr><th>Description</th><th>Ordered Qty</th><th>Received Qty</th><th>Unit Cost</th><th>Amount</th></tr></thead>
-        <tbody>${po.lines.map(l => `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${l.receivedQty || 0} ${escapeHtml(l.uom)}${(l.receivedQty || 0) >= l.qty ? ' ✓' : ''}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`).join('')}</tbody>
+        <tbody>${po.lines.map(l => {
+          const receivedCell = (l.receivedQty || 0) >= l.qty
+            ? `${l.receivedQty || 0} ${escapeHtml(l.uom)} ✓`
+            : `<span class="cell-needs-input">${l.receivedQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
+          return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
+        }).join('')}</tbody>
       </table>
       <div class="totals">
         <div class="line"><span>Items Total</span><span>${formatMoney(po.lines.reduce((s, l) => s + l.amount, 0), po.currency)}</span></div>
