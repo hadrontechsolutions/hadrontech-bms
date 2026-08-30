@@ -4,7 +4,7 @@
    One Sales Order can spawn multiple Supplier POs (grouped by supplier).
    ============================================================ */
 
-const SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery', 'Delivered', 'Completed', 'Cancelled'];
+const SO_STATUSES = ['Draft', 'Confirmed', 'Sourcing', 'Ordered from Supplier', 'Partially Received', 'Ready for Delivery', 'Delivered', 'Cancelled'];
 
 /** Called from the Customer PO detail page. Builds a Sales Order from quotation lines (if any) or the PO amount alone. */
 async function createFromCustomerPO(po, quotation) {
@@ -95,13 +95,17 @@ Router.route('/sales-orders', async () => {
       <table class="data-table">
         <thead><tr><th>SO #</th><th>Customer</th><th>Quotation #</th><th>Customer PO #</th><th>Order Date</th><th>Status</th><th>Total</th></tr></thead>
         <tbody>
-          ${all.map(so => `
+          ${all.map(so => {
+            const mismatched = so.status === 'Delivered' && (so.lines || []).some(l => (l.deliveredQty || 0) < l.qty);
+            const badgeHTML = mismatched ? `<span class="badge badge-lost">DELIVERED — INCOMPLETE</span>` : statusBadge(so.status);
+            return `
             <tr class="clickable-row" data-hash="/sales-orders/${so.id}">
               <td>${escapeHtml(so.soNo)}</td><td>${escapeHtml(custMap[so.customerId]?.companyName || '—')}</td>
               <td>${escapeHtml(quoteMap[so.quotationId]?.quotationNo || '—')}</td>
               <td>${escapeHtml(cpoMap[so.customerPOId]?.customerPoNumber || cpoMap[so.customerPOId]?.poNo || '—')}</td>
-              <td>${formatDate(so.orderDate)}</td><td>${statusBadge(so.status)}</td><td>${formatMoney(so.grandTotal, so.currency)}</td>
-            </tr>`).join('')}
+              <td>${formatDate(so.orderDate)}</td><td>${badgeHTML}</td><td>${formatMoney(so.grandTotal, so.currency)}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
       ${all.length === 0 ? `<div class="empty-inline">No sales orders yet. Convert a won quotation's customer PO to create one.</div>` : ''}
@@ -136,9 +140,13 @@ async function renderSODetail(id) {
   const pendingBySupplier = {};
   pendingLines.forEach(l => { (pendingBySupplier[l.supplierId] = pendingBySupplier[l.supplierId] || []).push(l); });
 
+  const undeliveredLines = (so.lines || []).filter(l => (l.deliveredQty || 0) < l.qty);
+  const showDeliveryMismatch = so.status === 'Delivered' && undeliveredLines.length > 0;
+  const headerBadge = showDeliveryMismatch ? `<span class="badge badge-lost">DELIVERED — INCOMPLETE</span>` : statusBadge(so.status);
+
   content.innerHTML = `
     <div class="page-head">
-      <div><div class="doc-number-tag">${escapeHtml(so.soNo)}</div><h1>${escapeHtml(customer?.companyName || '—')} ${statusBadge(so.status)}</h1></div>
+      <div><div class="doc-number-tag">${escapeHtml(so.soNo)}</div><h1>${escapeHtml(customer?.companyName || '—')} ${headerBadge}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         <button class="btn-line" id="btnProforma">${existingPI ? `View Proforma Invoice (${escapeHtml(existingPI.piNo)})` : 'Generate Proforma Invoice'}</button>
@@ -147,6 +155,8 @@ async function renderSODetail(id) {
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
+
+    ${showDeliveryMismatch ? `<div class="card danger-card">⚠ This order is marked <b>Delivered</b>, but ${undeliveredLines.length} line(s) don't actually have their delivered quantity recorded — the "Delivered" column below still shows less than what was ordered. This usually means the status was set manually instead of through "Record Delivery," so stock was never actually moved. Use <b>Record Delivery</b> above to correct this.</div>` : ''}
 
     <div class="card">
       <div class="status-actions">
@@ -191,7 +201,7 @@ async function renderSODetail(id) {
               // Only the genuinely-unassigned case gets the editable dropdown — a line that
               // already has a supplier (just not yet turned into a Supplier PO) stays as
               // plain text so it can't be confused with, or accidentally overwrite, this one.
-              const canAssign = !['Completed', 'Cancelled'].includes(so.status);
+              const canAssign = !['Delivered', 'Cancelled'].includes(so.status);
               supplierCell = canAssign
                 ? `<select class="ln-assign-supplier" data-lineid="${l.lineId}" style="font-size:12px; padding:4px 6px;">
                      <option value="">— Assign supplier —</option>
@@ -252,11 +262,22 @@ async function renderSODetail(id) {
     await DB.logActivity(`Deleted sales order ${so.soNo}`);
     toast('Deleted.'); Router.navigate('/sales-orders');
   };
-  const SO_TERMINAL = ['Completed', 'Cancelled'];
   content.querySelectorAll('.status-btn').forEach(btn => btn.onclick = async () => {
     const newStatus = btn.dataset.status;
+    const SO_TERMINAL = ['Cancelled'];
     const movingIntoTerminal = SO_TERMINAL.includes(newStatus);
     const hasChildPOs = supplierPOs.length > 0;
+
+    if (newStatus === 'Delivered') {
+      // "Record Delivery" is the correct path — it logs real quantities and moves actual
+      // stock. Manually flipping the status here bypasses both, so if quantities don't
+      // actually match, the person needs to know exactly what they're overriding.
+      const undelivered = (so.lines || []).filter(l => (l.deliveredQty || 0) < l.qty);
+      if (undelivered.length > 0) {
+        const detail = undelivered.map(l => `• ${l.description}: ${l.deliveredQty || 0} of ${l.qty} ${l.uom} recorded`).join('\n');
+        if (!confirm(`${undelivered.length} line(s) don't actually have their delivered quantity recorded yet:\n\n${detail}\n\nThe correct way to mark this order Delivered is the "Record Delivery" button above — it logs the real quantities and updates stock correctly. Marking it Delivered here will NOT do either of those things.\n\nOverride and mark it Delivered anyway?`)) return;
+      }
+    }
     if (movingIntoTerminal) {
       const extra = newStatus === 'Cancelled' && hasChildPOs ? ` This sales order has ${supplierPOs.length} linked Supplier PO(s) that will NOT be automatically cancelled — check those separately.` : '';
       if (!confirm(`Mark ${so.soNo} as ${newStatus}?${extra}`)) return;

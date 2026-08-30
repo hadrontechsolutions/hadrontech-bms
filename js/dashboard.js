@@ -18,11 +18,11 @@ Router.route('/dashboard', async () => {
   const lostQuotes = latestQuotes.filter(q => q.status === 'Lost').length;
   const winRate = (wonQuotes + lostQuotes) > 0 ? Math.round((wonQuotes / (wonQuotes + lostQuotes)) * 100) : 0;
   const cpoReceived = customerPOs.length;
-  const openSO = salesOrders.filter(o => !['Completed', 'Cancelled'].includes(o.status)).length;
+  const openSO = salesOrders.filter(o => !['Delivered', 'Cancelled'].includes(o.status)).length;
   const spoAwaiting = supplierPOs.filter(p => p.status === 'Awaiting Confirmation').length;
   const awaitingDelivery = salesOrders.filter(o => ['Ready for Delivery', 'Partially Received'].includes(o.status)).length;
-  const completedOrders = salesOrders.filter(o => o.status === 'Completed').length;
-  const outstandingValue = salesOrders.filter(o => !['Completed', 'Cancelled'].includes(o.status)).reduce((s, o) => s + (o.grandTotal || 0), 0);
+  const completedOrders = salesOrders.filter(o => o.status === 'Delivered').length;
+  const outstandingValue = salesOrders.filter(o => !['Delivered', 'Cancelled'].includes(o.status)).reduce((s, o) => s + (o.grandTotal || 0), 0);
   const expiredNeedingReview = latestQuotes.filter(q => getExpiryInfo(q).state === 'expired');
   const expiringWithin7 = latestQuotes.filter(q => ['today', 'soon'].includes(getExpiryInfo(q).state));
 
@@ -63,7 +63,7 @@ Router.route('/dashboard', async () => {
       ${statCard(openSO, 'Open Sales Orders')}
       ${statCard(spoAwaiting, 'Supplier POs Awaiting Confirmation')}
       ${statCard(awaitingDelivery, 'Orders Awaiting Delivery')}
-      ${statCard(completedOrders, 'Completed Orders')}
+      ${statCard(completedOrders, 'Delivered Orders')}
       ${statCard(winRate + '%', 'Quotation Win Rate')}
     </div>
 

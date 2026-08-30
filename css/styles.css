@@ -99,6 +99,7 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
 .card h3{margin-top:0;}
 .section-title{font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--steel); border-bottom:1px solid var(--line); padding-bottom:8px; margin:0 0 14px;}
 .warning-card{background:#fff8ea; border-color:#f0d9a6; color:#7a5b00; font-size:13px;}
+.danger-card{background:var(--danger-lt); border-color:#f0b8b3; color:var(--danger); font-size:13px;}
 .callout{font-size:13px;}
 .callout-info{background:var(--warn-lt); border-color:#e8d48a; color:#6b4f00;}
 .muted-text{color:var(--muted); font-size:12px;}
