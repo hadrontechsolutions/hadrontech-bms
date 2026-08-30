@@ -46,12 +46,16 @@ Router.route('/supplier-pos', async () => {
       <table class="data-table">
         <thead><tr><th>PO #</th><th>Supplier</th><th>Sales Order</th><th>PO Date</th><th>Status</th><th>Total Cost</th></tr></thead>
         <tbody>
-          ${all.map(po => `
+          ${all.map(po => {
+            const mismatched = po.status === 'Received' && (po.lines || []).some(l => (l.receivedQty || 0) < l.qty);
+            const badgeHTML = mismatched ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
+            return `
             <tr class="clickable-row" data-hash="/supplier-pos/${po.id}">
               <td>${escapeHtml(po.poNo)}</td><td>${escapeHtml(supMap[po.supplierId]?.companyName || '—')}</td>
               <td>${escapeHtml(soMap[po.salesOrderId]?.soNo || '—')}</td>
-              <td>${formatDate(po.poDate)}</td><td>${statusBadge(po.status)}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
-            </tr>`).join('')}
+              <td>${formatDate(po.poDate)}</td><td>${badgeHTML}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
       ${all.length === 0 ? `<div class="empty-inline">No supplier POs yet. Create one from a Sales Order.</div>` : ''}
@@ -73,9 +77,13 @@ async function renderSPODetail(id) {
 
   Router.setBreadcrumb([{ label: 'Supplier Purchase Orders', hash: '/supplier-pos' }, { label: po.poNo }]);
 
+  const unreceivedLines = (po.lines || []).filter(l => (l.receivedQty || 0) < l.qty);
+  const showReceiveMismatch = po.status === 'Received' && unreceivedLines.length > 0;
+  const headerBadge = showReceiveMismatch ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
+
   content.innerHTML = `
     <div class="page-head">
-      <div><div class="doc-number-tag">${escapeHtml(po.poNo)}</div><h1>${escapeHtml(supplier?.companyName || '—')} ${statusBadge(po.status)}</h1></div>
+      <div><div class="doc-number-tag">${escapeHtml(po.poNo)}</div><h1>${escapeHtml(supplier?.companyName || '—')} ${headerBadge}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         <button class="btn-amber" id="btnReceiveStock">Receive Stock</button>
@@ -83,6 +91,8 @@ async function renderSPODetail(id) {
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
+
+    ${showReceiveMismatch ? `<div class="card danger-card">⚠ This PO is marked <b>Received</b>, but ${unreceivedLines.length} line(s) don't actually have their received quantity recorded — the "Received Qty" column below still shows less than what was ordered. This usually means the status was set manually instead of through "Receive Stock," so your inventory was never actually updated. Use <b>Receive Stock</b> above to correct this.</div>` : ''}
 
     <div class="card"><div class="status-actions">
       ${SPO_STATUSES.filter(s => s !== po.status).map(s => `<button class="btn-line btn-sm status-btn" data-status="${s}">Mark: ${s}</button>`).join('')}
@@ -138,6 +148,17 @@ async function renderSPODetail(id) {
   const SPO_TERMINAL = ['Received', 'Cancelled'];
   content.querySelectorAll('.status-btn').forEach(btn => btn.onclick = async () => {
     const newStatus = btn.dataset.status;
+    if (newStatus === 'Received') {
+      // "Receive Stock" is the correct path — it logs real quantities and moves actual
+      // stock into inventory. Manually flipping the status here bypasses both, so if
+      // quantities don't actually match, the person needs to know exactly what they're
+      // overriding.
+      const unreceived = (po.lines || []).filter(l => (l.receivedQty || 0) < l.qty);
+      if (unreceived.length > 0) {
+        const detail = unreceived.map(l => `• ${l.description}: ${l.receivedQty || 0} of ${l.qty} ${l.uom} recorded`).join('\n');
+        if (!confirm(`${unreceived.length} line(s) don't actually have their received quantity recorded yet:\n\n${detail}\n\nThe correct way to mark this PO Received is the "Receive Stock" button above — it logs the real quantities and updates your inventory correctly. Marking it Received here will NOT do either of those things.\n\nOverride and mark it Received anyway?`)) return;
+      }
+    }
     if (SPO_TERMINAL.includes(newStatus)) {
       if (!confirm(`Mark ${po.poNo} as ${newStatus}? This is a terminal status for this purchase order.`)) return;
     }
