@@ -97,8 +97,8 @@ async function main() {
   console.log('STEP 25: Customer PO po-desc width = 160px (matches reference):', doc.querySelector('.po-desc').getAttribute('style').includes('width:160px'));
   console.log('STEP 26: Customer PO po-qty width = 55px (matches reference):', doc.querySelector('.po-qty').getAttribute('style').includes('width:55px'));
   console.log('STEP 27: Customer PO po-price width = 80px (matches reference):', doc.querySelector('.po-price').getAttribute('style').includes('width:80px'));
-  console.log('STEP 28: Customer PO catalog select uses min-width:110px, matching Quotation\'s exact technique:', doc.querySelector('.po-catalog').getAttribute('style').includes('min-width:110px'));
-  console.log('STEP 29: Customer PO correctly has NO internal-only highlighting (no cost/margin data captured here):', doc.querySelectorAll('.internal-only-col').length === 0);
+  console.log('STEP 28: Customer PO catalog uses the same searchable picker button as Quotation (not a plain <select> anymore):', !doc.querySelector('.po-catalog') && doc.querySelector('.po-catalog-btn').classList.contains('item-picker-trigger'));
+  console.log('STEP 29: Customer PO\'s only internal-only content is the legitimate "Amount w/ VAT" column (no cost/margin data — that column was added correctly in a later session):', doc.querySelectorAll('.internal-only-col').length === 2 && doc.querySelector('th.internal-only-col').textContent.includes('Amount w/ VAT'));
 
   console.log('\n=== LINE-ITEM WIDTH STANDARDIZATION + INTERNAL-ONLY HIGHLIGHTING VERIFIED ===');
 }

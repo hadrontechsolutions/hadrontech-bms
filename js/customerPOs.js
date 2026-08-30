@@ -74,9 +74,6 @@ async function renderCPOForm(id, query) {
       the items here. This is specifically for orders with nothing behind them yet — most
       commonly sample requests — where otherwise there'd be no structured record of what was
       actually asked for beyond a single lump PO Amount. */
-  function productOptionsForCPO(selectedId) {
-    return `<option value="">—</option>` + products.filter(p => !p.archived).map(p => `<option value="${p.id}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(p.itemNo)} — ${escapeHtml(p.description || '').slice(0, 30)}</option>`).join('');
-  }
   function poLinesBlockHTML(hasQuotation, freight) {
     if (hasQuotation) return '';
     return `
@@ -209,7 +206,7 @@ async function renderCPOForm(id, query) {
       const amountWithVat = r2(amount * (1 + (Number(l.vatRate) || 0) / 100));
       l.amount = amount; l.amountWithVat = amountWithVat;
       return `<tr data-idx="${i}">
-        <td><select class="po-catalog" style="min-width:110px;">${productOptionsForCPO(l.itemId)}</select></td>
+        <td><button type="button" class="item-picker-trigger po-catalog-btn">${l.itemId ? escapeHtml(products.find(p => String(p.id) === String(l.itemId))?.itemNo || '(item removed)') : '+ Select Item'}</button></td>
         <td><textarea class="po-desc" rows="1" style="width:160px;">${escapeHtml(l.description || '')}</textarea></td>
         <td><input class="po-qty" type="number" min="0" step="any" value="${l.qty || 0}" style="width:55px;"></td>
         <td><input class="po-uom" value="${escapeHtml(l.uom || 'pc')}" style="width:45px;"></td>
@@ -233,17 +230,25 @@ async function renderCPOForm(id, query) {
         markDirty();
       });
       bind('.po-desc', 'description'); bind('.po-qty', 'qty', true); bind('.po-uom', 'uom'); bind('.po-price', 'unitPrice', true); bind('.po-vat', 'vatRate', true);
-      tr.querySelector('.po-catalog').addEventListener('change', (e) => {
-        const p = products.find(pr => String(pr.id) === e.target.value);
-        poLines[idx].itemId = e.target.value ? Number(e.target.value) : '';
-        if (p) {
-          poLines[idx].description = p.description || poLines[idx].description;
-          poLines[idx].unitPrice = Number(p.standardPrice) || poLines[idx].unitPrice;
-          poLines[idx].uom = p.uom || poLines[idx].uom || 'pc';
-          drawPOLines();
-          syncPOAmountFromLines();
-        }
-        markDirty();
+      tr.querySelector('.po-catalog-btn').addEventListener('click', () => {
+        openItemPicker(
+          products.filter(p => !p.archived),
+          {
+            title: 'Select Item from Catalog',
+            getLabel: (p) => `${p.itemNo} — ${p.description || ''}`,
+            getSubLabel: (p) => [p.brand, p.modelNo].filter(Boolean).join(' · '),
+            getSearchText: (p) => [p.itemNo, p.description, p.brand, p.modelNo].filter(Boolean).join(' ')
+          },
+          (p) => {
+            poLines[idx].itemId = p.id;
+            poLines[idx].description = p.description || poLines[idx].description;
+            poLines[idx].unitPrice = Number(p.standardPrice) || poLines[idx].unitPrice;
+            poLines[idx].uom = p.uom || poLines[idx].uom || 'pc';
+            drawPOLines();
+            syncPOAmountFromLines();
+            markDirty();
+          }
+        );
       });
     });
     body.querySelectorAll('[data-podel]').forEach(btn => btn.addEventListener('click', () => {

@@ -110,6 +110,51 @@ function statusBadge(status) {
   return `<span class="${cls}">${escapeHtml(status || '—')}</span>`;
 }
 
+/** A searchable, scrollable item picker — used anywhere a person needs to choose from a
+    catalog that could grow large, instead of a plain <select> that gets unwieldy once there
+    are many items. items: array of records. options.getLabel/getSubLabel/getSearchText are
+    functions given a record; onSelect(record) fires once, after which the picker closes itself. */
+function openItemPicker(items, options, onSelect) {
+  const overlay = document.createElement('div');
+  overlay.className = 'item-picker-overlay';
+  overlay.innerHTML = `
+    <div class="item-picker-box">
+      <div class="item-picker-header">
+        <h3>${escapeHtml(options.title || 'Select Item')}</h3>
+        <input type="text" class="item-picker-search" placeholder="Type to search...">
+      </div>
+      <div class="item-picker-list"></div>
+      <div class="item-picker-footer"><button type="button" class="btn-line btn-sm" data-cancel>Cancel</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const searchInput = overlay.querySelector('.item-picker-search');
+  const listEl = overlay.querySelector('.item-picker-list');
+  const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+
+  function renderList(filter) {
+    const f = (filter || '').trim().toLowerCase();
+    const filtered = !f ? items : items.filter(it => (options.getSearchText ? options.getSearchText(it) : String(it.description || '')).toLowerCase().includes(f));
+    if (filtered.length === 0) {
+      listEl.innerHTML = `<div class="item-picker-empty">No matches found.</div>`;
+      return;
+    }
+    listEl.innerHTML = filtered.map((it, i) => `
+      <div class="item-picker-row" data-idx="${i}">
+        <div class="ipr-title">${escapeHtml(options.getLabel ? options.getLabel(it) : String(it.description || ''))}</div>
+        ${options.getSubLabel ? `<div class="ipr-sub">${escapeHtml(options.getSubLabel(it))}</div>` : ''}
+      </div>`).join('');
+    listEl.querySelectorAll('.item-picker-row').forEach(row => {
+      row.addEventListener('click', () => { const item = filtered[Number(row.dataset.idx)]; close(); onSelect(item); });
+    });
+  }
+  renderList('');
+  searchInput.addEventListener('input', () => renderList(searchInput.value));
+  overlay.querySelector('[data-cancel]').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', function escHandler(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); } });
+  setTimeout(() => searchInput.focus(), 0);
+}
+
 function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms || 250); };
@@ -139,5 +184,5 @@ function arrayToCSV(rows, columns) {
 window.Util = {
   r2, formatMoney, formatDate, todayISO, addDaysISO, formatLocalISO, daysBetweenISO, escapeHtml, toast,
   markDirty, clearDirty, isDirty, guardNavigation, el, statusBadge, debounce,
-  csvEscape, downloadFile, arrayToCSV, currencyList
+  csvEscape, downloadFile, arrayToCSV, currencyList, openItemPicker
 };

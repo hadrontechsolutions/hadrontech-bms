@@ -30,8 +30,9 @@ async function main() {
   await wait(10);
   console.log('STEP 3b: Clicking "+ Add Line" adds a row and locks PO Amount to the calculated total:', doc.querySelectorAll('#poLinesBody tr').length === 1 && doc.getElementById('f_poAmount').readOnly);
   const row1 = doc.querySelector('#poLinesBody tr');
-  row1.querySelector('.po-catalog').value = String(prodId);
-  row1.querySelector('.po-catalog').dispatchEvent(new win.Event('change'));
+  row1.querySelector('.po-catalog-btn').click();
+  await wait(10);
+  doc.querySelector('.item-picker-row').click();
   await wait(10);
   console.log('STEP 4: Picking a catalog item auto-fills description and price:', doc.querySelector('.po-desc').value.includes('Sample Wooden Hand Brush') && doc.querySelector('.po-price').value === '238');
 

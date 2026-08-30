@@ -317,10 +317,6 @@ async function renderQuoteForm(id) {
 
   let lines = q.lines && q.lines.length ? q.lines : [emptyLine()];
 
-  function productOptions(selectedId) {
-    return `<option value="">—</option>` + products.filter(p => !p.archived).map(p =>
-      `<option value="${p.id}" ${String(p.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(p.itemNo)} — ${escapeHtml(p.description).slice(0, 30)}</option>`).join('');
-  }
   function supplierOptions(selectedId) {
     return `<option value="">—</option>` + suppliers.filter(s => !s.archived).map(s =>
       `<option value="${s.id}" ${String(s.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(s.companyName).slice(0, 25)}</option>`).join('');
@@ -349,7 +345,7 @@ async function renderQuoteForm(id) {
       return `
       <tr data-lid="${l.lineId}">
         <td>${i + 1}</td>
-        <td><select class="ln-catalog" style="min-width:110px;">${productOptions(l.itemId)}</select></td>
+        <td><button type="button" class="item-picker-trigger ln-catalog-btn">${l.itemId ? escapeHtml(products.find(p => String(p.id) === String(l.itemId))?.itemNo || '(item removed)') : '+ Select Item'}</button></td>
         <td><input class="ln-brand" value="${escapeHtml(l.brand)}" style="width:70px;"></td>
         <td><input class="ln-model" value="${escapeHtml(l.modelNo)}" style="width:90px;"></td>
         <td><textarea class="ln-desc" rows="1" style="width:160px;">${escapeHtml(l.description)}</textarea></td>
@@ -407,23 +403,28 @@ async function renderQuoteForm(id) {
         drawLines(); refreshTotals(); markDirty();
       });
       tr.querySelector('.ln-supplier').addEventListener('change', (e) => { line.supplierId = e.target.value; markDirty(); });
-      tr.querySelector('.ln-catalog').addEventListener('change', (e) => {
-        const pid = e.target.value;
-        line.itemId = pid;
-        const p = products.find(x => String(x.id) === String(pid));
-        if (p) {
-          line.brand = p.brand || ''; line.modelNo = p.modelNo || ''; line.description = p.description || '';
-          line.unitCost = p.standardCost || 0; line.unitPrice = p.standardPrice || 0; line.uom = p.uom || 'pc';
-          line.supplierId = p.defaultSupplierId || '';
-          line.costCurrency = p.currency || currentCurrency();
-          line.costExchangeRate = referenceRate(line.costCurrency, currentCurrency(), settings);
-          // Zero-Rated/Exempt items shouldn't silently carry a leftover VAT rate from the previous line;
-          // VATable items pick up the quotation's standard rate unless the header is itself Zero-Rated/Exempt.
-          const headerVat = document.getElementById('f_vatMode').value;
-          if (p.vatClass === 'Zero-Rated' || p.vatClass === 'VAT Exempt' || headerVat !== 'Standard12') line.vatRate = 0;
-          else line.vatRate = 12;
-        }
-        drawLines(); refreshTotals(); markDirty();
+      tr.querySelector('.ln-catalog-btn').addEventListener('click', () => {
+        openItemPicker(
+          products.filter(p => !p.archived),
+          {
+            title: 'Select Item from Catalog',
+            getLabel: (p) => `${p.itemNo} — ${p.description || ''}`,
+            getSubLabel: (p) => [p.brand, p.modelNo].filter(Boolean).join(' · '),
+            getSearchText: (p) => [p.itemNo, p.description, p.brand, p.modelNo].filter(Boolean).join(' ')
+          },
+          (p) => {
+            line.itemId = p.id;
+            line.brand = p.brand || ''; line.modelNo = p.modelNo || ''; line.description = p.description || '';
+            line.unitCost = p.standardCost || 0; line.unitPrice = p.standardPrice || 0; line.uom = p.uom || 'pc';
+            line.supplierId = p.defaultSupplierId || '';
+            line.costCurrency = p.currency || currentCurrency();
+            line.costExchangeRate = referenceRate(line.costCurrency, currentCurrency(), settings);
+            const headerVat = document.getElementById('f_vatMode').value;
+            if (p.vatClass === 'Zero-Rated' || p.vatClass === 'VAT Exempt' || headerVat !== 'Standard12') line.vatRate = 0;
+            else line.vatRate = 12;
+            drawLines(); refreshTotals(); markDirty();
+          }
+        );
       });
       tr.querySelector('[data-del]').addEventListener('click', () => {
         if (lines.length === 1) { toast('A quotation needs at least one line item.', 'err'); return; }
