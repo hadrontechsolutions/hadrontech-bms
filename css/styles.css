@@ -117,9 +117,14 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
 
 /* ---------- Badges ---------- */
 .badge{display:inline-block; padding:3px 9px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; background:#eef1f6; color:var(--steel);}
-.badge-active,.badge-won,.badge-confirmed,.badge-received,.badge-completed,.badge-delivered{background:var(--ok-lt); color:var(--ok);}
+/* GREEN — a genuinely finished / successful outcome, not just "acknowledged" */
+.badge-active,.badge-won,.badge-received,.badge-completed,.badge-delivered,.badge-converted-to-sales-order{background:var(--ok-lt); color:var(--ok);}
+/* GREY — draft, cancelled, or otherwise inactive/neutral */
 .badge-draft,.badge-pending,.badge-inactive,.badge-cancelled{background:#eceff3; color:var(--muted);}
-.badge-sent,.badge-sourcing,.badge-in-production,.badge-ready-for-shipment,.badge-ready-for-delivery,.badge-shipped,.badge-open{background:var(--info-lt); color:var(--info);}
+/* BLUE — actively moving forward, but not done yet. "Confirmed" belongs here, not
+   green — confirming an order is the START of fulfillment, not the finish. */
+.badge-sent,.badge-sourcing,.badge-in-production,.badge-ready-for-shipment,.badge-ready-for-delivery,.badge-shipped,.badge-open,.badge-confirmed,.badge-ordered-from-supplier{background:var(--info-lt); color:var(--info);}
+/* AMBER — needs a decision or is only partially done */
 .badge-under-review,.badge-awaiting-confirmation,.badge-partially-received,.badge-prospect{background:var(--amber-lt); color:var(--amber);}
 .badge-lost,.badge-expired{background:var(--danger-lt); color:var(--danger);}
 .badge-info{background:var(--info-lt); color:var(--info);}
