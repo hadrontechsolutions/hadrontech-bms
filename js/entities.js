@@ -291,10 +291,11 @@ async function renderDetail(cfg, id) {
 
   document.getElementById('btnDelete').onclick = async () => {
     const related = cfg.checkRelatedBeforeDelete ? await cfg.checkRelatedBeforeDelete(record) : 0;
-    const warn = related > 0
-      ? `This ${cfg.label.toLowerCase()} has ${related} linked transaction record(s). Deleting it will NOT delete those records, but the link will show as missing. `
-      : '';
-    if (!confirm(`${warn}Permanently delete "${record[cfg.titleField]}"? This cannot be undone.\n\nTip: use Archive instead if you just want to hide it from lists.`)) return;
+    if (related > 0) {
+      alert(`"${record[cfg.titleField]}" can't be deleted — it's referenced by ${related} existing transaction record(s) (e.g. a quotation, order, or stock movement). Deleting it would leave those records pointing at something that no longer exists.\n\nUse Archive instead — it hides this ${cfg.label.toLowerCase()} from active lists and new transactions, without breaking anything that already references it.`);
+      return;
+    }
+    if (!confirm(`Permanently delete "${record[cfg.titleField]}"? This cannot be undone.`)) return;
     await DB.dbDelete(cfg.key, Number(id));
     await DB.logActivity(`Deleted ${cfg.label.toLowerCase()} ${record[cfg.titleField]}`);
     toast(`${cfg.label} deleted.`);
