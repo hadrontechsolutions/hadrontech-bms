@@ -54,6 +54,8 @@ Router.route('/settings/backup', async () => {
         <button class="btn-line btn-sm" data-csv="customerPOs">CustomerPOs.csv</button>
         <button class="btn-line btn-sm" data-csv="salesOrders">SalesOrders.csv</button>
         <button class="btn-line btn-sm" data-csv="supplierPOs">SupplierPOs.csv</button>
+        <button class="btn-line btn-sm" data-csv="stockMovements">StockMovements.csv</button>
+        <button class="btn-line btn-sm" data-csv="proformaInvoices">ProformaInvoices.csv</button>
       </div>
     </div>
   `;
@@ -122,7 +124,9 @@ const CSV_COLUMNS = {
   customerPOs: [{ label: 'Record No', value: 'poNo' }, { label: 'Customer PO No', value: 'customerPoNumber' }, { label: 'Date Received', value: 'dateReceived' }, { label: 'Status', value: 'status' }, { label: 'Amount', value: 'poAmount' }],
   salesOrders: [{ label: 'SO No', value: 'soNo' }, { label: 'Order Date', value: 'orderDate' }, { label: 'Status', value: 'status' }, { label: 'Total', value: 'grandTotal' }],
   supplierPOs: [{ label: 'PO No', value: 'poNo' }, { label: 'PO Date', value: 'poDate' }, { label: 'Status', value: 'status' }, { label: 'Total Cost', value: 'totalCost' }],
-  enquiries: [{ label: 'Enquiry No', value: 'enquiryNo' }, { label: 'Customer', value: r => r.customerSnapshot?.companyName || '' }, { label: 'Subject', value: 'subject' }, { label: 'Stage', value: 'stage' }, { label: 'Date Received', value: 'dateReceived' }]
+  enquiries: [{ label: 'Enquiry No', value: 'enquiryNo' }, { label: 'Customer', value: r => r.customerSnapshot?.companyName || '' }, { label: 'Subject', value: 'subject' }, { label: 'Stage', value: 'stage' }, { label: 'Date Received', value: 'dateReceived' }],
+  stockMovements: [{ label: 'Date', value: 'date' }, { label: 'Product ID', value: 'productId' }, { label: 'Type', value: 'type' }, { label: 'Qty', value: 'qty' }, { label: 'Reference', value: 'reference' }, { label: 'Note', value: 'note' }, { label: 'By', value: 'createdBy' }],
+  proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }]
 };
 
 async function exportTableCSV(storeName) {

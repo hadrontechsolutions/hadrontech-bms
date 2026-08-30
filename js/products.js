@@ -42,8 +42,11 @@ Entities.defineEntity({
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ],
   checkRelatedBeforeDelete: async (record) => {
-    const quotations = await DB.dbGetAll('quotations');
-    return quotations.filter(q => (q.lines || []).some(l => String(l.itemId) === String(record.id))).length;
+    const [quotations, stockMovements] = await Promise.all([
+      DB.dbGetAll('quotations'),
+      DB.dbQueryIndex('stockMovements', 'productId', record.id)
+    ]);
+    return quotations.filter(q => (q.lines || []).some(l => String(l.itemId) === String(record.id))).length + stockMovements.length;
   },
   relatedPanels: async (record) => {
     if (record.type === 'Service') return ''; // services don't carry physical stock
