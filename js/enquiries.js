@@ -4,6 +4,17 @@
    the Quotation/Customer PO/Sales Order/Supplier PO chain that
    already exists, plus tracks delivery milestones and a payment
    ledger explicitly, since those aren't single-field statuses.
+
+   *** STATUS: NOT CURRENTLY LOADED / DORMANT ***
+   This file is intentionally NOT included in index.html's script
+   list — the Enquiries tab was removed from the UI by request, but
+   the underlying 'enquiries' IndexedDB store and this file were
+   deliberately left in place (not deleted) so the feature can be
+   restored later without losing any historical data. If re-enabling
+   this: add <script src="js/enquiries.js"></script> to index.html
+   in the same relative position it originally had (after
+   entities.js, before quotations.js), and re-add "Enquiries" to the
+   sidebar navigation. Until then, nothing in this file executes.
    ============================================================ */
 
 const ENQ_STAGES = ['New Enquiry', 'Quotation Sent', 'Won - Processing', 'In Delivery', 'Delivered', 'Payment Complete', 'Lost / Cancelled'];

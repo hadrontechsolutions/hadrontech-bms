@@ -54,33 +54,28 @@ Customer → Quotation (with revisions) → Customer PO → Sales Order → Supp
 
 ---
 
-## 3. Enquiries — the visual tracker
+## 3. Enquiries — dormant feature (not currently active)
 
-The **Enquiries** module (top of the sidebar) is the "front door" for a client inquiry
-and answers exactly: *where is this, what's the quotation status, where's the delivery,
-has the client paid?* — all in one screen, without digging through separate modules.
+**This module is not currently visible or usable in the app.** It was built, then removed
+from the sidebar and active navigation by request — but the code (`js/enquiries.js`) and
+its underlying data were deliberately left in place rather than deleted, so it can be
+restored later without losing anything. `js/enquiries.js` is **not** included in
+`index.html`'s script list right now, so none of the code below actually runs.
 
-- **Board view** (default): a Kanban board, one column per stage (New Enquiry → Quotation
+What it did, for reference (all of this would work again if re-enabled):
+
+- **Board view**: a Kanban board, one column per stage (New Enquiry → Quotation
   Sent → Won - Processing → In Delivery → Delivered → Payment Complete, plus Lost /
-  Cancelled). Drag a card to a different column to move its stage, or open it and use
-  the "Move to..." buttons.
-- **Table view**: the same enquiries as a sortable list with Quotation / Delivery /
-  Payment status and balance due as columns — better for scanning many at once.
-- **Three progress tracks on every enquiry's detail page**:
-  - *Quotation Status* — reads live from the linked Quotation record (no duplicate entry).
-  - *Delivery Status* — a 7-step tracker (Not Started → ... → Delivered to Client) with a
-    dated milestone log, since "status from factory to end user" needs more granularity
-    than a single order status.
-  - *Payment Status* — a running ledger: total amount, each payment received (date,
-    amount, method, reference), balance due, and an automatic **⚠ Overdue** flag once
-    the due date passes with a balance remaining. Overdue enquiries also surface on the
-    Dashboard.
-- **Auto-linking**: creating a Customer PO from a linked quotation, or converting that PO
-  to a Sales Order, automatically updates the enquiry's stage and delivery status — you
-  don't have to update the enquiry by hand as it moves through the existing chain.
+  Cancelled). Drag a card to a different column to move its stage.
+- **Table view**: the same enquiries as a sortable list.
+- **Three progress tracks per enquiry**: Quotation Status (read live from the linked
+  Quotation), Delivery Status (a 7-step tracker with a dated milestone log), and Payment
+  Status (a running ledger with an automatic Overdue flag).
+- **Auto-linking** to the Customer PO / Sales Order chain as an order progresses.
 
-This module is purely additive: it links to your existing Customers/Quotations/Orders
-rather than duplicating them, so nothing about your existing records changed.
+**To re-enable it:** add `<script src="js/enquiries.js"></script>` back into
+`index.html` (after `entities.js`, before `quotations.js`), and restore its entry in the
+sidebar navigation. No data migration needed — the `enquiries` store was never removed.
 
 ---
 
@@ -131,18 +126,19 @@ export and reminds you automatically:
 index.html              Main app shell (sidebar, header, content area)
 css/styles.css           All styling
 js/db.js                 IndexedDB layer — schema, generic CRUD, document numbering
-js/utils.js               Formatting, toasts, unsaved-changes guard, CSV/download helpers
+js/utils.js               Formatting, toasts, unsaved-changes guard, CSV/download helpers, searchable Item Picker
 js/router.js              Hash-based navigation (#/customers/12, etc.)
 js/entities.js             Generic list/form/detail engine (used by Customers/Suppliers/Products)
 js/customers.js            Customer fields + related-records panel
 js/suppliers.js            Supplier fields + related-records panel
-js/products.js             Product/Service fields
+js/products.js             Product/Service fields, On Hand/Committed/Available stock tracking
 js/quotations.js           Quotation module: line items, calculations, revisions, status workflow
 js/customerPOs.js          Customer PO module
 js/salesOrders.js          Sales Order module + "create Supplier PO" grouping logic
 js/supplierPOs.js          Supplier PO module
-js/enquiries.js            Enquiry tracker: Kanban board, table view, quotation/delivery/payment tracks
-js/print.js                A4 printable documents (Quotation, Sales Order, Supplier PO)
+js/proformaInvoices.js     Proforma Invoice generation (from a Sales Order)
+js/enquiries.js            Enquiry tracker — NOT currently loaded/active, see Section 3
+js/print.js                A4 printable documents (Quotation, Sales Order, Supplier PO, Proforma Invoice)
 js/dashboard.js            Summary cards, quick actions, activity feed, mini charts
 js/reports.js              10 filterable reports + CSV export
 js/search.js               Global search across all record types
@@ -171,36 +167,26 @@ below.
 Two automated end-to-end scripts (included for reference — not needed for normal use)
 drove the app through the full sequences below with **zero errors**:
 
-**`test-routes.js`** — confirms every page in the app renders without a JavaScript error:
-Dashboard, Enquiries (board + table), Customers, Suppliers, Products, Quotations,
-Customer POs, Sales Orders, Supplier POs, Reports, Search, Settings, Backup & Restore.
+**`test-routes.js`** — confirms every active page in the app renders without a
+JavaScript error: Dashboard, Customers, Suppliers, Products, Quotations, Customer POs,
+Sales Orders, Supplier POs, Proforma Invoices, Reports, Search, Settings, Backup &
+Restore. (Enquiries is excluded — see Section 3, it's not currently loaded.)
 
-**`test-enquiries.js`** — the core business workflow, including the new Enquiry tracker:
+**The full test suite is 40 files** covering the system end-to-end — the full
+Quotation → Customer PO → Sales Order → Supplier PO → Proforma Invoice chain, multi-
+option quotations, inventory/stock tracking, VAT handling, currency conversion, backup/
+restore, and the deletion-protection and status-validation safeguards described
+elsewhere in this README. Every file is independently runnable and named for what it
+covers (e.g. `test-inventory-tracking.js`, `test-cpo-line-items.js`). There's no single
+master checklist kept in sync by hand — the tests themselves are the source of truth,
+and all 40 pass together as a regression check before anything ships.
 
-- [x] Create a customer, supplier, and product
-- [x] Create a quotation with line items; totals (subtotal/VAT/grand total) calculate correctly
-- [x] Create a new revision of a quotation (old revision preserved, viewable, read-only)
-- [x] Mark a quotation as Won
-- [x] Record a Customer PO linked to that quotation
-- [x] Convert the Customer PO into a Sales Order (line items copied automatically)
-- [x] Split a Sales Order into multiple Supplier POs, grouped by supplier
-- [x] Log a new Enquiry, move it across Kanban stages, link it to a quotation
-- [x] Record partial payments against an enquiry and confirm balance/overdue calculate correctly
-- [x] Log delivery milestones and confirm the delivery status tracker updates
-- [x] Confirm an enquiry auto-links and auto-advances stage as its quotation becomes a
-      Customer PO, then a Sales Order — with no manual re-entry
-- [x] Navigate forward and backward through every linked record (customer ↔ quotation ↔
-      customer PO ↔ sales order ↔ supplier PO ↔ enquiry)
-- [x] Print a Quotation, Sales Order, and Supplier PO (opens a clean A4-formatted window)
-- [x] Export a full JSON backup (now includes Enquiries) and restore it — all records intact
-- [x] Archive and unarchive a record
-- [x] View Reports and Global Search
-
-To re-run these yourself (optional, requires Node.js — not needed to use the app):
+To re-run them yourself (optional, requires Node.js — not needed to use the app):
 ```
 npm install jsdom fake-indexeddb
 node test-routes.js
-node test-enquiries.js
+# or run all of them:
+for f in test-*.js; do node "$f"; done
 ```
 
 ---
@@ -224,10 +210,11 @@ Being upfront about what's simplified, so nothing surprises you later:
   VAT on the discounted amount). This is accurate for the common case but is not a full
   tax engine — always sanity-check unusual discount/VAT combinations before sending a
   quotation to a customer.
-- **Supplier PO line items are inherited from the Sales Order**, not independently
-  editable line-by-line after creation (you can edit terms, dates, freight, and notes,
-  but not re-split quantities across suppliers after the fact — you'd cancel and
-  recreate that supplier PO instead).
+- **Supplier PO line items ARE independently editable after creation** — via "Edit /
+  Revise PO," you can adjust quantities, unit cost, and UOM, or add/remove lines
+  entirely (e.g. if the supplier's actual quote differs from what was first assumed).
+  Description text is locked once a line exists, by design — see the note on
+  traceability below.
 - **No login/authentication.** Anyone with access to this computer/browser profile can
   open and edit the data. The "Your Name" field in Settings is used only for the
   created-by/modified-by audit trail, not as a security boundary.

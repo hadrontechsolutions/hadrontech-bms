@@ -51,7 +51,6 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
 .btn-sm{padding:5px 10px; font-size:12px;}
 
 /* ---------- Shell layout ---------- */
-.app-shell{display:flex; min-height:100vh;}
 .topbar{
   position:fixed; top:0; left:0; right:0; height:56px; background:var(--navy); color:#fff;
   display:flex; align-items:center; justify-content:space-between; padding:0 20px; z-index:100;
