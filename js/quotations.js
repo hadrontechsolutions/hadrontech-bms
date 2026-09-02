@@ -359,7 +359,17 @@ async function renderQuoteForm(id) {
           </div>
           ${diffCurrency ? `<div class="ln-cost-php muted-text" style="font-size:10px; margin-top:2px; white-space:nowrap;">→${formatMoney((Number(l.unitCost) || 0) * (Number(l.costExchangeRate) || 1), qCur)}</div>` : ''}
         </td>
-        <td class="internal-only-col"><select class="ln-costccy" style="width:62px;">${currencyList(settings).map(c2 => `<option ${c2 === (l.costCurrency || qCur) ? 'selected' : ''}>${c2}</option>`).join('')}</select></td>
+        <td class="internal-only-col"><select class="ln-costccy" style="width:62px;">${(() => {
+          const list = currencyList(settings);
+          const current = l.costCurrency || qCur;
+          // Same safety net used elsewhere for archived references: if this line's actual
+          // stored currency isn't in the currently configured list, still show it as a real,
+          // selectable option instead of silently defaulting to whatever's first in the list —
+          // that's exactly what was making the dropdown disagree with the value actually
+          // driving the calculation.
+          const options = list.includes(current) ? list : [current, ...list];
+          return options.map(c2 => `<option ${c2 === current ? 'selected' : ''}>${escapeHtml(c2)}${!list.includes(c2) ? ' (not in Settings)' : ''}</option>`).join('');
+        })()}</select></td>
         <td class="internal-only-col"><input class="ln-rate" type="number" step="0.0001" min="0" value="${l.costExchangeRate ?? 1}" style="width:60px;" ${diffCurrency ? '' : 'disabled title="Only used when Cost Currency differs from the quotation currency"'}></td>
         <td class="internal-only-col"><input class="ln-markup" type="number" step="0.01" value="${l.markupPercent}" style="width:60px;"></td>
         <td><input class="ln-price" type="number" min="0" step="0.01" value="${l.unitPrice}" style="width:80px;"></td>
