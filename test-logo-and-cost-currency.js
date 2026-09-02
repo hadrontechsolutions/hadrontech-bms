@@ -34,17 +34,17 @@ async function main() {
   win.location.hash = '#/quotations/new';
   await win.Router.resolveRoute();
   await wait(10);
-  console.log('STEP 4: Header renamed from "Cost Ccy" to the clearer "Cost Currency":', doc.getElementById('content').textContent.includes('Cost Currency') && !doc.getElementById('content').textContent.includes('Cost Ccy'));
+  console.log('STEP 4: Header reverted back to "Cost Ccy" (per follow-up request — the dropdown fix alone made the separate label redundant):', doc.getElementById('content').textContent.includes('Cost Ccy'));
 
   const row = doc.querySelector('#linesBody tr');
-  console.log('STEP 5: The Unit Cost cell now shows its own currency code label (defaults to PHP), self-labeled without needing to check a separate column:', row.querySelector('.ln-cost').closest('td').textContent.includes('PHP'));
+  console.log('STEP 5: The standalone currency-code label on Unit Cost was removed (Cost Ccy dropdown is now the single source of truth):', !row.querySelector('.ln-cost').closest('td').querySelector('span'));
 
   const ccySelect = row.querySelector('.ln-costccy');
   ccySelect.value = 'USD';
   ccySelect.dispatchEvent(new win.Event('change'));
   await wait(10);
   const row2 = doc.querySelector('#linesBody tr');
-  console.log('STEP 6: Switching Cost Currency to USD immediately updates the label shown right on the Unit Cost field:', row2.querySelector('.ln-cost').closest('td').textContent.includes('USD'));
+  console.log('STEP 6: The Cost Ccy dropdown itself still correctly updates and reflects the real selection:', row2.querySelector('.ln-costccy').value === 'USD');
 
   row2.querySelector('.ln-cost').value = '82';
   row2.querySelector('.ln-cost').dispatchEvent(new win.Event('input'));

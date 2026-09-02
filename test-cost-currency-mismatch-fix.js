@@ -32,14 +32,11 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(10);
   const row = doc.querySelector('#linesBody tr');
-  const label = row.querySelector('.ln-cost').closest('td').querySelector('span').textContent;
   const dropdownValue = row.querySelector('.ln-costccy').value;
 
-  console.log('STEP 1: The currency label on Unit Cost correctly shows USD (reading the real stored value):', label === 'USD');
-  console.log('STEP 2: THE BUG, NOW FIXED: the Cost Currency dropdown ALSO correctly shows USD selected, matching the label — not silently defaulting to PHP:', dropdownValue.startsWith('USD'));
-  console.log('STEP 3: Since USD isn\'t currently registered in Settings, the option is clearly flagged so it\'s not mistaken for a normal choice:', dropdownValue.includes('not in Settings'));
-
-  console.log('STEP 4: The PHP conversion hint correctly reflects 850 x 58 = 49,300.00 the whole time (the math never had this bug, only the dropdown display did):', row.querySelector('.ln-cost-php').textContent.includes('49,300.00'));
+  console.log('STEP 1: THE BUG, NOW FIXED: the Cost Ccy dropdown correctly shows the real stored value (USD) — not silently defaulting to PHP:', dropdownValue.startsWith('USD'));
+  console.log('STEP 2: Since USD isn\'t currently registered in Settings, the option is clearly flagged so it\'s not mistaken for a normal choice:', dropdownValue.includes('not in Settings'));
+  console.log('STEP 3: The PHP conversion hint correctly reflects 850 x 58 = 49,300.00 the whole time (the math never had this bug, only the dropdown display did):', row.querySelector('.ln-cost-php').textContent.includes('49,300.00'));
 
   const settings2 = await win.DB.getSettings();
   settings2.referenceRates = { USD: 58 };
