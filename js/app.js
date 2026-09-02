@@ -30,14 +30,6 @@ async function boot() {
     return;
   }
 
-  // Header global search
-  const headerSearch = document.getElementById('headerSearch');
-  headerSearch.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && headerSearch.value.trim()) {
-      Router.navigate('/search?q=' + encodeURIComponent(headerSearch.value.trim()));
-    }
-  });
-
   // Sidebar nav clicks (also works via plain <a href="#...">, this just guards unsaved changes)
   document.querySelectorAll('.nav-link').forEach(a => {
     a.addEventListener('click', (e) => {
