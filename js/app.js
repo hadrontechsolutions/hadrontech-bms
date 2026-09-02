@@ -11,7 +11,7 @@ function applyBrandHeader(settings) {
     mark.innerHTML = `<img src="${settings.logoDataUrl}" alt="Logo" style="width:100%;height:100%;object-fit:contain;">`;
     mark.style.border = 'none';
   }
-  text.innerHTML = `${escapeHtml((settings.companyName || 'HADRONTECH').toUpperCase())}<span class="sub">Business Management System</span>`;
+  text.innerHTML = `${escapeHtml((settings.logoText || settings.companyName || 'HADRONTECH').toUpperCase())}<span class="sub">Business Management System</span>`;
 }
 window.applyBrandHeader = applyBrandHeader;
 

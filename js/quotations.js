@@ -285,7 +285,7 @@ async function renderQuoteForm(id) {
         <thead><tr>
           <th style="width:26px;">#</th><th>Catalog</th><th>Brand</th><th>Model/Part No.</th><th>Description *</th>
           <th>Option</th>
-          <th>Qty</th><th>UOM</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Cost Ccy</th><th class="internal-only-col">Rate→<span id="rateArrowCcy"></span></th><th class="internal-only-col">Markup %</th><th>Unit Price</th><th>Disc %</th><th>VAT %</th>
+          <th>Qty</th><th>UOM</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Cost Currency</th><th class="internal-only-col">Rate→<span id="rateArrowCcy"></span></th><th class="internal-only-col">Markup %</th><th>Unit Price</th><th>Disc %</th><th>VAT %</th>
           <th class="internal-only-col">Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th></th>
         </tr></thead>
         <tbody id="linesBody"></tbody>
@@ -352,7 +352,11 @@ async function renderQuoteForm(id) {
         <td><input class="ln-option" list="optionSuggestions" value="${escapeHtml(l.optionGroup || '')}" placeholder="e.g. Option 1" style="width:85px;"></td>
         <td><input class="ln-qty" type="number" min="0" step="any" value="${l.qty}" style="width:55px;"></td>
         <td><input class="ln-uom" value="${escapeHtml(l.uom)}" style="width:45px;"></td>
-        <td class="internal-only-col"><input class="ln-cost" type="number" min="0" step="0.01" value="${l.unitCost}" style="width:75px;">
+        <td class="internal-only-col">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <span class="muted-text" style="font-size:10px; font-weight:700; min-width:26px;" title="Cost Currency for this line">${escapeHtml(l.costCurrency || qCur)}</span>
+            <input class="ln-cost" type="number" min="0" step="0.01" value="${l.unitCost}" style="width:58px;">
+          </div>
           ${diffCurrency ? `<div class="ln-cost-php muted-text" style="font-size:10px; margin-top:2px; white-space:nowrap;">→${formatMoney((Number(l.unitCost) || 0) * (Number(l.costExchangeRate) || 1), qCur)}</div>` : ''}
         </td>
         <td class="internal-only-col"><select class="ln-costccy" style="width:62px;">${currencyList(settings).map(c2 => `<option ${c2 === (l.costCurrency || qCur) ? 'selected' : ''}>${c2}</option>`).join('')}</select></td>
