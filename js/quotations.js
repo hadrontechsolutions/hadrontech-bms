@@ -352,7 +352,9 @@ async function renderQuoteForm(id) {
         <td><input class="ln-option" list="optionSuggestions" value="${escapeHtml(l.optionGroup || '')}" placeholder="e.g. Option 1" style="width:85px;"></td>
         <td><input class="ln-qty" type="number" min="0" step="any" value="${l.qty}" style="width:55px;"></td>
         <td><input class="ln-uom" value="${escapeHtml(l.uom)}" style="width:45px;"></td>
-        <td class="internal-only-col"><input class="ln-cost" type="number" min="0" step="0.01" value="${l.unitCost}" style="width:75px;"></td>
+        <td class="internal-only-col"><input class="ln-cost" type="number" min="0" step="0.01" value="${l.unitCost}" style="width:75px;">
+          ${diffCurrency ? `<div class="ln-cost-php muted-text" style="font-size:10px; margin-top:2px; white-space:nowrap;">→${formatMoney((Number(l.unitCost) || 0) * (Number(l.costExchangeRate) || 1), qCur)}</div>` : ''}
+        </td>
         <td class="internal-only-col"><select class="ln-costccy" style="width:62px;">${currencyList(settings).map(c2 => `<option ${c2 === (l.costCurrency || qCur) ? 'selected' : ''}>${c2}</option>`).join('')}</select></td>
         <td class="internal-only-col"><input class="ln-rate" type="number" step="0.0001" min="0" value="${l.costExchangeRate ?? 1}" style="width:60px;" ${diffCurrency ? '' : 'disabled title="Only used when Cost Currency differs from the quotation currency"'}></td>
         <td class="internal-only-col"><input class="ln-markup" type="number" step="0.01" value="${l.markupPercent}" style="width:60px;"></td>
@@ -384,6 +386,8 @@ async function renderQuoteForm(id) {
           const c2 = computeLine(line, currentCurrency());
           tr.querySelector('.ln-amount').textContent = formatMoney(c2.net, currentCurrency());
           tr.querySelector('.ln-amount-vat').textContent = formatMoney(c2.lineTotal, currentCurrency());
+          const phpHint = tr.querySelector('.ln-cost-php');
+          if (phpHint) phpHint.textContent = `→${formatMoney((Number(line.unitCost) || 0) * (Number(line.costExchangeRate) || 1), currentCurrency())}`;
           refreshTotals();
           markDirty();
         });
