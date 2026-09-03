@@ -29,6 +29,14 @@ async function boot() {
     return;
   }
 
+  // Sidebar collapse/expand toggle — preference persists across sessions (this is a display
+  // preference tied to this browser, not business data, so it doesn't need to be part of the
+  // portable JSON backup the way company settings do).
+  document.getElementById('sidebarToggle').addEventListener('click', () => {
+    const collapsed = document.body.classList.toggle('sidebar-collapsed');
+    localStorage.setItem('hadrontechSidebarCollapsed', collapsed ? '1' : '0');
+  });
+
   // Sidebar nav clicks (also works via plain <a href="#...">, this just guards unsaved changes)
   document.querySelectorAll('.nav-link').forEach(a => {
     a.addEventListener('click', (e) => {

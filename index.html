@@ -7,9 +7,11 @@
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
+<script>document.body.classList.toggle('sidebar-collapsed', localStorage.getItem('hadrontechSidebarCollapsed') === '1');</script>
 
 <div class="topbar">
   <div class="brand" id="brandBlock">
+    <button type="button" id="sidebarToggle" class="sidebar-toggle" title="Collapse/expand menu">☰</button>
     <div class="brand-mark" id="brandMark"></div>
     <div class="brand-text" id="brandText">HADRONTECH<span class="sub">Business Management System</span></div>
   </div>
@@ -17,21 +19,21 @@
 </div>
 
 <div class="app-sidebar">
-  <a href="#/dashboard" class="nav-link" data-section="/dashboard">📊 Dashboard</a>
+  <a href="#/dashboard" class="nav-link" data-section="/dashboard" title="Dashboard">📊 <span class="nav-label">Dashboard</span></a>
   <div class="nav-divider"></div>
-  <a href="#/customers" class="nav-link" data-section="/customers">🏢 Customers</a>
-  <a href="#/suppliers" class="nav-link" data-section="/suppliers">🚚 Suppliers</a>
-  <a href="#/products" class="nav-link" data-section="/products">📦 Products &amp; Services</a>
+  <a href="#/customers" class="nav-link" data-section="/customers" title="Customers">🏢 <span class="nav-label">Customers</span></a>
+  <a href="#/suppliers" class="nav-link" data-section="/suppliers" title="Suppliers">🚚 <span class="nav-label">Suppliers</span></a>
+  <a href="#/products" class="nav-link" data-section="/products" title="Products &amp; Services">📦 <span class="nav-label">Products &amp; Services</span></a>
   <div class="nav-divider"></div>
-  <a href="#/quotations" class="nav-link" data-section="/quotations">📄 Quotations</a>
-  <a href="#/customer-pos" class="nav-link" data-section="/customer-pos">📥 Customer POs</a>
-  <a href="#/sales-orders" class="nav-link" data-section="/sales-orders">🧾 Sales Orders</a>
-  <a href="#/supplier-pos" class="nav-link" data-section="/supplier-pos">📤 Supplier POs</a>
+  <a href="#/quotations" class="nav-link" data-section="/quotations" title="Quotations">📄 <span class="nav-label">Quotations</span></a>
+  <a href="#/customer-pos" class="nav-link" data-section="/customer-pos" title="Customer POs">📥 <span class="nav-label">Customer POs</span></a>
+  <a href="#/sales-orders" class="nav-link" data-section="/sales-orders" title="Sales Orders">🧾 <span class="nav-label">Sales Orders</span></a>
+  <a href="#/supplier-pos" class="nav-link" data-section="/supplier-pos" title="Supplier POs">📤 <span class="nav-label">Supplier POs</span></a>
   <div class="nav-divider"></div>
-  <a href="#/reports" class="nav-link" data-section="/reports">📈 Reports</a>
-  <a href="#/search" class="nav-link" data-section="/search">🔍 Search</a>
-  <a href="#/settings" class="nav-link" data-section="/settings">⚙️ Settings</a>
-  <a href="#/settings/backup" class="nav-link" data-section="/settings">💾 Backup &amp; Restore</a>
+  <a href="#/reports" class="nav-link" data-section="/reports" title="Reports">📈 <span class="nav-label">Reports</span></a>
+  <a href="#/search" class="nav-link" data-section="/search" title="Search">🔍 <span class="nav-label">Search</span></a>
+  <a href="#/settings" class="nav-link" data-section="/settings" title="Settings">⚙️ <span class="nav-label">Settings</span></a>
+  <a href="#/settings/backup" class="nav-link" data-section="/settings" title="Backup &amp; Restore">💾 <span class="nav-label">Backup &amp; Restore</span></a>
 </div>
 
 <div class="app-main">

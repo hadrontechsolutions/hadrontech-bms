@@ -43,7 +43,7 @@ Router.route('/settings', async () => {
               <input type="file" id="s_logoFile" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">
               <button type="button" class="btn-line btn-sm" id="btnChooseLogo">Choose Image...</button>
               <button type="button" class="btn-danger btn-sm" id="btnRemoveLogo" ${settings.logoDataUrl ? '' : 'style="display:none;"'}>Remove Logo</button>
-              <div class="muted-text" style="margin-top:6px;">PNG, JPG, SVG or WEBP. Stored locally with your other data — recommended under 500 KB so backup files stay small. Appears on the sidebar header and on printed Quotations, Sales Orders, and Supplier POs.</div>
+              <div class="muted-text" style="margin-top:6px;">PNG, JPG, SVG or WEBP. Stored locally with your other data — recommended under 500 KB so backup files stay small. Appears on printed Quotations, Sales Orders, and Supplier POs — the sidebar itself uses text-only branding by design.</div>
             </div>
           </div>
         </div>
