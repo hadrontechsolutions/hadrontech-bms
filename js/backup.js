@@ -126,7 +126,7 @@ const CSV_COLUMNS = {
   supplierPOs: [{ label: 'PO No', value: 'poNo' }, { label: 'PO Date', value: 'poDate' }, { label: 'Status', value: 'status' }, { label: 'Total Cost', value: 'totalCost' }],
   enquiries: [{ label: 'Enquiry No', value: 'enquiryNo' }, { label: 'Customer', value: r => r.customerSnapshot?.companyName || '' }, { label: 'Subject', value: 'subject' }, { label: 'Stage', value: 'stage' }, { label: 'Date Received', value: 'dateReceived' }],
   stockMovements: [{ label: 'Date', value: 'date' }, { label: 'Product ID', value: 'productId' }, { label: 'Type', value: 'type' }, { label: 'Qty', value: 'qty' }, { label: 'Reference', value: 'reference' }, { label: 'Note', value: 'note' }, { label: 'By', value: 'createdBy' }],
-  proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }]
+  proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Invoice Amount', value: r => r.grandTotal ?? '' }, { label: 'Amount Paid', value: r => (typeof piAmountPaid === 'function' ? piAmountPaid(r) : '') }, { label: 'Balance Due', value: r => (typeof piBalanceDue === 'function' ? piBalanceDue(r) : '') }, { label: 'Payment Status', value: r => (typeof piPaymentStatus === 'function' ? piPaymentStatus(r) : '') }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }]
 };
 
 async function exportTableCSV(storeName) {

@@ -189,9 +189,11 @@ async function printProformaInvoice(pi, so, customer) {
   const settings = await DB.getSettings();
   const custName = customer?.companyName || so?.customerSnapshot?.companyName || '';
   const custAddr = customer?.billingAddress || '';
-  const rows = (so?.lines || []).map((l, i) => {
+  // Uses the PI's OWN snapshot (lines/totals/terms), not the Sales Order live — this invoice's
+  // numbers are frozen as of when it was generated, exactly what payment tracking is anchored to.
+  const rows = (pi.lines || []).map((l, i) => {
     const c = QuoteCalc.computeLine(l);
-    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, so.currency)}</td><td class="p-num">${formatMoney(c.net, so.currency)}</td></tr>`;
+    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, pi.currency)}</td><td class="p-num">${formatMoney(c.net, pi.currency)}</td></tr>`;
   }).join('');
 
   printShell(pi.piNo, `
@@ -201,14 +203,14 @@ async function printProformaInvoice(pi, so, customer) {
     </div>
     <div class="p-grid2">
       <div><div class="p-label">Bill To</div><b>${escapeHtml(custName)}</b><br><span style="font-size:11px;color:#666;">${escapeHtml(custAddr)}</span></div>
-      <div><div class="p-label">Terms</div><div style="font-size:11px;">Payment: ${escapeHtml(so?.paymentTerms || '—')}<br>Incoterms: ${escapeHtml(so?.incoterms || '—')}</div></div>
+      <div><div class="p-label">Terms</div><div style="font-size:11px;">Payment: ${escapeHtml(pi.paymentTerms || '—')}<br>Incoterms: ${escapeHtml(pi.incoterms || '—')}</div></div>
     </div>
     <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="p-totals">
-      <div class="ln"><span>Subtotal</span><span>${so ? formatMoney(so.subtotal, so.currency) : '—'}</span></div>
-      <div class="ln"><span>VAT</span><span>${so ? formatMoney(so.vatTotal, so.currency) : '—'}</span></div>
-      <div class="ln"><span>Freight</span><span>${so ? formatMoney(so.freight || 0, so.currency) : '—'}</span></div>
-      <div class="ln grand"><span>Total Amount Due</span><span>${so ? formatMoney(so.grandTotal, so.currency) : '—'}</span></div>
+      <div class="ln"><span>Subtotal</span><span>${formatMoney(pi.subtotal, pi.currency)}</span></div>
+      <div class="ln"><span>VAT</span><span>${formatMoney(pi.vatTotal, pi.currency)}</span></div>
+      <div class="ln"><span>Freight</span><span>${formatMoney(pi.freight || 0, pi.currency)}</span></div>
+      <div class="ln grand"><span>Total Amount Due</span><span>${formatMoney(pi.grandTotal, pi.currency)}</span></div>
     </div>
     ${pi.notes ? `<div class="p-terms"><b>Note</b>\n${escapeHtml(pi.notes)}</div>` : ''}
     ${bankDetailsHTML(settings)}

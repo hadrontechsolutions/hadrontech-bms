@@ -44,7 +44,12 @@ async function resolveRoute() {
 function highlightSidebar(path) {
   const section = '/' + (path.split('/')[1] || 'dashboard');
   document.querySelectorAll('.nav-link').forEach(a => {
-    a.classList.toggle('active', a.dataset.section === section);
+    // data-section can list more than one path (space-separated) for pages whose detail
+    // view lives under a different first segment than its own list page — e.g. Payments
+    // (/payments) and individual Proforma Invoices (/proforma-invoices/:id) are the same
+    // section from a navigation standpoint, but don't share a URL prefix.
+    const sections = (a.dataset.section || '').split(' ');
+    a.classList.toggle('active', sections.includes(section));
   });
 }
 
