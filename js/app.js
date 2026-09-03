@@ -3,13 +3,12 @@
    module has registered its routes with Router.route(...).
    ============================================================ */
 
-/** Swaps the sidebar-header brand mark for an uploaded logo image, if one exists. */
+/** Sets the sidebar-header brand text. The uploaded Company Logo (Settings > Company
+    Profile) is deliberately NEVER shown here — by design, it's used exclusively on printed
+    Quotations/Sales Orders/Supplier POs, never in the app's own interface, regardless of
+    whether one is uploaded. The app header is always text-only. */
 function applyBrandHeader(settings) {
-  const mark = document.getElementById('brandMark');
   const text = document.getElementById('brandText');
-  if (settings.logoDataUrl) {
-    mark.innerHTML = `<img src="${settings.logoDataUrl}" alt="Logo" style="width:32px;height:32px;object-fit:contain;">`;
-  }
   text.innerHTML = `${escapeHtml((settings.logoText || settings.companyName || 'HADRONTECH').toUpperCase())}<span class="sub">Business Management System</span>`;
 }
 window.applyBrandHeader = applyBrandHeader;

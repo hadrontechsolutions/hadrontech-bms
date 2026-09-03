@@ -63,11 +63,6 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
   border-bottom:3px solid var(--amber);
 }
 .brand{display:flex; align-items:center; gap:10px;}
-/* Empty by default (text-only branding) — only takes visible shape if a real logo image
-   is uploaded via Settings, at which point applyBrandHeader() injects an <img> into it. */
-.brand-mark{flex:none;}
-.brand-mark:empty{display:none;}
-.brand-mark img{display:block;}
 .brand-text{font-weight:800; letter-spacing:.03em; font-size:15px;}
 .brand-text .sub{display:block; font-family:var(--mono); font-weight:400; font-size:9px; letter-spacing:.16em; color:#9fb0c9; text-transform:uppercase;}
 .header-user{font-size:12px; color:#c3cee0;}
@@ -160,7 +155,6 @@ body.sidebar-collapsed .nav-divider{margin:10px 14px;}
 .logo-preview img{max-width:100%; max-height:100%; object-fit:contain;}
 .logo-preview-empty{font-size:11px; color:var(--muted); text-align:center;}
 .logo-upload-controls{flex:1; padding-top:4px;}
-#brandMark img{display:block;}
 
 /* ---------- Detail view ---------- */
 .detail-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:18px 24px;}
