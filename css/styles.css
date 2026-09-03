@@ -63,10 +63,11 @@ hr.divider{border:none; border-top:1px solid var(--line); margin:16px 0;}
   border-bottom:3px solid var(--amber);
 }
 .brand{display:flex; align-items:center; gap:10px;}
-.brand-mark{width:26px; height:26px; border:2px solid var(--amber); position:relative; flex:none;}
-.brand-mark::before,.brand-mark::after{content:""; position:absolute; background:var(--amber);}
-.brand-mark::before{width:100%; height:2px; top:50%; left:0; transform:translateY(-50%);}
-.brand-mark::after{height:100%; width:2px; left:50%; top:0; transform:translateX(-50%);}
+/* Empty by default (text-only branding) — only takes visible shape if a real logo image
+   is uploaded via Settings, at which point applyBrandHeader() injects an <img> into it. */
+.brand-mark{flex:none;}
+.brand-mark:empty{display:none;}
+.brand-mark img{display:block;}
 .brand-text{font-weight:800; letter-spacing:.03em; font-size:15px;}
 .brand-text .sub{display:block; font-family:var(--mono); font-weight:400; font-size:9px; letter-spacing:.16em; color:#9fb0c9; text-transform:uppercase;}
 .header-user{font-size:12px; color:#c3cee0;}

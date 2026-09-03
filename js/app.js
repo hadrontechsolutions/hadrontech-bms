@@ -8,8 +8,7 @@ function applyBrandHeader(settings) {
   const mark = document.getElementById('brandMark');
   const text = document.getElementById('brandText');
   if (settings.logoDataUrl) {
-    mark.innerHTML = `<img src="${settings.logoDataUrl}" alt="Logo" style="width:100%;height:100%;object-fit:contain;">`;
-    mark.style.border = 'none';
+    mark.innerHTML = `<img src="${settings.logoDataUrl}" alt="Logo" style="width:32px;height:32px;object-fit:contain;">`;
   }
   text.innerHTML = `${escapeHtml((settings.logoText || settings.companyName || 'HADRONTECH').toUpperCase())}<span class="sub">Business Management System</span>`;
 }
