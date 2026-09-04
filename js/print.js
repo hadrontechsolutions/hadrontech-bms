@@ -228,9 +228,12 @@ async function printTechnicalOffer(t, customer) {
   const settings = await DB.getSettings();
   const itemRows = (t.items || []).map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.description)}</td><td>${escapeHtml(it.qty)}</td><td>${escapeHtml(it.manufacturer)}</td></tr>`).join('');
   const specRows = (t.specs || []).map(s => `<tr><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.requested)}</td><td>${escapeHtml(s.offered)}</td></tr>`).join('');
+  const sectionsHTML = (t.sections || []).filter(s => s.title || s.body).map(s =>
+    `<h3 style="margin-top:26px; color:#1b2a4a;">${escapeHtml(s.title)}</h3><p style="font-size:12px; white-space:pre-line;">${escapeHtml(s.body)}</p>`
+  ).join('');
 
   printShell(t.offerNo, `
-    <div style="text-align:right; font-size:10px; letter-spacing:.08em; color:#5b6b84; font-weight:700; margin-bottom:24px;">HADRONTECH INDUSTRIAL SOLUTIONS</div>
+    ${t.hideCompanyInfo ? '' : `<div style="text-align:right; font-size:10px; letter-spacing:.08em; color:#5b6b84; font-weight:700; margin-bottom:24px;">HADRONTECH INDUSTRIAL SOLUTIONS</div>`}
     <div style="text-align:center;">
       <div style="font-size:26px; font-weight:800; color:#1b2a4a; letter-spacing:.06em;">TECHNICAL OFFER</div>
       <div style="border-bottom:3px solid #c8720a; width:120px; margin:10px auto 14px;"></div>
@@ -247,13 +250,15 @@ async function printTechnicalOffer(t, customer) {
     <h3 style="margin-top:30px; color:#1b2a4a;">Summary of Offered Items</h3>
     <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Manufacturer / Origin</th></tr></thead><tbody>${itemRows}</tbody></table>
 
+    ${sectionsHTML}
+
     <h3 style="margin-top:26px; color:#1b2a4a;">Technical Data Sheet</h3>
     <table class="p-items"><thead><tr><th>Item</th><th>Requested (RFQ / End-User)</th><th>Offered (Supplier / Nameplate)</th></tr></thead><tbody>${specRows}</tbody></table>
 
     <div class="p-terms" style="font-style:italic;">Subject to final supplier verification and end-user technical approval.</div>
-    <div class="p-sign">
+    ${t.hideCompanyInfo ? '' : `<div class="p-sign">
       <div><div class="box">${escapeHtml(settings.authorizedSignatory)}<br>Prepared by</div></div>
-    </div>
+    </div>`}
   `);
 }
 

@@ -72,6 +72,7 @@ async function renderTODetail(id) {
         <div class="detail-item"><div class="detail-label">RFQ Reference</div><div class="detail-value">${escapeHtml(t.rfqReference || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">${formatDate(t.date)}</div></div>
       </div>
+      ${t.hideCompanyInfo ? `<p class="muted-text" style="margin-top:12px;">🔒 Company name and signatory are hidden on the printed copy of this offer.</p>` : ''}
     </div>
 
     <div class="card">
@@ -82,6 +83,12 @@ async function renderTODetail(id) {
         <tbody>${t.items.map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.description)}</td><td>${escapeHtml(it.qty)}</td><td>${escapeHtml(it.manufacturer)}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
+
+    ${(t.sections || []).length > 0 ? t.sections.map(s => `
+    <div class="card">
+      <h3 class="section-title">${escapeHtml(s.title)}</h3>
+      <p style="white-space:pre-line;">${escapeHtml(s.body)}</p>
+    </div>`).join('') : ''}
 
     <div class="card">
       <h3 class="section-title">Technical Data Sheet</h3>
@@ -113,6 +120,10 @@ async function renderTOForm(record) {
   const customers = await DB.dbGetAll('customers');
   let items = record ? record.items.map(it => Object.assign({}, it)) : [];
   let specs = record ? record.specs.map(s => Object.assign({}, s)) : [];
+  let sections = record ? (record.sections || []).map(s => Object.assign({}, s)) : [
+    { title: 'Product Description', body: '' },
+    { title: 'Country of Origin (COO)', body: '' }
+  ];
 
   Router.setBreadcrumb(isNew
     ? [{ label: 'Technical Offers', hash: '/technical-offers' }, { label: 'New' }]
@@ -134,6 +145,13 @@ async function renderTOForm(record) {
           <div class="field"><label>RFQ Reference</label><input id="f_rfqReference" value="${escapeHtml(record?.rfqReference || '')}"></div>
           <div class="field"><label>Date</label><input type="date" id="f_date" value="${record?.date || todayISO()}"></div>
         </div>
+        <div class="field" style="margin-top:14px;">
+          <label style="display:flex; align-items:center; gap:8px; text-transform:none; font-weight:500; font-size:13px; color:var(--ink);">
+            <input type="checkbox" id="f_hideCompanyInfo" ${record?.hideCompanyInfo ? 'checked' : ''} style="width:auto;">
+            Do not show company name and signatory on the printed document
+          </label>
+          <p class="muted-text" style="margin-top:4px;">Turn this on if your customer needs to submit this offer onward without it being identifiable as coming from Hadrontech.</p>
+        </div>
       </div>
 
       <div class="card">
@@ -146,6 +164,13 @@ async function renderTOForm(record) {
         </table>
         </div>
         <button type="button" class="btn-line btn-sm" id="btnAddItem" style="margin-top:8px;">+ Add Item</button>
+      </div>
+
+      <div class="card">
+        <h3 class="section-title">Additional Sections</h3>
+        <p class="muted-text">Any narrative content the offer needs — e.g. Product Description, Country of Origin (COO), Installation Notes, Certifications. Add, remove, or rename as needed; two common ones are pre-filled below.</p>
+        <div id="sectionsBody"></div>
+        <button type="button" class="btn-line btn-sm" id="btnAddSection" style="margin-top:8px;">+ Add Section</button>
       </div>
 
       <div class="card">
@@ -203,10 +228,32 @@ async function renderTOForm(record) {
       specs.splice(Number(btn.dataset.specdel), 1); drawSpecs(); markDirty();
     }));
   }
-  drawItems(); drawSpecs();
+  function drawSections() {
+    const host = document.getElementById('sectionsBody');
+    host.innerHTML = sections.map((s, i) => `
+      <div class="card" style="background:var(--paper); margin-bottom:10px; padding:14px;" data-idx="${i}">
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <div style="flex:1;">
+            <input class="se-title" value="${escapeHtml(s.title || '')}" placeholder="Section title, e.g. Product Description" style="font-weight:700; margin-bottom:8px;">
+            <textarea class="se-body" rows="3" placeholder="Section text...">${escapeHtml(s.body || '')}</textarea>
+          </div>
+          <div class="row-del" data-sectiondel="${i}" style="padding-top:6px;">✕</div>
+        </div>
+      </div>`).join('');
+    host.querySelectorAll('[data-idx]').forEach(card => {
+      const idx = Number(card.dataset.idx);
+      const bind = (sel, field) => card.querySelector(sel).addEventListener('input', (e) => { sections[idx][field] = e.target.value; markDirty(); });
+      bind('.se-title', 'title'); bind('.se-body', 'body');
+    });
+    host.querySelectorAll('[data-sectiondel]').forEach(btn => btn.addEventListener('click', () => {
+      sections.splice(Number(btn.dataset.sectiondel), 1); drawSections(); markDirty();
+    }));
+  }
+  drawItems(); drawSpecs(); drawSections();
 
   document.getElementById('btnAddItem').onclick = () => { items.push({ description: '', qty: '', manufacturer: '' }); drawItems(); markDirty(); };
   document.getElementById('btnAddSpec').onclick = () => { specs.push({ item: '', requested: '', offered: '' }); drawSpecs(); markDirty(); };
+  document.getElementById('btnAddSection').onclick = () => { sections.push({ title: '', body: '' }); drawSections(); markDirty(); };
 
   content.querySelectorAll('input,textarea,select').forEach(i => i.addEventListener('input', markDirty));
 
@@ -226,6 +273,8 @@ async function renderTOForm(record) {
         date: document.getElementById('f_date').value || todayISO(),
         items: items.filter(it => (it.description || '').trim()),
         specs: specs.filter(s => (s.item || '').trim()),
+        sections: sections.filter(s => (s.title || '').trim() || (s.body || '').trim()),
+        hideCompanyInfo: document.getElementById('f_hideCompanyInfo').checked,
         updatedAt: now, modifiedBy: settings.userName
       };
       if (isNew) {
