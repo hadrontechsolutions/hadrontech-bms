@@ -133,62 +133,6 @@ async function printQuotation(q, customer) {
   `);
 }
 
-/** A Technical Offer shares a Quotation's line items and structure (including multi-option
-    groups) but deliberately shows NONE of the commercial content -- no unit prices, discounts,
-    line amounts, subtotal/VAT/freight/grand total, payment terms, incoterms, or bank details.
-    It's meant for a customer's technical/engineering reviewers, kept separate from whatever a
-    commercial quotation is doing on the pricing side. Uses the same quotation number/revision
-    as its reference -- this is a print view, not a separate tracked record. */
-async function printTechnicalOffer(q, customer) {
-  const settings = await DB.getSettings();
-  const custName = customer?.companyName || q.customerSnapshot?.companyName || '';
-  const custAddr = customer?.billingAddress || q.customerSnapshot?.address || '';
-
-  const rowHTML = (l, i) => `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td></tr>`;
-  const itemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th></tr></thead>`;
-
-  let itemsHTML;
-  if (q.isMultiOption && q.optionTotals && q.optionTotals.length > 0) {
-    const commonLines = (q.lines || []).filter(l => (q.commonLineIds || []).includes(l.lineId));
-    itemsHTML = `
-      <p style="font-size:12px; font-style:italic; margin:10px 0;">This offer presents ${q.optionTotals.length} alternative technical configurations for evaluation.</p>
-      ${commonLines.length > 0 ? `<div style="font-weight:800; margin-top:10px;">Included with Every Option</div><table class="p-items">${itemsHead}<tbody>${commonLines.map((l, i) => rowHTML(l, i)).join('')}</tbody></table>` : ''}
-      ${q.optionTotals.map(o => {
-        const groupLines = (q.lines || []).filter(l => (o.lineIds || []).includes(l.lineId));
-        return `<div style="font-weight:800; margin-top:14px; border-top:2px solid #151d2b; padding-top:8px;">${escapeHtml(o.label)}</div>
-          <table class="p-items">${itemsHead}<tbody>${groupLines.map((l, i) => rowHTML(l, i)).join('')}</tbody></table>`;
-      }).join('')}
-    `;
-  } else {
-    itemsHTML = `<table class="p-items">${itemsHead}<tbody>${(q.lines || []).map((l, i) => rowHTML(l, i)).join('')}</tbody></table>`;
-  }
-
-  printShell(q.quotationNo, `
-    <div class="p-head">
-      ${coBlock(settings)}
-      <div><div class="p-doc-title">Technical Offer</div><div class="p-doc-no">${escapeHtml(q.quotationNo)}</div>
-      <div class="p-dates">${q.rfqRef ? `Your Ref: ${escapeHtml(q.rfqRef)}<br>` : ''}Revision: ${padRev(q.revision)}<br>Date: ${formatDate(q.date)}</div></div>
-    </div>
-    <div class="p-grid2">
-      <div><div class="p-label">Prepared For</div><b>${escapeHtml(custName)}</b><br><span style="font-size:11px;color:#666;">${escapeHtml(custAddr)}</span>
-        ${q.projectName ? `<br><span style="font-size:11px;">Project: ${escapeHtml(q.projectName)}</span>` : ''}
-        ${q.endUser ? `<br><span style="font-size:11px;">End-User: ${escapeHtml(q.endUser)}</span>` : ''}
-      </div>
-      <div><div class="p-label">Technical Details</div>
-        <div style="font-size:11px;">Delivery Lead Time: ${escapeHtml(q.deliveryLeadTime || '—')}<br>Warranty: ${escapeHtml(q.warranty || '—')}</div>
-      </div>
-    </div>
-    ${itemsHTML}
-    ${q.customerNotes ? `<div class="p-terms"><b>Notes:</b>\n${escapeHtml(q.customerNotes)}</div>` : ''}
-    <div class="p-terms" style="font-style:italic;">This Technical Offer is issued for technical evaluation only and does not constitute a commercial quotation. Pricing and commercial terms are provided separately.</div>
-    <div class="p-sign">
-      ${signatureBlockHTML(settings, 'Prepared by / Technical Representative')}
-      <div class="box">Reviewed and Technically Approved By / Printed Name</div>
-    </div>
-    <div class="p-foot">${escapeHtml(settings.companyName)} · System-generated document</div>
-  `);
-}
-
 async function printSalesOrder(so, customer, customerPO, quotation) {
   const settings = await DB.getSettings();
   const rows = so.lines.map((l, i) => {
@@ -276,4 +220,41 @@ async function printProformaInvoice(pi, so, customer) {
   `);
 }
 
-window.Print = { printQuotation, printTechnicalOffer, printSalesOrder, printSupplierPO, printProformaInvoice };
+/** Technical Offers deliberately use a MINIMAL header, not the full coBlock() used everywhere
+    else -- these documents are meant to be forwarded on by the customer to their own end user,
+    so a heavy Hadrontech branding treatment (logo, address, bank details) doesn't belong here.
+    Just enough identity to know who prepared it. */
+async function printTechnicalOffer(t, customer) {
+  const settings = await DB.getSettings();
+  const itemRows = (t.items || []).map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.description)}</td><td>${escapeHtml(it.qty)}</td><td>${escapeHtml(it.manufacturer)}</td></tr>`).join('');
+  const specRows = (t.specs || []).map(s => `<tr><td>${escapeHtml(s.item)}</td><td>${escapeHtml(s.requested)}</td><td>${escapeHtml(s.offered)}</td></tr>`).join('');
+
+  printShell(t.offerNo, `
+    <div style="text-align:right; font-size:10px; letter-spacing:.08em; color:#5b6b84; font-weight:700; margin-bottom:24px;">HADRONTECH INDUSTRIAL SOLUTIONS</div>
+    <div style="text-align:center;">
+      <div style="font-size:26px; font-weight:800; color:#1b2a4a; letter-spacing:.06em;">TECHNICAL OFFER</div>
+      <div style="border-bottom:3px solid #c8720a; width:120px; margin:10px auto 14px;"></div>
+      <div style="font-size:13px; color:#5b6b84;">For technical evaluation only \u2014 this document does not represent a declaration of full compliance.</div>
+    </div>
+    <table style="width:100%; margin-top:24px; font-size:12px; border-collapse:collapse;">
+      <tr><td style="padding:5px 0; color:#5b6b84; width:140px;">To</td><td style="padding:5px 0; font-weight:700;">${escapeHtml(t.endUser || '—')}</td></tr>
+      <tr><td style="padding:5px 0; color:#5b6b84;">Attention</td><td style="padding:5px 0; font-weight:700;">${escapeHtml(t.attentionTo || '—')}</td></tr>
+      <tr><td style="padding:5px 0; color:#5b6b84;">Submitted Via</td><td style="padding:5px 0; font-weight:700;">${escapeHtml(customer?.companyName || '—')}</td></tr>
+      <tr><td style="padding:5px 0; color:#5b6b84;">RFQ Reference</td><td style="padding:5px 0; font-weight:700;">${escapeHtml(t.rfqReference || '—')}</td></tr>
+      <tr><td style="padding:5px 0; color:#5b6b84;">Date</td><td style="padding:5px 0; font-weight:700;">${formatDate(t.date)}</td></tr>
+    </table>
+
+    <h3 style="margin-top:30px; color:#1b2a4a;">Summary of Offered Items</h3>
+    <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Manufacturer / Origin</th></tr></thead><tbody>${itemRows}</tbody></table>
+
+    <h3 style="margin-top:26px; color:#1b2a4a;">Technical Data Sheet</h3>
+    <table class="p-items"><thead><tr><th>Item</th><th>Requested (RFQ / End-User)</th><th>Offered (Supplier / Nameplate)</th></tr></thead><tbody>${specRows}</tbody></table>
+
+    <div class="p-terms" style="font-style:italic;">Subject to final supplier verification and end-user technical approval.</div>
+    <div class="p-sign">
+      <div><div class="box">${escapeHtml(settings.authorizedSignatory)}<br>Prepared by</div></div>
+    </div>
+  `);
+}
+
+window.Print = { printQuotation, printSalesOrder, printSupplierPO, printProformaInvoice, printTechnicalOffer };

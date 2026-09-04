@@ -5,7 +5,7 @@
    ============================================================ */
 
 const DB_NAME = 'HadrontechDB';
-const DB_VERSION = 4; // v4 adds the 'proformaInvoices' store — existing data is untouched on upgrade.
+const DB_VERSION = 5; // v5 adds the 'technicalOffers' store — existing data is untouched on upgrade.
 let _db = null;
 
 /** Opens (and if needed, creates/upgrades) the database. Call once at startup. */
@@ -61,6 +61,13 @@ function openDB() {
       ]);
       mk('proformaInvoices', { keyPath: 'id', autoIncrement: true }, [
         ['piNo', 'piNo', true], ['salesOrderId', 'salesOrderId']
+      ]);
+      // A Technical Offer is deliberately NOT tied to the Products catalog or to a priced
+      // Quotation -- it's for proposing a supplier's offering for technical evaluation,
+      // often before an item is formally onboarded or pricing is finalized. Every item and
+      // spec line is stored as free text for exactly that reason.
+      mk('technicalOffers', { keyPath: 'id', autoIncrement: true }, [
+        ['offerNo', 'offerNo', true], ['customerId', 'customerId']
       ]);
       mk('counters', { keyPath: 'name' });
       mk('settings', { keyPath: 'key' });
@@ -148,6 +155,7 @@ async function ensureCounters() {
     { name: 'salesOrder', prefix: 'HT-SO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'supplierPO', prefix: 'HT-PO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'proformaInvoice', prefix: 'HT-PI', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'technicalOffer', prefix: 'HT-TO', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {
     const existing = await getCounter(d.name);

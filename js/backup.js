@@ -3,7 +3,7 @@
    This is the primary safety net for an offline, single-device app.
    ============================================================ */
 
-const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'counters', 'settings', 'activity'];
+const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'technicalOffers', 'counters', 'settings', 'activity'];
 const APP_VERSION = '1.0.0';
 
 Router.route('/settings/backup', async () => {
@@ -56,6 +56,7 @@ Router.route('/settings/backup', async () => {
         <button class="btn-line btn-sm" data-csv="supplierPOs">SupplierPOs.csv</button>
         <button class="btn-line btn-sm" data-csv="stockMovements">StockMovements.csv</button>
         <button class="btn-line btn-sm" data-csv="proformaInvoices">ProformaInvoices.csv</button>
+        <button class="btn-line btn-sm" data-csv="technicalOffers">TechnicalOffers.csv</button>
       </div>
     </div>
   `;
@@ -126,7 +127,8 @@ const CSV_COLUMNS = {
   supplierPOs: [{ label: 'PO No', value: 'poNo' }, { label: 'PO Date', value: 'poDate' }, { label: 'Status', value: 'status' }, { label: 'Total Cost', value: 'totalCost' }],
   enquiries: [{ label: 'Enquiry No', value: 'enquiryNo' }, { label: 'Customer', value: r => r.customerSnapshot?.companyName || '' }, { label: 'Subject', value: 'subject' }, { label: 'Stage', value: 'stage' }, { label: 'Date Received', value: 'dateReceived' }],
   stockMovements: [{ label: 'Date', value: 'date' }, { label: 'Product ID', value: 'productId' }, { label: 'Type', value: 'type' }, { label: 'Qty', value: 'qty' }, { label: 'Reference', value: 'reference' }, { label: 'Note', value: 'note' }, { label: 'By', value: 'createdBy' }],
-  proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Invoice Amount', value: r => r.grandTotal ?? '' }, { label: 'Amount Paid', value: r => (typeof piAmountPaid === 'function' ? piAmountPaid(r) : '') }, { label: 'Balance Due', value: r => (typeof piBalanceDue === 'function' ? piBalanceDue(r) : '') }, { label: 'Payment Status', value: r => (typeof piPaymentStatus === 'function' ? piPaymentStatus(r) : '') }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }]
+  proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Invoice Amount', value: r => r.grandTotal ?? '' }, { label: 'Amount Paid', value: r => (typeof piAmountPaid === 'function' ? piAmountPaid(r) : '') }, { label: 'Balance Due', value: r => (typeof piBalanceDue === 'function' ? piBalanceDue(r) : '') }, { label: 'Payment Status', value: r => (typeof piPaymentStatus === 'function' ? piPaymentStatus(r) : '') }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }],
+  technicalOffers: [{ label: 'Offer No', value: 'offerNo' }, { label: 'Customer ID', value: 'customerId' }, { label: 'End User', value: 'endUser' }, { label: 'RFQ Reference', value: 'rfqReference' }, { label: 'Date', value: 'date' }, { label: 'Item Count', value: r => (r.items || []).length }, { label: 'Spec Row Count', value: r => (r.specs || []).length }, { label: 'Created By', value: 'createdBy' }]
 };
 
 async function exportTableCSV(storeName) {
