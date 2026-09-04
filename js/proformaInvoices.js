@@ -20,6 +20,24 @@
 Router.route('/proforma-invoices/:id', (p) => renderPIDetail(p.id));
 Router.route('/payments', () => renderPaymentsList());
 
+/** One-time migration for PIs generated before the snapshot fields existed (before payment
+    tracking was added) -- those records have no stored grandTotal/lines at all, which would
+    otherwise silently show as a ₱0.00 invoice. Backfills from the linked Sales Order's
+    CURRENT figures (the best available source at this point) and persists it, so it becomes
+    a proper frozen snapshot from here on -- same protection new invoices get automatically. */
+async function ensurePISnapshot(pi) {
+  if (pi.grandTotal !== undefined && pi.lines !== undefined) return pi;
+  const so = await DB.dbGet('salesOrders', pi.salesOrderId);
+  if (!so) return pi; // nothing to backfill from; leave as-is rather than guess
+  pi.lines = (so.lines || []).map(l => Object.assign({}, l));
+  pi.subtotal = so.subtotal; pi.vatTotal = so.vatTotal; pi.freight = so.freight; pi.other = so.other;
+  pi.grandTotal = so.grandTotal; pi.currency = so.currency;
+  pi.paymentTerms = so.paymentTerms; pi.incoterms = so.incoterms;
+  pi.payments = pi.payments || [];
+  await DB.dbPut('proformaInvoices', pi);
+  return pi;
+}
+
 function piAmountPaid(pi) {
   return r2((pi.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0));
 }
@@ -35,9 +53,10 @@ function piPaymentStatus(pi) {
 }
 
 async function renderPIDetail(id) {
-  const pi = await DB.dbGet('proformaInvoices', Number(id));
+  let pi = await DB.dbGet('proformaInvoices', Number(id));
   const content = document.getElementById('content');
   if (!pi) { content.innerHTML = `<div class="empty-state"><h3>Proforma Invoice not found</h3></div>`; return; }
+  pi = await ensurePISnapshot(pi);
 
   const so = await DB.dbGet('salesOrders', pi.salesOrderId);
   const customer = so ? await DB.dbGet('customers', so.customerId) : null;
@@ -161,9 +180,10 @@ function renderRecordPaymentForm(pi, id) {
 async function renderPaymentsList() {
   const content = document.getElementById('content');
   Router.setBreadcrumb([{ label: 'Payments' }]);
-  const [allPIs, salesOrders, customers] = await Promise.all([
+  const [allPIsRaw, salesOrders, customers] = await Promise.all([
     DB.dbGetAll('proformaInvoices'), DB.dbGetAll('salesOrders'), DB.dbGetAll('customers')
   ]);
+  const allPIs = await Promise.all(allPIsRaw.map(pi => ensurePISnapshot(pi)));
   const soMap = Object.fromEntries(salesOrders.map(s => [s.id, s]));
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
 
@@ -220,4 +240,4 @@ async function getOrCreateProformaInvoice(so) {
   Router.navigate(`/proforma-invoices/${newId}`);
 }
 
-window.ProformaInvoices = { getOrCreateProformaInvoice, piAmountPaid, piBalanceDue, piPaymentStatus };
+window.ProformaInvoices = { getOrCreateProformaInvoice, piAmountPaid, piBalanceDue, piPaymentStatus, ensurePISnapshot };
