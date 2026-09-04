@@ -160,7 +160,7 @@ async function renderTOForm(record) {
         <p class="muted-text">Entered as plain text — items here don't need to already exist in your Products &amp; Services catalog, since a Technical Offer is often proposing what a supplier can provide before that's settled.</p>
         <div style="overflow-x:auto; max-width:100%;">
         <table class="data-table compact">
-          <thead><tr><th>Description</th><th style="width:110px;">Qty</th><th style="width:220px;">Manufacturer / Origin</th><th></th></tr></thead>
+          <thead><tr><th>Description</th><th>Qty</th><th>Manufacturer / Origin</th><th></th></tr></thead>
           <tbody id="itemsBody"></tbody>
         </table>
         </div>
@@ -197,9 +197,9 @@ async function renderTOForm(record) {
     const body = document.getElementById('itemsBody');
     body.innerHTML = items.map((it, i) => `
       <tr data-idx="${i}">
-        <td><textarea class="it-desc" rows="1">${escapeHtml(it.description || '')}</textarea></td>
-        <td><input class="it-qty" value="${escapeHtml(it.qty || '')}" placeholder="e.g. 2 pcs"></td>
-        <td><input class="it-manuf" value="${escapeHtml(it.manufacturer || '')}" placeholder="e.g. Pentair, Made in Italy"></td>
+        <td><textarea class="it-desc" rows="2" style="width:380px;">${escapeHtml(it.description || '')}</textarea></td>
+        <td><input class="it-qty" value="${escapeHtml(it.qty || '')}" placeholder="e.g. 2 pcs" style="width:80px;"></td>
+        <td><input class="it-manuf" value="${escapeHtml(it.manufacturer || '')}" placeholder="e.g. Pentair, Made in Italy" style="width:220px;"></td>
         <td class="row-del" data-itemdel="${i}">✕</td>
       </tr>`).join('');
     body.querySelectorAll('tr').forEach(tr => {
@@ -215,9 +215,9 @@ async function renderTOForm(record) {
     const body = document.getElementById('specsBody');
     body.innerHTML = specs.map((s, i) => `
       <tr data-idx="${i}">
-        <td><input class="sp-item" value="${escapeHtml(s.item || '')}" placeholder="e.g. Connection Size"></td>
-        <td><input class="sp-req" value="${escapeHtml(s.requested || '')}"></td>
-        <td><input class="sp-off" value="${escapeHtml(s.offered || '')}"></td>
+        <td><input class="sp-item" value="${escapeHtml(s.item || '')}" placeholder="e.g. Connection Size" style="width:220px;"></td>
+        <td><input class="sp-req" value="${escapeHtml(s.requested || '')}" style="width:280px;"></td>
+        <td><input class="sp-off" value="${escapeHtml(s.offered || '')}" style="width:280px;"></td>
         <td class="row-del" data-specdel="${i}">✕</td>
       </tr>`).join('');
     body.querySelectorAll('tr').forEach(tr => {
