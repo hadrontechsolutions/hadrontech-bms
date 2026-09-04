@@ -712,6 +712,7 @@ async function renderQuoteDetail(id) {
       </div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
+        <button class="btn-line" id="btnPrintTechnical">Print Technical Offer</button>
         ${canEditInPlace ? `<button class="btn-line" id="btnEdit">Edit</button>` : ''}
         ${q.isLatest ? `<button class="btn-line" id="btnDuplicate">Duplicate</button>` : ''}
         ${q.isLatest ? `<button class="btn-line" id="btnRevise">New Revision</button>` : ''}
@@ -774,6 +775,7 @@ async function renderQuoteDetail(id) {
 
   const editBtn = document.getElementById('btnEdit'); if (editBtn) editBtn.onclick = () => Router.navigate(`/quotations/${q.id}/edit`);
   document.getElementById('btnPrint').onclick = () => Print.printQuotation(q, customer);
+  document.getElementById('btnPrintTechnical').onclick = () => Print.printTechnicalOffer(q, customer);
   const extendBtn = document.getElementById('btnExtendValidity');
   if (extendBtn) extendBtn.onclick = () => renderExtendValidityForm(q, id);
 
