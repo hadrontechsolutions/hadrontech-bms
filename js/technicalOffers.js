@@ -28,7 +28,7 @@ async function renderTOList() {
   content.innerHTML = `
     <div class="page-head">
       <h1>Technical Offers</h1>
-      <div class="page-actions"><a href="#/technical-offers/new" class="btn-amber">+ New Technical Offer</a></div>
+      <div class="page-actions"><button class="btn-amber" id="btnNewTO">+ New Technical Offer</button></div>
     </div>
     <div class="card" style="padding:0;">
       ${all.length === 0 ? `<div class="empty-inline">No technical offers yet. Create one to propose a supplier's offering for a customer's technical evaluation.</div>` : `
@@ -45,6 +45,7 @@ async function renderTOList() {
       </table>`}
     </div>
   `;
+  document.getElementById('btnNewTO').onclick = () => Router.navigate('/technical-offers/new');
 }
 
 async function renderTODetail(id) {
@@ -187,7 +188,7 @@ async function renderTOForm(record) {
 
       <div class="form-actions">
         <button type="submit" class="btn-amber" id="btnSaveTO">Save</button>
-        <a href="#${isNew ? '/technical-offers' : `/technical-offers/${record.id}`}" class="btn-line">Cancel</a>
+        <button type="button" class="btn-line" id="btnCancelTO">Cancel</button>
       </div>
     </form>
   `;
@@ -250,6 +251,12 @@ async function renderTOForm(record) {
     }));
   }
   drawItems(); drawSpecs(); drawSections();
+
+  document.getElementById('btnCancelTO').onclick = () => {
+    if (!guardNavigation()) return;
+    clearDirty();
+    Router.navigate(isNew ? '/technical-offers' : `/technical-offers/${record.id}`);
+  };
 
   document.getElementById('btnAddItem').onclick = () => { items.push({ description: '', qty: '', manufacturer: '' }); drawItems(); markDirty(); };
   document.getElementById('btnAddSpec').onclick = () => { specs.push({ item: '', requested: '', offered: '' }); drawSpecs(); markDirty(); };
