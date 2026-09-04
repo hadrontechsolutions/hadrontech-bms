@@ -234,11 +234,17 @@ async function renderTOForm(record) {
     host.innerHTML = sections.map((s, i) => `
       <div class="card" style="background:var(--paper); margin-bottom:10px; padding:14px;" data-idx="${i}">
         <div style="display:flex; gap:10px; align-items:flex-start;">
-          <div style="flex:1;">
-            <input class="se-title" value="${escapeHtml(s.title || '')}" placeholder="Section title, e.g. Product Description" style="font-weight:700; margin-bottom:8px;">
-            <textarea class="se-body" rows="3" placeholder="Section text...">${escapeHtml(s.body || '')}</textarea>
+          <div style="flex:1; min-width:0;">
+            <div class="field" style="margin-bottom:10px;">
+              <label>Section Title</label>
+              <input class="se-title" value="${escapeHtml(s.title || '')}" placeholder="e.g. Product Description" style="font-weight:700;">
+            </div>
+            <div class="field">
+              <label>Section Text</label>
+              <textarea class="se-body" rows="3" placeholder="Section text...">${escapeHtml(s.body || '')}</textarea>
+            </div>
           </div>
-          <div class="row-del" data-sectiondel="${i}" style="padding-top:6px;">✕</div>
+          <div class="row-del" data-sectiondel="${i}" style="padding-top:26px;">✕</div>
         </div>
       </div>`).join('');
     host.querySelectorAll('[data-idx]').forEach(card => {
