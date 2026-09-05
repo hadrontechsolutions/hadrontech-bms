@@ -26,8 +26,8 @@ const REPORT_GROUPS = [
     { key: 'supplierPaymentsAging', label: 'Supplier Payments Aging Report' }
   ]},
   { group: 'Bookkeeper Reports', reports: [
-    { key: 'salesRegisterBookkeeper', label: 'Sales Register (for Bookkeeper)' },
-    { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register (for Bookkeeper)' }
+    { key: 'salesRegisterBookkeeper', label: 'Sales Register' },
+    { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register' }
   ]}
 ];
 // Flat lookup kept for anything that just needs a report's label or existence check by key.
@@ -48,7 +48,7 @@ async function renderReports(activeKey) {
           ${REPORT_GROUPS.map(g => `
             <div class="report-group" data-group>
               <div class="report-group-label">${escapeHtml(g.group)}</div>
-              ${g.reports.map(r => `<a href="#/reports/${r.key}" class="report-link ${r.key === activeKey ? 'active' : ''}" data-label="${escapeHtml(r.label.toLowerCase())}">${r.label}</a>`).join('')}
+              ${g.reports.map(r => `<a href="#/reports/${r.key}" class="report-link ${r.key === activeKey ? 'active' : ''}" data-label="${escapeHtml(r.label.toLowerCase())}" data-group="${escapeHtml(g.group.toLowerCase())}">${r.label}</a>`).join('')}
             </div>`).join('')}
           <div class="empty-inline" id="reportFilterEmpty" style="display:none;">No reports match.</div>
         </div>
@@ -73,7 +73,7 @@ async function renderReports(activeKey) {
     document.querySelectorAll('.report-group').forEach(groupEl => {
       let groupHasMatch = false;
       groupEl.querySelectorAll('.report-link').forEach(link => {
-        const match = !q || link.dataset.label.includes(q);
+        const match = !q || link.dataset.label.includes(q) || link.dataset.group.includes(q);
         link.style.display = match ? '' : 'none';
         if (match) groupHasMatch = true;
       });
