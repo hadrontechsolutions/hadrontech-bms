@@ -6,11 +6,13 @@ const REPORT_DEFS = [
   { key: 'quotationRegister', label: 'Quotation Register' },
   { key: 'openQuotations', label: 'Open Quotation Report' },
   { key: 'wonLost', label: 'Won & Lost Quotation Report' },
+  { key: 'technicalOffersLog', label: 'Technical Offers Log' },
   { key: 'salesOrderRegister', label: 'Sales Order Register' },
   { key: 'supplierPORegister', label: 'Supplier PO Register' },
   { key: 'salesByCustomer', label: 'Sales by Customer' },
   { key: 'salesByMonth', label: 'Sales by Month' },
   { key: 'grossProfit', label: 'Gross Profit Report' },
+  { key: 'paymentsAging', label: 'Payments Aging Report' },
   { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery' },
   { key: 'expiringSoon', label: 'Quotations Expiring Soon' },
   { key: 'expiredQuotations', label: 'Expired Quotations — Needs Review' },
@@ -78,6 +80,7 @@ async function buildReport(key, from, to) {
   const suppliers = await DB.dbGetAll('suppliers');
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
+  const soMap = Object.fromEntries(salesOrders.map(s => [s.id, s]));
 
   switch (key) {
     case 'quotationRegister':
@@ -188,6 +191,46 @@ async function buildReport(key, from, to) {
         formatMoney(r2(rows.reduce((s, r) => s + (r.totalCost || 0), 0)))
       ];
       return { rows, cols, totals, note: 'Figures are shown in PHP. If any purchase orders were in a foreign currency, their amounts are summed as raw numbers, not converted — please review those individually before handing this to your bookkeeper.' };
+    }
+    case 'technicalOffersLog': {
+      const technicalOffers = await DB.dbGetAll('technicalOffers');
+      const rows = technicalOffers.filter(t => inRange(t.date));
+      return { rows, cols: [
+        { label: 'Offer No', value: 'offerNo' },
+        { label: 'Date', value: r => formatDate(r.date) },
+        { label: 'Submitted Via', value: r => custMap[r.customerId]?.companyName || '' },
+        { label: 'End User', value: r => r.endUser || '' },
+        { label: 'RFQ Reference', value: r => r.rfqReference || '' },
+        { label: 'Status', value: r => r.status || 'Draft' }
+      ]};
+    }
+    case 'paymentsAging': {
+      // Proforma Invoices link to a Sales Order, not directly to a customer -- resolve through
+      // the same chain the Payments list itself uses. Also apply the same legacy-invoice
+      // migration used there, so an invoice nobody has opened yet still reports its real balance.
+      const proformaInvoicesRaw = await DB.dbGetAll('proformaInvoices');
+      const proformaInvoices = await Promise.all(proformaInvoicesRaw.map(pi => ProformaInvoices.ensurePISnapshot(pi)));
+      const rows = proformaInvoices.filter(pi => ProformaInvoices.piPaymentStatus(pi) !== 'Paid' && inRange(pi.date));
+      const daysOutstanding = (d) => d ? Math.max(0, Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000)) : '';
+      const cols = [
+        { label: 'PI No', value: 'piNo' },
+        { label: 'Customer', value: r => custMap[soMap[r.salesOrderId]?.customerId]?.companyName || '' },
+        { label: 'SO No', value: r => soMap[r.salesOrderId]?.soNo || '' },
+        { label: 'Date', value: r => formatDate(r.date) },
+        { label: 'Days Outstanding', value: r => daysOutstanding(r.date) },
+        { label: 'Invoice Amount', value: r => formatMoney(r.grandTotal, r.currency) },
+        { label: 'Amount Paid', value: r => formatMoney(ProformaInvoices.piAmountPaid(r), r.currency) },
+        { label: 'Balance Due', value: r => formatMoney(ProformaInvoices.piBalanceDue(r), r.currency) },
+        { label: 'Status', value: r => ProformaInvoices.piPaymentStatus(r) }
+      ];
+      // Outstanding balances can span more than one currency -- deliberately NOT summed into a
+      // single totals row, since adding e.g. PHP and USD together would produce a meaningless
+      // number. Instead, break it down by currency in the note above the table.
+      const byCurrency = {};
+      rows.forEach(r => { const cur = r.currency || 'PHP'; byCurrency[cur] = (byCurrency[cur] || 0) + ProformaInvoices.piBalanceDue(r); });
+      const breakdown = Object.keys(byCurrency).sort().map(cur => formatMoney(byCurrency[cur], cur)).join(', ');
+      const note = rows.length === 0 ? '' : `Total outstanding by currency: ${breakdown}. Figures are not combined across currencies, since summing different currencies together would be meaningless. Only Unpaid and Partially Paid invoices are shown — fully paid invoices are excluded.`;
+      return { rows, cols, note };
     }
     default: return { rows: [], cols: [] };
   }
