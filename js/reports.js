@@ -94,7 +94,13 @@ async function renderReports(activeKey) {
     if (currentRows.length === 0) { wrap.innerHTML = `<div class="empty-inline">No data for this report yet.</div>`; return; }
     wrap.innerHTML = (result.note ? `<p class="muted-text" style="margin-bottom:10px;">${escapeHtml(result.note)}</p>` : '')
       + `<table class="data-table compact"><thead><tr>${currentCols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
-      <tbody>${currentRows.map(row => `<tr>${currentCols.map(c => `<td>${escapeHtml(String(typeof c.value === 'function' ? c.value(row) : row[c.value] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+      <tbody>${currentRows.map(row => `<tr>${currentCols.map(c => {
+        const raw = typeof c.value === 'function' ? c.value(row) : row[c.value] ?? '';
+        // badge:true renders the cell as a color-coded status pill (statusBadge already escapes
+        // its own text safely) instead of plain escaped text. CSV export below is untouched --
+        // it always uses the plain raw value, so exported files never contain HTML markup.
+        return `<td>${c.badge ? statusBadge(String(raw)) : escapeHtml(String(raw))}</td>`;
+      }).join('')}</tr>`).join('')}</tbody>
       ${currentTotals ? `<tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);">${currentTotals.map(t => `<td>${escapeHtml(t)}</td>`).join('')}</tr></tfoot>` : ''}
       </table>`;
   }
@@ -123,39 +129,56 @@ async function buildReport(key, from, to) {
     case 'quotationRegister':
       return { rows: quotations.filter(q => inRange(q.date)), cols: [
         { label: 'Quotation No', value: 'quotationNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || r.customerSnapshot?.companyName || '' },
-        { label: 'Date', value: r => formatDate(r.date) }, { label: 'Status', value: 'status' }, { label: 'VAT Amount', value: r => formatMoney(r.vatTotal || 0, r.currency) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
+        { label: 'Date', value: r => formatDate(r.date) }, { label: 'Status', value: 'status', badge: true }, { label: 'VAT Amount', value: r => formatMoney(r.vatTotal || 0, r.currency) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
       ]};
     case 'openQuotations':
       return { rows: quotations.filter(q => ['Draft', 'Sent', 'Under Review'].includes(q.status) && inRange(q.date)), cols: [
         { label: 'Quotation No', value: 'quotationNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Status', value: 'status' }, { label: 'Valid Until', value: r => formatDate(r.validUntil) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
+        { label: 'Status', value: 'status', badge: true }, { label: 'Valid Until', value: r => formatDate(r.validUntil) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
       ]};
     case 'wonLost':
       return { rows: quotations.filter(q => ['Won', 'Lost'].includes(q.status) && inRange(q.date)), cols: [
         { label: 'Quotation No', value: 'quotationNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Status', value: 'status' }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
+        { label: 'Status', value: 'status', badge: true }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
       ]};
     case 'salesOrderRegister':
       return { rows: salesOrders.filter(o => inRange(o.orderDate)), cols: [
         { label: 'SO No', value: 'soNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Date', value: r => formatDate(r.orderDate) }, { label: 'Status', value: 'status' }, { label: 'VAT Amount', value: r => formatMoney(r.vatTotal || 0, r.currency) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
+        { label: 'Date', value: r => formatDate(r.orderDate) }, { label: 'Status', value: 'status', badge: true }, { label: 'VAT Amount', value: r => formatMoney(r.vatTotal || 0, r.currency) }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
       ]};
     case 'supplierPORegister':
       return { rows: supplierPOs.filter(p => inRange(p.poDate)), cols: [
         { label: 'PO No', value: 'poNo' }, { label: 'Supplier', value: r => supMap[r.supplierId]?.companyName || '' },
-        { label: 'Date', value: r => formatDate(r.poDate) }, { label: 'Status', value: 'status' }, { label: 'Total Cost', value: r => formatMoney(r.totalCost, r.currency) }
+        { label: 'Date', value: r => formatDate(r.poDate) }, { label: 'Status', value: 'status', badge: true }, { label: 'Total Cost', value: r => formatMoney(r.totalCost, r.currency) }
       ]};
     case 'salesByCustomer': {
-      const map = {};
-      salesOrders.filter(o => inRange(o.orderDate)).forEach(o => { map[o.customerId] = (map[o.customerId] || 0) + (o.grandTotal || 0); });
-      const rows = Object.entries(map).map(([cid, total]) => ({ customer: custMap[cid]?.companyName || 'Unknown', total: formatMoney(total) }));
-      return { rows, cols: [{ label: 'Customer', value: 'customer' }, { label: 'Total Sales', value: 'total' }] };
+      // BUG FIX: this previously called formatMoney(total) with no currency argument, which
+      // silently defaults to PHP -- meaning if a customer had any non-PHP sales order, its
+      // amount got summed in as if it were PHP and displayed with a ₱ symbol regardless. Fixed
+      // using the same PHP-assumed-with-anomaly-flag approach used on the Payments Aging Report.
+      const filtered = salesOrders.filter(o => inRange(o.orderDate));
+      const phpMap = {}, nonPhpByCustomer = {};
+      filtered.forEach(o => {
+        if ((o.currency || 'PHP') === 'PHP') { phpMap[o.customerId] = (phpMap[o.customerId] || 0) + (o.grandTotal || 0); }
+        else { nonPhpByCustomer[o.customerId] = (nonPhpByCustomer[o.customerId] || []).concat([o]); }
+      });
+      const rows = Object.entries(phpMap).map(([cid, total]) => ({ customer: custMap[cid]?.companyName || 'Unknown', total: formatMoney(total, 'PHP') }));
+      const nonPhpCount = Object.values(nonPhpByCustomer).reduce((s, arr) => s + arr.length, 0);
+      const note = nonPhpCount === 0 ? '' : `⚠ ${nonPhpCount} sales order(s) in this period are NOT in PHP and are excluded from these totals — customer sales are expected to always be in PHP, so it's worth double-checking these.`;
+      return { rows, cols: [{ label: 'Customer', value: 'customer' }, { label: 'Total Sales', value: 'total' }], note };
     }
     case 'salesByMonth': {
-      const map = {};
-      salesOrders.filter(o => inRange(o.orderDate)).forEach(o => { const m = (o.orderDate || '').slice(0, 7); map[m] = (map[m] || 0) + (o.grandTotal || 0); });
-      const rows = Object.keys(map).sort().map(m => ({ month: m, total: formatMoney(map[m]) }));
-      return { rows, cols: [{ label: 'Month', value: 'month' }, { label: 'Total Sales', value: 'total' }] };
+      // Same bug, same fix as salesByCustomer above.
+      const filtered = salesOrders.filter(o => inRange(o.orderDate));
+      const phpMap = {}; let nonPhpCount = 0;
+      filtered.forEach(o => {
+        const m = (o.orderDate || '').slice(0, 7);
+        if ((o.currency || 'PHP') === 'PHP') { phpMap[m] = (phpMap[m] || 0) + (o.grandTotal || 0); }
+        else { nonPhpCount++; }
+      });
+      const rows = Object.keys(phpMap).sort().map(m => ({ month: m, total: formatMoney(phpMap[m], 'PHP') }));
+      const note = nonPhpCount === 0 ? '' : `⚠ ${nonPhpCount} sales order(s) in this period are NOT in PHP and are excluded from these totals — customer sales are expected to always be in PHP, so it's worth double-checking these.`;
+      return { rows, cols: [{ label: 'Month', value: 'month' }, { label: 'Total Sales', value: 'total' }], note };
     }
     case 'grossProfit':
       return { rows: quotations.filter(q => q.status === 'Won' && inRange(q.date)), cols: [
@@ -166,7 +189,7 @@ async function buildReport(key, from, to) {
     case 'awaitingDelivery':
       return { rows: salesOrders.filter(o => ['Ready for Delivery', 'Partially Received'].includes(o.status)), cols: [
         { label: 'SO No', value: 'soNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Status', value: 'status' }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
+        { label: 'Status', value: 'status', badge: true }, { label: 'Total', value: r => formatMoney(r.grandTotal, r.currency) }
       ]};
     case 'expiringSoon': {
       return { rows: quotations.filter(q => ['today', 'soon'].includes(getExpiryInfo(q).state)), cols: [
@@ -177,7 +200,7 @@ async function buildReport(key, from, to) {
     case 'expiredQuotations': {
       return { rows: quotations.filter(q => getExpiryInfo(q).state === 'expired'), cols: [
         { label: 'Quotation No', value: 'quotationNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Valid Until', value: r => formatDate(r.validUntil) }, { label: 'Status', value: 'status' }, { label: 'Expired', value: r => getExpiryInfo(r).text }
+        { label: 'Valid Until', value: r => formatDate(r.validUntil) }, { label: 'Status', value: 'status', badge: true }, { label: 'Expired', value: r => getExpiryInfo(r).text }
       ]};
     }
     case 'salesRegisterBookkeeper': {
@@ -238,7 +261,7 @@ async function buildReport(key, from, to) {
         { label: 'Submitted Via', value: r => custMap[r.customerId]?.companyName || '' },
         { label: 'End User', value: r => r.endUser || '' },
         { label: 'RFQ Reference', value: r => r.rfqReference || '' },
-        { label: 'Status', value: r => r.status || 'Draft' }
+        { label: 'Status', value: r => r.status || 'Draft', badge: true }
       ]};
     }
     case 'paymentsAging': {
@@ -258,7 +281,7 @@ async function buildReport(key, from, to) {
         { label: 'Invoice Amount', value: r => formatMoney(r.grandTotal, r.currency) },
         { label: 'Amount Paid', value: r => formatMoney(ProformaInvoices.piAmountPaid(r), r.currency) },
         { label: 'Balance Due', value: r => formatMoney(ProformaInvoices.piBalanceDue(r), r.currency) },
-        { label: 'Status', value: r => ProformaInvoices.piPaymentStatus(r) }
+        { label: 'Status', value: r => ProformaInvoices.piPaymentStatus(r), badge: true }
       ];
       // Customer invoices are expected to always be in PHP for this business. Rather than
       // treating multiple currencies as a normal case to gracefully average together, PHP
@@ -288,7 +311,7 @@ async function buildReport(key, from, to) {
         { label: 'Total Cost', value: r => formatMoney(r.totalCost, r.currency) },
         { label: 'Amount Paid', value: r => formatMoney(SupplierPOs.spoAmountPaid(r), r.currency) },
         { label: 'Balance Due', value: r => formatMoney(SupplierPOs.spoBalanceDue(r), r.currency) },
-        { label: 'Status', value: r => SupplierPOs.spoPaymentStatus(r) }
+        { label: 'Status', value: r => SupplierPOs.spoPaymentStatus(r), badge: true }
       ];
       const byCurrency = {};
       rows.forEach(r => { const cur = r.currency || 'PHP'; byCurrency[cur] = (byCurrency[cur] || 0) + SupplierPOs.spoBalanceDue(r); });
