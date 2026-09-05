@@ -2,24 +2,36 @@
    reports.js — business reports, all filterable by date and exportable to CSV
    ============================================================ */
 
-const REPORT_DEFS = [
-  { key: 'quotationRegister', label: 'Quotation Register' },
-  { key: 'openQuotations', label: 'Open Quotation Report' },
-  { key: 'wonLost', label: 'Won & Lost Quotation Report' },
-  { key: 'technicalOffersLog', label: 'Technical Offers Log' },
-  { key: 'salesOrderRegister', label: 'Sales Order Register' },
-  { key: 'supplierPORegister', label: 'Supplier PO Register' },
-  { key: 'salesByCustomer', label: 'Sales by Customer' },
-  { key: 'salesByMonth', label: 'Sales by Month' },
-  { key: 'grossProfit', label: 'Gross Profit Report' },
-  { key: 'paymentsAging', label: 'Payments Aging Report' },
-  { key: 'supplierPaymentsAging', label: 'Supplier Payments Aging Report' },
-  { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery' },
-  { key: 'expiringSoon', label: 'Quotations Expiring Soon' },
-  { key: 'expiredQuotations', label: 'Expired Quotations — Needs Review' },
-  { key: 'salesRegisterBookkeeper', label: 'Sales Register (for Bookkeeper)' },
-  { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register (for Bookkeeper)' }
+const REPORT_GROUPS = [
+  { group: 'Quotations & Technical Offers', reports: [
+    { key: 'quotationRegister', label: 'Quotation Register' },
+    { key: 'openQuotations', label: 'Open Quotation Report' },
+    { key: 'wonLost', label: 'Won & Lost Quotation Report' },
+    { key: 'expiringSoon', label: 'Quotations Expiring Soon' },
+    { key: 'expiredQuotations', label: 'Expired Quotations — Needs Review' },
+    { key: 'technicalOffersLog', label: 'Technical Offers Log' }
+  ]},
+  { group: 'Orders & Fulfillment', reports: [
+    { key: 'salesOrderRegister', label: 'Sales Order Register' },
+    { key: 'supplierPORegister', label: 'Supplier PO Register' },
+    { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery' }
+  ]},
+  { group: 'Financial Performance', reports: [
+    { key: 'salesByCustomer', label: 'Sales by Customer' },
+    { key: 'salesByMonth', label: 'Sales by Month' },
+    { key: 'grossProfit', label: 'Gross Profit Report' }
+  ]},
+  { group: 'Payments & Collections', reports: [
+    { key: 'paymentsAging', label: 'Payments Aging Report' },
+    { key: 'supplierPaymentsAging', label: 'Supplier Payments Aging Report' }
+  ]},
+  { group: 'Bookkeeper Reports', reports: [
+    { key: 'salesRegisterBookkeeper', label: 'Sales Register (for Bookkeeper)' },
+    { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register (for Bookkeeper)' }
+  ]}
 ];
+// Flat lookup kept for anything that just needs a report's label or existence check by key.
+const REPORT_DEFS = REPORT_GROUPS.flatMap(g => g.reports);
 
 Router.route('/reports', () => renderReports('quotationRegister'));
 Router.route('/reports/:key', (p) => renderReports(p.key));
@@ -30,8 +42,16 @@ async function renderReports(activeKey) {
   content.innerHTML = `
     <div class="page-head"><h1>Reports</h1></div>
     <div class="report-layout">
-      <div class="report-nav">
-        ${REPORT_DEFS.map(r => `<a href="#/reports/${r.key}" class="report-link ${r.key === activeKey ? 'active' : ''}">${r.label}</a>`).join('')}
+      <div class="report-nav-panel">
+        <input type="text" id="reportFilter" class="report-filter-box" placeholder="Filter reports...">
+        <div class="report-nav" id="reportNav">
+          ${REPORT_GROUPS.map(g => `
+            <div class="report-group" data-group>
+              <div class="report-group-label">${escapeHtml(g.group)}</div>
+              ${g.reports.map(r => `<a href="#/reports/${r.key}" class="report-link ${r.key === activeKey ? 'active' : ''}" data-label="${escapeHtml(r.label.toLowerCase())}">${r.label}</a>`).join('')}
+            </div>`).join('')}
+          <div class="empty-inline" id="reportFilterEmpty" style="display:none;">No reports match.</div>
+        </div>
       </div>
       <div class="report-body">
         <div class="card">
@@ -46,6 +66,22 @@ async function renderReports(activeKey) {
       </div>
     </div>
   `;
+
+  document.getElementById('reportFilter').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    let anyVisible = false;
+    document.querySelectorAll('.report-group').forEach(groupEl => {
+      let groupHasMatch = false;
+      groupEl.querySelectorAll('.report-link').forEach(link => {
+        const match = !q || link.dataset.label.includes(q);
+        link.style.display = match ? '' : 'none';
+        if (match) groupHasMatch = true;
+      });
+      groupEl.style.display = groupHasMatch ? '' : 'none';
+      if (groupHasMatch) anyVisible = true;
+    });
+    document.getElementById('reportFilterEmpty').style.display = anyVisible ? 'none' : '';
+  });
 
   let currentRows = [], currentCols = [], currentTotals = null;
 

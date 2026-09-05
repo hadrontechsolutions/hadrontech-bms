@@ -206,8 +206,12 @@ th.internal-only-col{color:var(--amber) !important;}
 .activity-time{margin-left:auto; color:var(--muted); font-size:11px; font-family:var(--mono);}
 
 /* ---------- Reports ---------- */
-.report-layout{display:grid; grid-template-columns:220px 1fr; gap:18px;}
-.report-nav{display:flex; flex-direction:column; gap:2px;}
+.report-layout{display:grid; grid-template-columns:230px 1fr; gap:18px;}
+.report-nav-panel{display:flex; flex-direction:column; gap:10px;}
+.report-filter-box{width:100%; box-sizing:border-box;}
+.report-nav{display:flex; flex-direction:column; gap:4px;}
+.report-group{display:flex; flex-direction:column; gap:2px; margin-bottom:10px;}
+.report-group-label{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--steel); font-weight:700; padding:8px 12px 4px;}
 .report-link{padding:9px 12px; border-radius:var(--radius-sm); color:var(--ink); font-size:13px;}
 .report-link:hover{background:#eef1f6; text-decoration:none;}
 .report-link.active{background:var(--navy); color:#fff; font-weight:700;}
