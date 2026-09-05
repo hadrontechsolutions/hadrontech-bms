@@ -4,10 +4,14 @@
 
 Router.route('/dashboard', async () => {
   Router.setBreadcrumb([{ label: 'Dashboard' }]);
-  const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity] = await Promise.all([
+  const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity, proformaInvoicesRaw, technicalOffers] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('suppliers'), DB.dbGetAll('quotations'),
-    DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.recentActivity(12)
+    DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.recentActivity(12),
+    DB.dbGetAll('proformaInvoices'), DB.dbGetAll('technicalOffers')
   ]);
+  // Migrate any pre-payment-tracking invoices here too, the same way the Payments list does --
+  // otherwise an invoice nobody has opened yet could still show a stale ₱0.00 in these stats.
+  const proformaInvoices = await Promise.all(proformaInvoicesRaw.map(pi => ProformaInvoices.ensurePISnapshot(pi)));
 
   const latestQuotes = quotations.filter(q => q.isLatest);
   const activeCustomers = customers.filter(c => c.status === 'Active' && !c.archived).length;
@@ -25,6 +29,17 @@ Router.route('/dashboard', async () => {
   const outstandingValue = salesOrders.filter(o => !['Delivered', 'Cancelled'].includes(o.status)).reduce((s, o) => s + (o.grandTotal || 0), 0);
   const expiredNeedingReview = latestQuotes.filter(q => getExpiryInfo(q).state === 'expired');
   const expiringWithin7 = latestQuotes.filter(q => ['today', 'soon'].includes(getExpiryInfo(q).state));
+
+  // Outstanding invoices can span more than one currency (PHP, USD, ...) -- summing them into a
+  // single figure would silently add mismatched currencies together, so this groups by currency
+  // instead and only shows a tile for currencies that actually have something outstanding.
+  const outstandingPIs = proformaInvoices.filter(pi => ProformaInvoices.piPaymentStatus(pi) !== 'Paid');
+  const outstandingByCurrency = {};
+  outstandingPIs.forEach(pi => {
+    const cur = pi.currency || 'PHP';
+    outstandingByCurrency[cur] = (outstandingByCurrency[cur] || 0) + ProformaInvoices.piBalanceDue(pi);
+  });
+  const totalTechnicalOffers = technicalOffers.length;
 
   // sales value by month (last 6 months) from sales orders
   const monthMap = {};
@@ -46,6 +61,7 @@ Router.route('/dashboard', async () => {
       <button class="qa-btn" data-hash="/products/new">+ New Product</button>
       <button class="qa-btn" data-hash="/quotations/new">+ New Quotation</button>
       <button class="qa-btn" data-hash="/customer-pos/new">Record Customer PO</button>
+      <button class="qa-btn" data-hash="/technical-offers/new">+ New Technical Offer</button>
       <button class="qa-btn" data-hash="/reports">Search Records</button>
       <button class="qa-btn" data-hash="/settings/backup">Backup Data</button>
     </div>
@@ -65,6 +81,9 @@ Router.route('/dashboard', async () => {
       ${statCard(awaitingDelivery, 'Orders Awaiting Delivery')}
       ${statCard(completedOrders, 'Delivered Orders')}
       ${statCard(winRate + '%', 'Quotation Win Rate')}
+      ${statCard(outstandingPIs.length, 'Invoices Awaiting Payment')}
+      ${Object.keys(outstandingByCurrency).sort().map(cur => statCard(formatMoney(outstandingByCurrency[cur], cur), `Outstanding (${cur})`)).join('')}
+      ${statCard(totalTechnicalOffers, 'Technical Offers')}
     </div>
 
     <div class="dash-grid">
