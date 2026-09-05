@@ -39,6 +39,16 @@ Router.route('/dashboard', async () => {
     const cur = pi.currency || 'PHP';
     outstandingByCurrency[cur] = (outstandingByCurrency[cur] || 0) + ProformaInvoices.piBalanceDue(pi);
   });
+  // Mirror of the customer-side outstanding stats above, but for what WE owe suppliers rather
+  // than what customers owe us. Same reasoning on currency: local suppliers bill in PHP,
+  // overseas ones (e.g. Pentair) in USD, so this is broken down per-currency too rather than
+  // summed into one meaningless combined figure.
+  const outstandingSPOs = supplierPOs.filter(po => SupplierPOs.spoPaymentStatus(po) !== 'Paid');
+  const owedByCurrency = {};
+  outstandingSPOs.forEach(po => {
+    const cur = po.currency || 'PHP';
+    owedByCurrency[cur] = (owedByCurrency[cur] || 0) + SupplierPOs.spoBalanceDue(po);
+  });
   const totalTechnicalOffers = technicalOffers.length;
   const offersAwaitingResponse = technicalOffers.filter(t => t.status === 'Sent').length;
   const offersNeedingRevision = technicalOffers.filter(t => t.status === 'Revision Requested').length;
@@ -85,6 +95,8 @@ Router.route('/dashboard', async () => {
       ${statCard(winRate + '%', 'Quotation Win Rate')}
       ${statCard(outstandingPIs.length, 'Invoices Awaiting Payment')}
       ${Object.keys(outstandingByCurrency).sort().map(cur => statCard(formatMoney(outstandingByCurrency[cur], cur), `Outstanding (${cur})`)).join('')}
+      ${statCard(outstandingSPOs.length, 'Supplier POs Awaiting Payment')}
+      ${Object.keys(owedByCurrency).sort().map(cur => statCard(formatMoney(owedByCurrency[cur], cur), `Owed to Suppliers (${cur})`)).join('')}
       ${statCard(totalTechnicalOffers, 'Technical Offers')}
       ${statCard(offersAwaitingResponse, 'Technical Offers Awaiting Response')}
       ${statCard(offersNeedingRevision, 'Technical Offers Needing Revision')}
