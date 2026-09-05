@@ -54,6 +54,7 @@ Router.route('/settings/backup', async () => {
         <button class="btn-line btn-sm" data-csv="customerPOs">CustomerPOs.csv</button>
         <button class="btn-line btn-sm" data-csv="salesOrders">SalesOrders.csv</button>
         <button class="btn-line btn-sm" data-csv="supplierPOs">SupplierPOs.csv</button>
+        <button class="btn-line btn-sm" data-csv="enquiries">Enquiries.csv</button>
         <button class="btn-line btn-sm" data-csv="stockMovements">StockMovements.csv</button>
         <button class="btn-line btn-sm" data-csv="proformaInvoices">ProformaInvoices.csv</button>
         <button class="btn-line btn-sm" data-csv="technicalOffers">TechnicalOffers.csv</button>
