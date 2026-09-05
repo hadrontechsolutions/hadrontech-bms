@@ -223,14 +223,17 @@ async function buildReport(key, from, to) {
         { label: 'Balance Due', value: r => formatMoney(ProformaInvoices.piBalanceDue(r), r.currency) },
         { label: 'Status', value: r => ProformaInvoices.piPaymentStatus(r) }
       ];
-      // Outstanding balances can span more than one currency -- deliberately NOT summed into a
-      // single totals row, since adding e.g. PHP and USD together would produce a meaningless
-      // number. Instead, break it down by currency in the note above the table.
-      const byCurrency = {};
-      rows.forEach(r => { const cur = r.currency || 'PHP'; byCurrency[cur] = (byCurrency[cur] || 0) + ProformaInvoices.piBalanceDue(r); });
-      const breakdown = Object.keys(byCurrency).sort().map(cur => formatMoney(byCurrency[cur], cur)).join(', ');
-      const note = rows.length === 0 ? '' : `Total outstanding by currency: ${breakdown}. Figures are not combined across currencies, since summing different currencies together would be meaningless. Only Unpaid and Partially Paid invoices are shown — fully paid invoices are excluded.`;
-      return { rows, cols, note };
+      // Customer invoices are expected to always be in PHP for this business. Rather than
+      // treating multiple currencies as a normal case to gracefully average together, PHP
+      // invoices get one simple, clean total -- and if a non-PHP invoice ever shows up, it's
+      // flagged as a standalone anomaly worth double-checking, not folded into the total.
+      const phpRows = rows.filter(r => (r.currency || 'PHP') === 'PHP');
+      const nonPhpRows = rows.filter(r => (r.currency || 'PHP') !== 'PHP');
+      const totalOutstandingPHP = r2(phpRows.reduce((s, r) => s + ProformaInvoices.piBalanceDue(r), 0));
+      const totals = rows.length === 0 ? null : ['', '', '', '', '', '', 'TOTAL', formatMoney(totalOutstandingPHP, 'PHP'), ''];
+      const note = nonPhpRows.length === 0 ? '' :
+        `⚠ ${nonPhpRows.length} invoice(s) shown are NOT in PHP (${nonPhpRows.map(r => `${r.piNo} — ${r.currency}`).join(', ')}) and are excluded from the total above — customer invoices are expected to always be in PHP, so it's worth double-checking these.`;
+      return { rows, cols, totals, note };
     }
     default: return { rows: [], cols: [] };
   }

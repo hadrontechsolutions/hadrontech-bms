@@ -66,8 +66,8 @@ async function main() {
   console.log('STEP 10: Customer name is correctly resolved through the Sales Order link:', body.includes('Key Electrochem'));
   console.log('STEP 11: SO No is shown as a cross-reference:', body.includes('HT-SO-2026-0001'));
 
-  console.log('STEP 12: THE CORE CORRECTNESS CHECK: the note breaks down outstanding balance BY CURRENCY, not as one blind combined sum:', body.includes('by currency') && body.includes('₱13,200.00') && body.includes('$700.00'));
-  console.log('STEP 13: No single combined (and meaningless) total number appears anywhere, like "13900" mixing PHP and USD together:', !body.includes('13900.00') && !body.includes('13,900.00'));
+  console.log('STEP 12: THE CORE CORRECTNESS CHECK: customer invoices are assumed PHP, so the total is a single clean PHP figure (₱13,200.00 from the two outstanding PHP invoices), unaffected by the USD one:', body.includes('₱13,200.00'));
+  console.log('STEP 13: The USD invoice is flagged as a standalone anomaly, NOT silently folded into the PHP total:', body.includes('NOT in PHP') && body.includes('HT-PI-2026-0003') && body.includes('USD'));
 
   /* ============ CSV export doesn't crash for either new report ============ */
   let downloaded = null;
