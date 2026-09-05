@@ -40,6 +40,8 @@ Router.route('/dashboard', async () => {
     outstandingByCurrency[cur] = (outstandingByCurrency[cur] || 0) + ProformaInvoices.piBalanceDue(pi);
   });
   const totalTechnicalOffers = technicalOffers.length;
+  const offersAwaitingResponse = technicalOffers.filter(t => t.status === 'Sent').length;
+  const offersNeedingRevision = technicalOffers.filter(t => t.status === 'Revision Requested').length;
 
   // sales value by month (last 6 months) from sales orders
   const monthMap = {};
@@ -84,6 +86,8 @@ Router.route('/dashboard', async () => {
       ${statCard(outstandingPIs.length, 'Invoices Awaiting Payment')}
       ${Object.keys(outstandingByCurrency).sort().map(cur => statCard(formatMoney(outstandingByCurrency[cur], cur), `Outstanding (${cur})`)).join('')}
       ${statCard(totalTechnicalOffers, 'Technical Offers')}
+      ${statCard(offersAwaitingResponse, 'Technical Offers Awaiting Response')}
+      ${statCard(offersNeedingRevision, 'Technical Offers Needing Revision')}
     </div>
 
     <div class="dash-grid">

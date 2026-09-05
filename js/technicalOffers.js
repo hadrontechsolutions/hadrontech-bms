@@ -10,6 +10,8 @@
    has (or needs) a catalog record for the item at all.
    ============================================================ */
 
+const TO_STATUSES = ['Draft', 'Sent', 'Approved', 'Revision Requested'];
+
 Router.route('/technical-offers', () => renderTOList());
 Router.route('/technical-offers/new', () => renderTOForm(null));
 Router.route('/technical-offers/:id', (p) => renderTODetail(p.id));
@@ -33,7 +35,7 @@ async function renderTOList() {
     <div class="card" style="padding:0;">
       ${all.length === 0 ? `<div class="empty-inline">No technical offers yet. Create one to propose a supplier's offering for a customer's technical evaluation.</div>` : `
       <table class="data-table">
-        <thead><tr><th>Offer No.</th><th>Date</th><th>Submitted Via</th><th>End User</th><th>RFQ Reference</th></tr></thead>
+        <thead><tr><th>Offer No.</th><th>Date</th><th>Submitted Via</th><th>End User</th><th>RFQ Reference</th><th>Status</th></tr></thead>
         <tbody>${all.map(t => `
           <tr class="clickable-row" data-hash="/technical-offers/${t.id}">
             <td>${escapeHtml(t.offerNo)}</td>
@@ -41,6 +43,7 @@ async function renderTOList() {
             <td>${escapeHtml(custMap[t.customerId]?.companyName || '—')}</td>
             <td>${escapeHtml(t.endUser || '—')}</td>
             <td>${escapeHtml(t.rfqReference || '—')}</td>
+            <td>${statusBadge(t.status || 'Draft')}</td>
           </tr>`).join('')}</tbody>
       </table>`}
     </div>
@@ -57,11 +60,17 @@ async function renderTODetail(id) {
 
   content.innerHTML = `
     <div class="page-head">
-      <div><div class="doc-number-tag">${escapeHtml(t.offerNo)}</div><h1>Technical Offer</h1></div>
+      <div><div class="doc-number-tag">${escapeHtml(t.offerNo)}</div><h1>Technical Offer ${statusBadge(t.status || 'Draft')}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrintTO">Print</button>
         <button class="btn-line" id="btnEditTO">Edit</button>
         <button class="btn-danger" id="btnDeleteTO">Delete</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="status-actions">
+        ${TO_STATUSES.filter(s => s !== (t.status || 'Draft')).map(s => `<button class="btn-line btn-sm status-btn" data-status="${s}">Mark as ${s}</button>`).join('')}
       </div>
     </div>
 
@@ -113,6 +122,19 @@ async function renderTODetail(id) {
     toast('Deleted.');
     Router.navigate('/technical-offers');
   };
+
+  content.querySelectorAll('.status-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const newStatus = btn.dataset.status;
+      t.status = newStatus;
+      t.statusHistory = (t.statusHistory || []).concat([{ status: newStatus, date: new Date().toISOString() }]);
+      t.updatedAt = new Date().toISOString();
+      await DB.dbPut('technicalOffers', t);
+      await DB.logActivity(`Technical offer ${t.offerNo} marked as ${newStatus}`);
+      toast(`Marked as ${newStatus}.`);
+      renderTODetail(id);
+    };
+  });
 }
 
 async function renderTOForm(record) {
@@ -292,6 +314,8 @@ async function renderTOForm(record) {
       };
       if (isNew) {
         payload.offerNo = await DB.nextDocNumber('technicalOffer');
+        payload.status = 'Draft';
+        payload.statusHistory = [{ status: 'Draft', date: now }];
         payload.createdAt = now;
         payload.createdBy = settings.userName;
         const newId = await DB.dbAdd('technicalOffers', payload);
