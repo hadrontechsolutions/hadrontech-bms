@@ -34,6 +34,20 @@ async function createFromSalesOrder(so, supplierId, lines) {
   Router.navigate(`/supplier-pos/${newId}`);
 }
 
+function spoAmountPaid(spo) {
+  return r2((spo.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0));
+}
+function spoBalanceDue(spo) {
+  return r2((spo.totalCost || 0) - spoAmountPaid(spo));
+}
+function spoPaymentStatus(spo) {
+  const paid = spoAmountPaid(spo);
+  const total = spo.totalCost || 0;
+  if (paid <= 0) return 'Unpaid';
+  if (paid >= total) return 'Paid';
+  return 'Partially Paid';
+}
+
 Router.route('/supplier-pos', async () => {
   Router.setBreadcrumb([{ label: 'Supplier Purchase Orders' }]);
   const [all, suppliers, salesOrders] = await Promise.all([DB.dbGetAll('supplierPOs'), DB.dbGetAll('suppliers'), DB.dbGetAll('salesOrders')]);
@@ -44,7 +58,7 @@ Router.route('/supplier-pos', async () => {
     <div class="page-head"><h1>Supplier Purchase Orders</h1></div>
     <div class="card">
       <table class="data-table">
-        <thead><tr><th>PO #</th><th>Supplier</th><th>Sales Order</th><th>PO Date</th><th>Status</th><th>Total Cost</th></tr></thead>
+        <thead><tr><th>PO #</th><th>Supplier</th><th>Sales Order</th><th>PO Date</th><th>Status</th><th>Payment Status</th><th>Total Cost</th></tr></thead>
         <tbody>
           ${all.map(po => {
             const mismatched = po.status === 'Received' && (po.lines || []).some(l => (l.receivedQty || 0) < l.qty);
@@ -53,7 +67,7 @@ Router.route('/supplier-pos', async () => {
             <tr class="clickable-row" data-hash="/supplier-pos/${po.id}">
               <td>${escapeHtml(po.poNo)}</td><td>${escapeHtml(supMap[po.supplierId]?.companyName || '—')}</td>
               <td>${escapeHtml(soMap[po.salesOrderId]?.soNo || '—')}</td>
-              <td>${formatDate(po.poDate)}</td><td>${badgeHTML}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
+              <td>${formatDate(po.poDate)}</td><td>${badgeHTML}</td><td>${statusBadge(spoPaymentStatus(po))}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
             </tr>`;
           }).join('')}
         </tbody>
@@ -83,10 +97,11 @@ async function renderSPODetail(id) {
 
   content.innerHTML = `
     <div class="page-head">
-      <div><div class="doc-number-tag">${escapeHtml(po.poNo)}</div><h1>${escapeHtml(supplier?.companyName || '—')} ${headerBadge}</h1></div>
+      <div><div class="doc-number-tag">${escapeHtml(po.poNo)}</div><h1>${escapeHtml(supplier?.companyName || '—')} ${headerBadge} ${statusBadge(spoPaymentStatus(po))}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         <button class="btn-amber" id="btnReceiveStock">Receive Stock</button>
+        <button class="btn-amber" id="btnRecordPaymentSPO">Record Payment</button>
         <button class="btn-line" id="btnEditHeader">Edit / Revise PO</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
@@ -130,7 +145,24 @@ async function renderSPODetail(id) {
         <div class="line"><span>Freight</span><span>${formatMoney(po.freight, po.currency)}</span></div>
         <div class="line"><span>Taxes</span><span>${formatMoney(po.taxes, po.currency)}</span></div>
         <div class="line grand"><span>Total Purchase Cost</span><span>${formatMoney(po.totalCost, po.currency)}</span></div>
+        <div class="line"><span>Amount Paid</span><span class="text-ok">${formatMoney(spoAmountPaid(po), po.currency)}</span></div>
+        <div class="line grand"><span>Balance Due</span><span>${formatMoney(spoBalanceDue(po), po.currency)}</span></div>
       </div>
+    </div>
+
+    <div id="recordPaymentHostSPO"></div>
+
+    <div class="card">
+      <h3 class="section-title">Payment History</h3>
+      ${(po.payments || []).length === 0 ? `<div class="empty-inline">No payments recorded yet.</div>` : `
+      <table class="data-table compact">
+        <thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference / Note</th><th>Logged By</th></tr></thead>
+        <tbody>${[...po.payments].reverse().map(p => `<tr>
+          <td>${formatDate(p.date)}</td><td class="text-ok">${formatMoney(p.amount, po.currency)}</td>
+          <td>${escapeHtml(p.method || '—')}</td><td>${escapeHtml(p.reference || '—')}</td><td>${escapeHtml(p.createdBy || '—')}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      <p class="muted-text" style="margin-top:8px;">Payment history is a permanent record — to correct a mistaken entry, log an offsetting adjustment rather than deleting history.</p>`}
     </div>
 
     <div id="receiveStockHost"></div>
@@ -140,6 +172,7 @@ async function renderSPODetail(id) {
 
   document.getElementById('btnPrint').onclick = () => Print.printSupplierPO(po, supplier, salesOrder);
   document.getElementById('btnEditHeader').onclick = () => renderSPOHeaderEdit(po);
+  document.getElementById('btnRecordPaymentSPO').onclick = () => renderRecordPaymentFormSPO(po, id);
   document.getElementById('btnReceiveStock').onclick = () => {
     if (po.status === 'Cancelled') { toast('This PO is cancelled — nothing to receive against it.', 'err'); return; }
     renderReceiveStockForm(po, id);
@@ -174,6 +207,53 @@ async function renderSPODetail(id) {
     await DB.logActivity(`Supplier PO ${po.poNo} marked as ${newStatus}`);
     toast('Status updated.'); renderSPODetail(id);
   });
+}
+
+function renderRecordPaymentFormSPO(po, id) {
+  const host = document.getElementById('recordPaymentHostSPO');
+  const balanceDue = spoBalanceDue(po);
+  host.innerHTML = `
+    <div class="card">
+      <h3 class="section-title">Record Payment</h3>
+      <div class="form-grid">
+        <div class="field"><label>Date</label><input type="date" id="spo_pay_date" value="${todayISO()}"></div>
+        <div class="field"><label>Amount</label><input type="number" min="0" step="0.01" id="spo_pay_amount" value="${balanceDue > 0 ? balanceDue : ''}"></div>
+        <div class="field"><label>Method</label>
+          <select id="spo_pay_method">
+            <option>Bank Transfer</option><option>Cash</option><option>Check</option><option>Wire Transfer</option><option>Other</option>
+          </select>
+        </div>
+        <div class="field field-wide"><label>Reference / Note</label><input id="spo_pay_reference" placeholder="e.g. Bank reference number, or any note"></div>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button class="btn-amber btn-sm" id="btnConfirmPaymentSPO">Save Payment</button>
+        <button class="btn-line btn-sm" id="btnCancelPaymentSPO">Cancel</button>
+      </div>
+    </div>
+  `;
+  host.scrollIntoView && host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('btnCancelPaymentSPO').onclick = () => { host.innerHTML = ''; };
+  document.getElementById('btnConfirmPaymentSPO').onclick = async () => {
+    const amount = r2(Number(document.getElementById('spo_pay_amount').value) || 0);
+    if (amount <= 0) { toast('Enter a payment amount greater than 0.', 'err'); return; }
+    const newBalance = r2(balanceDue - amount);
+    if (newBalance < 0) {
+      if (!confirm(`This payment of ${formatMoney(amount, po.currency)} is more than the remaining balance of ${formatMoney(balanceDue, po.currency)} — it would overpay this PO by ${formatMoney(-newBalance, po.currency)}.\n\nSave anyway? (This can be correct — e.g. a credit applied toward a future order.)`)) return;
+    }
+    const settings = await DB.getSettings();
+    po.payments = (po.payments || []).concat([{
+      id: 'P' + Math.random().toString(36).slice(2, 9),
+      date: document.getElementById('spo_pay_date').value || todayISO(),
+      amount, method: document.getElementById('spo_pay_method').value,
+      reference: document.getElementById('spo_pay_reference').value,
+      createdBy: settings.userName, createdAt: new Date().toISOString()
+    }]);
+    po.updatedAt = new Date().toISOString();
+    await DB.dbPut('supplierPOs', po);
+    await DB.logActivity(`Recorded payment of ${formatMoney(amount, po.currency)} against supplier PO ${po.poNo}`);
+    toast('Payment recorded.');
+    renderSPODetail(id);
+  };
 }
 
 function renderSPOHeaderEdit(po) {
@@ -357,4 +437,4 @@ function renderReceiveStockForm(po, id) {
   };
 }
 
-window.SupplierPOs = { createFromSalesOrder };
+window.SupplierPOs = { createFromSalesOrder, spoAmountPaid, spoBalanceDue, spoPaymentStatus };

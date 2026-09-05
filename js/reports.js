@@ -13,6 +13,7 @@ const REPORT_DEFS = [
   { key: 'salesByMonth', label: 'Sales by Month' },
   { key: 'grossProfit', label: 'Gross Profit Report' },
   { key: 'paymentsAging', label: 'Payments Aging Report' },
+  { key: 'supplierPaymentsAging', label: 'Supplier Payments Aging Report' },
   { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery' },
   { key: 'expiringSoon', label: 'Quotations Expiring Soon' },
   { key: 'expiredQuotations', label: 'Expired Quotations — Needs Review' },
@@ -234,6 +235,31 @@ async function buildReport(key, from, to) {
       const note = nonPhpRows.length === 0 ? '' :
         `⚠ ${nonPhpRows.length} invoice(s) shown are NOT in PHP (${nonPhpRows.map(r => `${r.piNo} — ${r.currency}`).join(', ')}) and are excluded from the total above — customer invoices are expected to always be in PHP, so it's worth double-checking these.`;
       return { rows, cols, totals, note };
+    }
+    case 'supplierPaymentsAging': {
+      // Unlike customer invoices, supplier costs genuinely span multiple currencies for this
+      // business (local suppliers in PHP, overseas manufacturers like Pentair in USD) -- so
+      // this one properly breaks the outstanding total down BY currency instead of assuming
+      // one. Summing PHP and USD together would produce a number that looks precise but means
+      // nothing, so each currency gets its own total row instead of a single blind sum.
+      const rows = supplierPOs.filter(po => SupplierPOs.spoPaymentStatus(po) !== 'Paid' && inRange(po.poDate));
+      const daysOutstanding = (d) => d ? Math.max(0, Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000)) : '';
+      const cols = [
+        { label: 'PO No', value: 'poNo' },
+        { label: 'Supplier', value: r => supMap[r.supplierId]?.companyName || '' },
+        { label: 'PO Date', value: r => formatDate(r.poDate) },
+        { label: 'Days Outstanding', value: r => daysOutstanding(r.poDate) },
+        { label: 'Total Cost', value: r => formatMoney(r.totalCost, r.currency) },
+        { label: 'Amount Paid', value: r => formatMoney(SupplierPOs.spoAmountPaid(r), r.currency) },
+        { label: 'Balance Due', value: r => formatMoney(SupplierPOs.spoBalanceDue(r), r.currency) },
+        { label: 'Status', value: r => SupplierPOs.spoPaymentStatus(r) }
+      ];
+      const byCurrency = {};
+      rows.forEach(r => { const cur = r.currency || 'PHP'; byCurrency[cur] = (byCurrency[cur] || 0) + SupplierPOs.spoBalanceDue(r); });
+      const currencies = Object.keys(byCurrency).sort();
+      const note = rows.length === 0 ? '' :
+        `Total outstanding by currency: ${currencies.map(cur => formatMoney(byCurrency[cur], cur)).join(', ')}. Figures are not combined across currencies, since summing different currencies together would be meaningless. Only Unpaid and Partially Paid POs are shown — fully paid ones are excluded.`;
+      return { rows, cols, note };
     }
     default: return { rows: [], cols: [] };
   }
