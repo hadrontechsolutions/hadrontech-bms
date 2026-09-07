@@ -12,6 +12,28 @@
 
 const QUOTE_STATUSES = ['Draft', 'Sent', 'Under Review', 'Won', 'Lost', 'Expired'];
 
+const VAT_MODE_EXPLANATIONS = {
+  NonVat: 'Non-VAT means this business is not VAT-registered (below the ₱3M threshold) and doesn\u2019t charge VAT at all \u2014 different from Zero-Rated or VAT Exempt, which are still VAT-registered classifications for specific transactions.',
+  Standard12: 'Standard 12% means this business is VAT-registered and charges the standard 12% VAT rate on this sale.',
+  ZeroRated: 'Zero-Rated means this business is VAT-registered, but this specific transaction (e.g. exports, or sales to PEZA-registered buyers) is taxed at 0% \u2014 the seller is still VAT-registered, just not charging VAT on this particular sale.',
+  Exempt: 'VAT Exempt means this business is VAT-registered, but this specific transaction is statutorily exempt from VAT under the Tax Code (e.g. certain agricultural goods or specific exempt services).'
+};
+
+// Matched live against whatever's typed in the Incoterms field -- shows only the one relevant
+// explanation, the same single-explanation-at-a-time pattern as VAT Mode, rather than a static
+// list of all of them at once.
+const INCOTERMS_EXPLANATIONS = {
+  EXW: '<b>EXW</b> (Ex Works) \u2014 buyer picks up from <b>our warehouse</b>; buyer arranges and pays for <b>everything from there</b> (shipping, insurance, import duties)',
+  FOB: '<b>FOB</b> (Free on Board) \u2014 we deliver to the <b>port and load it</b>; buyer takes over cost and risk <b>once it\u2019s on the vessel</b>',
+  CIF: '<b>CIF</b> (Cost, Insurance, Freight) \u2014 we pay <b>shipping and insurance to the destination port</b>; buyer still handles <b>import duties/customs</b>',
+  DAP: '<b>DAP</b> (Delivered at Place) \u2014 we deliver to the agreed location <b>ready to unload</b>; buyer still handles <b>import duties/customs</b>',
+  DDP: '<b>DDP</b> (Delivered Duty Paid) \u2014 we handle <b>everything, including import duties/taxes</b>; buyer just receives the goods'
+};
+function matchIncoterm(text) {
+  const t = (text || '').trim().toUpperCase();
+  return Object.keys(INCOTERMS_EXPLANATIONS).find(code => t.startsWith(code));
+}
+
 /** Displays revision numbers zero-padded to 2 digits (Rev 00, Rev 01, ...) — a brand new
     quotation starts at revision 0 since nothing has been revised yet. */
 function padRev(n) { return String(n).padStart(2, '0'); }
@@ -268,13 +290,7 @@ async function renderQuoteForm(id) {
         <div class="field"><label>Valid Until</label><input type="date" id="f_validUntil" value="${q.validUntil || ''}"></div>
         <div class="field"><label>Payment Terms</label><input id="f_paymentTerms" value="${escapeHtml(q.paymentTerms || '')}"></div>
         <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(q.incoterms || '')}" placeholder="e.g. EXW, FOB Manila, DAP">
-          <ul class="muted-text" style="margin:6px 0 0; padding-left:18px; line-height:1.5;">
-            <li><b>EXW</b> (Ex Works) — buyer picks up from <b>our warehouse</b>; buyer arranges and pays for <b>everything from there</b> (shipping, insurance, import duties)</li>
-            <li><b>FOB</b> (Free on Board) — we deliver to the <b>port and load it</b>; buyer takes over cost and risk <b>once it's on the vessel</b></li>
-            <li><b>CIF</b> (Cost, Insurance, Freight) — we pay <b>shipping and insurance to the destination port</b>; buyer still handles <b>import duties/customs</b></li>
-            <li><b>DAP</b> (Delivered at Place) — we deliver to the agreed location <b>ready to unload</b>; buyer still handles <b>import duties/customs</b></li>
-            <li><b>DDP</b> (Delivered Duty Paid) — we handle <b>everything, including import duties/taxes</b>; buyer just receives the goods</li>
-          </ul>
+          <p class="muted-text" id="incotermsHint" style="margin-top:4px;"></p>
         </div>
         <div class="field"><label>Delivery Lead Time</label><input id="f_deliveryLeadTime" value="${escapeHtml(q.deliveryLeadTime || '')}"></div>
         <div class="field"><label>Warranty</label><input id="f_warranty" value="${escapeHtml(q.warranty || '')}"></div>
@@ -285,7 +301,7 @@ async function renderQuoteForm(id) {
             <option value="ZeroRated" ${q.vatMode === 'ZeroRated' ? 'selected' : ''}>Zero-Rated</option>
             <option value="Exempt" ${q.vatMode === 'Exempt' ? 'selected' : ''}>VAT Exempt</option>
           </select>
-          <p class="muted-text" style="margin-top:4px;">Non-VAT means this business is not VAT-registered (below the ₱3M threshold) and doesn't charge VAT at all — different from Zero-Rated or VAT Exempt, which are still VAT-registered classifications for specific transactions.</p>
+          <p class="muted-text" id="vatModeHint" style="margin-top:4px;"></p>
         </div>
       </div>
 
@@ -510,6 +526,21 @@ async function renderQuoteForm(id) {
   };
   content.querySelectorAll('#qForm input, #qForm select, #qForm textarea').forEach(i => i.addEventListener('input', () => { markDirty(); refreshTotals(); }));
 
+  // Both hints show only the ONE relevant explanation for whatever's currently selected/typed,
+  // not a static list of every possibility -- updates live as the person changes either field.
+  const vatModeHintEl = document.getElementById('vatModeHint');
+  const updateVatHint = () => { vatModeHintEl.textContent = VAT_MODE_EXPLANATIONS[document.getElementById('f_vatMode').value] || ''; };
+  updateVatHint();
+  document.getElementById('f_vatMode').addEventListener('change', updateVatHint);
+
+  const incotermsHintEl = document.getElementById('incotermsHint');
+  const updateIncotermsHint = () => {
+    const matched = matchIncoterm(document.getElementById('f_incoterms').value);
+    incotermsHintEl.innerHTML = matched ? INCOTERMS_EXPLANATIONS[matched] : '';
+  };
+  updateIncotermsHint();
+  document.getElementById('f_incoterms').addEventListener('input', updateIncotermsHint);
+
   // When a customer is picked, pull their own stored Payment Terms / Incoterms / Salesperson
   // in automatically — falling back to the company-wide Settings defaults only when the
   // customer's own record doesn't have that field filled in.
@@ -522,6 +553,7 @@ async function renderQuoteForm(id) {
     paymentTermsEl.value = selectedCustomer.paymentTerms || settings.defaultPaymentTerms;
     incotermsEl.value = selectedCustomer.incoterms || settings.defaultIncoterms;
     if (selectedCustomer.salesperson) salespersonEl.value = selectedCustomer.salesperson;
+    updateIncotermsHint();
     markDirty(); refreshTotals();
     toast(`Applied ${selectedCustomer.companyName}'s saved payment terms and Incoterms.`);
   });
