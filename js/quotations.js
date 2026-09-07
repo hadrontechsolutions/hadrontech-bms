@@ -56,10 +56,10 @@ function validityCellHTML(q) {
   return `<span class="${cls}">${dateStr}<br><span style="font-size:10.5px;">${escapeHtml(info.text)}</span></span>`;
 }
 
-function emptyLine() {
+function emptyLine(defaultVatRate) {
   return { lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', brand: '', modelNo: '',
     description: '', qty: 1, uom: 'pc', unitCost: 0, costCurrency: 'PHP', costExchangeRate: 1,
-    markupPercent: 0, unitPrice: 0, discountPercent: 0, vatRate: 12, supplierId: '',
+    markupPercent: 0, unitPrice: 0, discountPercent: 0, vatRate: defaultVatRate ?? 12, supplierId: '',
     supplierQuoteRef: '', leadTime: '', remarks: '', optionGroup: '' };
 }
 
@@ -242,9 +242,9 @@ async function renderQuoteForm(id) {
     date: todayISO(), validUntil: addDaysISO(todayISO(), settings.defaultQuotationValidityDays),
     salesperson: settings.userName, currency: 'PHP',
     paymentTerms: settings.defaultPaymentTerms, incoterms: settings.defaultIncoterms,
-    deliveryLeadTime: '', warranty: settings.defaultWarranty, vatMode: 'Standard12',
+    deliveryLeadTime: '', warranty: settings.defaultWarranty, vatMode: 'NonVat',
     overallDiscountPercent: 0, freightCharge: 0, otherCharges: 0,
-    internalNotes: '', customerNotes: '', lines: [emptyLine()]
+    internalNotes: '', customerNotes: '', lines: [emptyLine(0)]
   };
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: isEdit ? q.quotationNo : 'New Quotation' }]);
@@ -272,10 +272,12 @@ async function renderQuoteForm(id) {
         <div class="field"><label>Warranty</label><input id="f_warranty" value="${escapeHtml(q.warranty || '')}"></div>
         <div class="field"><label>VAT Mode</label>
           <select id="f_vatMode">
+            <option value="NonVat" ${q.vatMode === 'NonVat' ? 'selected' : ''}>Non-VAT (Percentage Tax)</option>
             <option value="Standard12" ${q.vatMode === 'Standard12' ? 'selected' : ''}>Standard 12%</option>
             <option value="ZeroRated" ${q.vatMode === 'ZeroRated' ? 'selected' : ''}>Zero-Rated</option>
             <option value="Exempt" ${q.vatMode === 'Exempt' ? 'selected' : ''}>VAT Exempt</option>
           </select>
+          <p class="muted-text" style="margin-top:4px;">Non-VAT means this business is not VAT-registered (below the ₱3M threshold) and doesn't charge VAT at all — different from Zero-Rated or VAT Exempt, which are still VAT-registered classifications for specific transactions.</p>
         </div>
       </div>
 
@@ -315,7 +317,7 @@ async function renderQuoteForm(id) {
     </form>
   `;
 
-  let lines = q.lines && q.lines.length ? q.lines : [emptyLine()];
+  let lines = q.lines && q.lines.length ? q.lines : [emptyLine(q.vatMode === 'Standard12' ? 12 : 0)];
 
   function supplierOptions(selectedId) {
     return `<option value="">—</option>` + suppliers.filter(s => !s.archived).map(s =>
@@ -493,7 +495,11 @@ async function renderQuoteForm(id) {
 
   drawLines(); refreshTotals();
 
-  document.getElementById('btnAddLine').onclick = () => { lines.push(emptyLine()); drawLines(); refreshTotals(); markDirty(); };
+  document.getElementById('btnAddLine').onclick = () => {
+    const headerVat = document.getElementById('f_vatMode').value;
+    lines.push(emptyLine(headerVat === 'Standard12' ? 12 : 0));
+    drawLines(); refreshTotals(); markDirty();
+  };
   content.querySelectorAll('#qForm input, #qForm select, #qForm textarea').forEach(i => i.addEventListener('input', () => { markDirty(); refreshTotals(); }));
 
   // When a customer is picked, pull their own stored Payment Terms / Incoterms / Salesperson
@@ -600,7 +606,7 @@ async function renderQuoteDetail(id) {
     DB.dbGetAll('suppliers')
   ]);
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
-  const vatModeLabel = { Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' }[q.vatMode] || (q.vatMode || '—');
+  const vatModeLabel = { NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' }[q.vatMode] || (q.vatMode || '—');
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: `${q.quotationNo} (Rev ${padRev(q.revision)})` }]);
 

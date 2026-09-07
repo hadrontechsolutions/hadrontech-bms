@@ -31,7 +31,7 @@ async function ensurePISnapshot(pi) {
   if (!so) return pi; // nothing to backfill from; leave as-is rather than guess
   pi.lines = (so.lines || []).map(l => Object.assign({}, l));
   pi.subtotal = so.subtotal; pi.vatTotal = so.vatTotal; pi.freight = so.freight; pi.other = so.other;
-  pi.grandTotal = so.grandTotal; pi.currency = so.currency;
+  pi.grandTotal = so.grandTotal; pi.currency = so.currency; pi.vatMode = so.vatMode;
   pi.paymentTerms = so.paymentTerms; pi.incoterms = so.incoterms;
   pi.payments = pi.payments || [];
   await DB.dbPut('proformaInvoices', pi);
@@ -231,7 +231,7 @@ async function getOrCreateProformaInvoice(so) {
     // Snapshot — see the file header comment for why this matters once payments are tracked.
     lines: (so.lines || []).map(l => Object.assign({}, l)),
     subtotal: so.subtotal, vatTotal: so.vatTotal, freight: so.freight, other: so.other,
-    grandTotal: so.grandTotal, currency: so.currency,
+    grandTotal: so.grandTotal, currency: so.currency, vatMode: so.vatMode,
     paymentTerms: so.paymentTerms, incoterms: so.incoterms,
     payments: [],
     createdAt: now, createdBy: settings.userName

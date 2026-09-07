@@ -77,11 +77,16 @@ async function printQuotation(q, customer) {
     return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + l.modelNo + (l.modelNo ? ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, q.currency)}</td><td class="p-num">${l.discountPercent || 0}%</td><td class="p-num">${formatMoney(c.net, q.currency)}</td></tr>`;
   };
   const itemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Disc.</th><th>Amount</th></tr></thead>`;
+  // "VAT: ₱0.00" alone reads the same whether this is a 0%-rated transaction from a VAT-registered
+  // business, or a business that isn't VAT-registered at all -- two genuinely different things.
+  // Label the line unambiguously for Non-VAT so nobody reading the printed quote mistakes one
+  // for the other, and add an explicit standalone statement further down as well.
+  const vatLineLabel = q.vatMode === 'NonVat' ? 'VAT (Non-VAT Registered)' : 'VAT';
   const totalsHTML = (t, label) => `
     <div class="p-totals">
       ${label ? `<div style="font-weight:800; margin-bottom:4px;">${escapeHtml(label)}</div>` : ''}
       <div class="ln"><span>Subtotal</span><span>${formatMoney(t.subtotal, q.currency)}</span></div>
-      <div class="ln"><span>VAT</span><span>${formatMoney(t.vatTotal, q.currency)}</span></div>
+      <div class="ln"><span>${vatLineLabel}</span><span>${formatMoney(t.vatTotal, q.currency)}</span></div>
       <div class="ln"><span>Freight</span><span>${formatMoney(t.freight, q.currency)}</span></div>
       <div class="ln"><span>Other Charges</span><span>${formatMoney(t.other, q.currency)}</span></div>
       <div class="ln grand"><span>${label ? escapeHtml(label) + ' Total' : 'Grand Total'}</span><span>${formatMoney(t.grandTotal, q.currency)}</span></div>
@@ -123,6 +128,7 @@ async function printQuotation(q, customer) {
       </div>
     </div>
     ${itemsAndTotalsHTML}
+    ${q.vatMode === 'NonVat' ? `<div class="p-terms" style="font-weight:700;">This is a Non-VAT Registered business (Percentage Taxpayer). Prices quoted are not subject to VAT.</div>` : ''}
     ${q.customerNotes ? `<div class="p-terms"><b>Notes:</b>\n${escapeHtml(q.customerNotes)}</div>` : ''}
     <div class="p-terms">${escapeHtml(settings.footerTerms)}</div>
     <div class="p-sign">
@@ -152,10 +158,11 @@ async function printSalesOrder(so, customer, customerPO, quotation) {
     <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="p-totals">
       <div class="ln"><span>Subtotal</span><span>${formatMoney(so.subtotal, so.currency)}</span></div>
-      <div class="ln"><span>VAT</span><span>${formatMoney(so.vatTotal, so.currency)}</span></div>
+      <div class="ln"><span>${so.vatMode === 'NonVat' ? 'VAT (Non-VAT Registered)' : 'VAT'}</span><span>${formatMoney(so.vatTotal, so.currency)}</span></div>
       <div class="ln"><span>Freight</span><span>${formatMoney(so.freight || 0, so.currency)}</span></div>
       <div class="ln grand"><span>Grand Total</span><span>${formatMoney(so.grandTotal, so.currency)}</span></div>
     </div>
+    ${so.vatMode === 'NonVat' ? `<div class="p-terms" style="font-weight:700;">This is a Non-VAT Registered business (Percentage Taxpayer). Prices quoted are not subject to VAT.</div>` : ''}
     ${bankDetailsHTML(settings)}
     <div class="p-sign">${signatureBlockHTML(settings, '')}<div class="box">Customer Acknowledgement</div></div>
     <div class="p-foot">${escapeHtml(settings.companyName)} · System-generated document</div>
@@ -208,10 +215,11 @@ async function printProformaInvoice(pi, so, customer) {
     <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="p-totals">
       <div class="ln"><span>Subtotal</span><span>${formatMoney(pi.subtotal, pi.currency)}</span></div>
-      <div class="ln"><span>VAT</span><span>${formatMoney(pi.vatTotal, pi.currency)}</span></div>
+      <div class="ln"><span>${pi.vatMode === 'NonVat' ? 'VAT (Non-VAT Registered)' : 'VAT'}</span><span>${formatMoney(pi.vatTotal, pi.currency)}</span></div>
       <div class="ln"><span>Freight</span><span>${formatMoney(pi.freight || 0, pi.currency)}</span></div>
       <div class="ln grand"><span>Total Amount Due</span><span>${formatMoney(pi.grandTotal, pi.currency)}</span></div>
     </div>
+    ${pi.vatMode === 'NonVat' ? `<div class="p-terms" style="font-weight:700;">This is a Non-VAT Registered business (Percentage Taxpayer). Prices quoted are not subject to VAT.</div>` : ''}
     ${pi.notes ? `<div class="p-terms"><b>Note</b>\n${escapeHtml(pi.notes)}</div>` : ''}
     ${bankDetailsHTML(settings)}
     <div class="p-terms" style="font-style:italic;">This is a Proforma Invoice for advance payment / reference purposes only. It is not an Official Receipt or a Sales Invoice for tax purposes.</div>
