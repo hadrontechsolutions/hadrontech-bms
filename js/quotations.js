@@ -267,7 +267,15 @@ async function renderQuoteForm(id) {
         <div class="field"><label>Quotation Date</label><input type="date" id="f_date" value="${q.date || ''}"></div>
         <div class="field"><label>Valid Until</label><input type="date" id="f_validUntil" value="${q.validUntil || ''}"></div>
         <div class="field"><label>Payment Terms</label><input id="f_paymentTerms" value="${escapeHtml(q.paymentTerms || '')}"></div>
-        <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(q.incoterms || '')}"></div>
+        <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(q.incoterms || '')}" placeholder="e.g. EXW, FOB Manila, DAP">
+          <ul class="muted-text" style="margin:6px 0 0; padding-left:18px; line-height:1.5;">
+            <li><b>EXW</b> (Ex Works) — buyer picks up from <b>our warehouse</b>; buyer arranges and pays for <b>everything from there</b> (shipping, insurance, import duties)</li>
+            <li><b>FOB</b> (Free on Board) — we deliver to the <b>port and load it</b>; buyer takes over cost and risk <b>once it's on the vessel</b></li>
+            <li><b>CIF</b> (Cost, Insurance, Freight) — we pay <b>shipping and insurance to the destination port</b>; buyer still handles <b>import duties/customs</b></li>
+            <li><b>DAP</b> (Delivered at Place) — we deliver to the agreed location <b>ready to unload</b>; buyer still handles <b>import duties/customs</b></li>
+            <li><b>DDP</b> (Delivered Duty Paid) — we handle <b>everything, including import duties/taxes</b>; buyer just receives the goods</li>
+          </ul>
+        </div>
         <div class="field"><label>Delivery Lead Time</label><input id="f_deliveryLeadTime" value="${escapeHtml(q.deliveryLeadTime || '')}"></div>
         <div class="field"><label>Warranty</label><input id="f_warranty" value="${escapeHtml(q.warranty || '')}"></div>
         <div class="field"><label>VAT Mode</label>
