@@ -27,7 +27,9 @@ const REPORT_GROUPS = [
   ]},
   { group: 'Bookkeeper Reports', reports: [
     { key: 'salesRegisterBookkeeper', label: 'Sales Register' },
-    { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register' }
+    { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register' },
+    { key: 'expenseRegister', label: 'Expense Register' },
+    { key: 'expensesByCategory', label: 'Expenses by Category' }
   ]}
 ];
 // Flat lookup kept for anything that just needs a report's label or existence check by key.
@@ -319,6 +321,33 @@ async function buildReport(key, from, to) {
       const note = rows.length === 0 ? '' :
         `Total outstanding by currency: ${currencies.map(cur => formatMoney(byCurrency[cur], cur)).join(', ')}. Figures are not combined across currencies, since summing different currencies together would be meaningless. Only Unpaid and Partially Paid POs are shown — fully paid ones are excluded.`;
       return { rows, cols, note };
+    }
+    case 'expenseRegister': {
+      const expenses = (await DB.dbGetAll('expenses')).filter(x => inRange(x.date));
+      const cols = [
+        { label: 'Expense No', value: 'expenseNo' },
+        { label: 'Date', value: r => formatDate(r.date) },
+        { label: 'Category', value: 'category' },
+        { label: 'Description', value: 'description' },
+        { label: 'Payee', value: r => r.payee || '' },
+        { label: 'Payment Method', value: r => r.paymentMethod || '' },
+        { label: 'Reference No', value: r => r.referenceNo || '' },
+        { label: 'Amount', value: r => formatMoney(r.amount, 'PHP') }
+      ];
+      const total = r2(expenses.reduce((s, x) => s + (x.amount || 0), 0));
+      const totals = expenses.length === 0 ? null : ['', '', '', '', '', '', 'TOTAL', formatMoney(total, 'PHP')];
+      return { rows: expenses, cols, totals };
+    }
+    case 'expensesByCategory': {
+      const expenses = (await DB.dbGetAll('expenses')).filter(x => inRange(x.date));
+      const byCategory = {};
+      expenses.forEach(x => { byCategory[x.category] = (byCategory[x.category] || 0) + (x.amount || 0); });
+      // Biggest spend categories first -- this is what a bookkeeper or owner actually wants to
+      // see first when asking "where is the money going", not an arbitrary or alphabetical order.
+      const rows = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([category, total]) => ({ category, total: formatMoney(total, 'PHP') }));
+      const grandTotal = r2(expenses.reduce((s, x) => s + (x.amount || 0), 0));
+      const totals = rows.length === 0 ? null : ['TOTAL', formatMoney(grandTotal, 'PHP')];
+      return { rows, cols: [{ label: 'Category', value: 'category' }, { label: 'Total Amount', value: 'total' }], totals };
     }
     default: return { rows: [], cols: [] };
   }

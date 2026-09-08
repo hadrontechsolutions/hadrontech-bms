@@ -5,7 +5,7 @@
    ============================================================ */
 
 const DB_NAME = 'HadrontechDB';
-const DB_VERSION = 5; // v5 adds the 'technicalOffers' store — existing data is untouched on upgrade.
+const DB_VERSION = 6; // v6 adds the 'expenses' store — existing data is untouched on upgrade.
 let _db = null;
 
 /** Opens (and if needed, creates/upgrades) the database. Call once at startup. */
@@ -68,6 +68,12 @@ function openDB() {
       // spec line is stored as free text for exactly that reason.
       mk('technicalOffers', { keyPath: 'id', autoIncrement: true }, [
         ['offerNo', 'offerNo', true], ['customerId', 'customerId']
+      ]);
+      // General operating expenses (rent, utilities, salaries, etc.) -- for bookkeeping, kept
+      // separate from Supplier POs since most expenses (rent, government fees, employee
+      // reimbursements) don't come from a "supplier" in the purchasing sense at all.
+      mk('expenses', { keyPath: 'id', autoIncrement: true }, [
+        ['expenseNo', 'expenseNo', true], ['date', 'date'], ['category', 'category']
       ]);
       mk('counters', { keyPath: 'name' });
       mk('settings', { keyPath: 'key' });
@@ -156,6 +162,7 @@ async function ensureCounters() {
     { name: 'supplierPO', prefix: 'HT-PO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'proformaInvoice', prefix: 'HT-PI', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'technicalOffer', prefix: 'HT-TO', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'expense', prefix: 'HT-EXP', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {
     const existing = await getCounter(d.name);

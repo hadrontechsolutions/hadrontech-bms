@@ -25,6 +25,7 @@ This document should still be kept current by hand, since it explains *why* thin
 | `stockMovements` | products.js (stock logic) | ✅ | ✅ | ⚠️ not searched | — | — |
 | `proformaInvoices` | proformaInvoices.js | ✅ | ✅ (incl. payment fields) | ✅ | ✅ (Payments) | **Payments Aging** |
 | `technicalOffers` | technicalOffers.js | ✅ | ✅ (incl. status) | ✅ | ✅ (incl. status breakdown) | **Technical Offers Log** |
+| `expenses` | expenses.js (generic entity engine) | ✅ | ✅ | ✅ | — | **Expense Register**, **Expenses by Category** |
 | `counters` | db.js | ✅ | — (internal) | — | — | — |
 | `settings` | settings.js | ✅ | — (internal) | — | — | — |
 | `activity` | db.js | ✅ | — (internal) | — | — | — |
