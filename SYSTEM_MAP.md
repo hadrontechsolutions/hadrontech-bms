@@ -51,6 +51,17 @@ This document should still be kept current by hand, since it explains *why* thin
 
 ---
 
+## Data durability (added after a real data-loss incident)
+
+This app has no server — every record lives in the browser's IndexedDB storage only. That makes it vulnerable to a few real, silent failure modes:
+- A browser setting like "clear cookies/site data when closed" wipes everything on browser close, with no warning.
+- Using a private/incognito window wipes everything when that window closes — by design, not a bug.
+- Without persistent storage granted, browsers can silently evict a site's data under disk pressure.
+
+As of the fix for the incident that prompted this section: **the app now requests `navigator.storage.persist()` on every boot**, and shows a visible warning banner if the browser declines (or doesn't support the API at all). This protects against the third scenario, but explicitly does **not** protect against the first two — those are the person's own browser configuration, not something code running on the page can override. The warning banner's text says this directly, so nobody reads "protected" as a guarantee it isn't.
+
+**The practical implication hasn't changed: regular backups are still the only real protection against total data loss.** Persistent storage reduces one risk factor; it doesn't replace backups.
+
 ## Currency-handling convention (worth remembering)
 
 Two different, deliberately different rules exist side by side:
