@@ -317,14 +317,14 @@ th.internal-only-col{color:var(--amber) !important;}
 /* ---------- Backup reminder banner ---------- */
 .ok-card{background:var(--ok-lt); border-color:#bfe6d3; color:#0a5c3e; font-size:13px;}
 .backup-banner{
-  background:#7a5b00; color:#fff8ea;
-  padding:8px 16px; font-size:13px; border-radius:var(--radius-md); margin-bottom:14px;
+  background:var(--amber-lt); color:#7a4e00; border-left:4px solid var(--amber);
+  padding:10px 16px; font-size:13px; border-radius:var(--radius-md); margin-bottom:14px;
   display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
 }
 .backup-banner-actions{display:flex; align-items:center; gap:8px; flex:none;}
-.backup-banner-actions button{padding:5px 12px; font-size:12px; border-radius:var(--radius-sm); border:1px solid #fff8ea; background:transparent; color:#fff8ea; cursor:pointer;}
-.backup-banner-actions #bannerBackupNow{background:#fff8ea; color:#7a5b00; font-weight:700; border:none;}
-.backup-banner-actions .banner-dismiss{border:none; padding:5px 8px;}
+.backup-banner-actions button{padding:5px 12px; font-size:12px; border-radius:var(--radius-sm); border:1px solid var(--amber); background:transparent; color:#7a4e00; cursor:pointer;}
+.backup-banner-actions #bannerBackupNow{background:var(--amber); color:#fff; font-weight:700; border:none;}
+.backup-banner-actions .banner-dismiss{border:none; padding:5px 8px; color:#7a4e00;}
 
 /* ---- Item Picker (searchable modal for catalog selection) ---- */
 .item-picker-overlay{position:fixed; inset:0; background:rgba(15,20,30,.5); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px;}
