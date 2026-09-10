@@ -43,6 +43,13 @@ async function renderBackupPage() {
       <button class="btn-amber" id="btnChooseFolder">${await hasBackupFolder() ? 'Change Backup Folder...' : 'Choose Backup Folder...'}</button>
       ${await hasBackupFolder() ? `<button class="btn-line" id="btnForgetFolder">Forget This Folder</button>` : ''}
       ${!window.showDirectoryPicker ? `<p class="muted-text" style="margin-top:8px;">Your browser doesn't support choosing a folder directly (this needs Chrome or Edge) — backups will still work using the normal save dialog.</p>` : ''}
+      <hr class="divider">
+      <div class="field" style="max-width:340px;">
+        <label>Custom Backup Filename (optional)</label>
+        <input id="f_customBackupFilename" value="${escapeHtml(settings.customBackupFilename || '')}" placeholder="Leave blank to use dated filenames">
+      </div>
+      <p class="muted-text" style="margin-top:4px;">If set, every backup is saved as exactly this filename, <b>overwriting the previous one each time</b> — no dated files to manage, but also no history to look back on if you ever need an older backup. Leave this blank (the default) to keep a separate dated file every time instead.</p>
+      <button class="btn-line btn-sm" id="btnSaveFilename" style="margin-top:6px;">Save</button>
     </div>
 
     <div class="card">
@@ -80,6 +87,12 @@ async function renderBackupPage() {
   document.getElementById('btnChooseFolder').onclick = chooseBackupFolder;
   const forgetBtn = document.getElementById('btnForgetFolder');
   if (forgetBtn) forgetBtn.onclick = forgetBackupFolder;
+  document.getElementById('btnSaveFilename').onclick = async () => {
+    const value = document.getElementById('f_customBackupFilename').value.trim();
+    settings.customBackupFilename = value;
+    await DB.dbPut('settings', settings);
+    toast(value ? `Backups will now be saved as "${backupFilename(settings)}".` : 'Backups will use dated filenames again.');
+  };
   document.getElementById('reminderDays').addEventListener('change', async (e) => {
     settings.backupReminderDays = Number(e.target.value) || 7;
     await DB.dbPut('settings', settings);
@@ -89,10 +102,16 @@ async function renderBackupPage() {
   content.querySelectorAll('[data-csv]').forEach(btn => btn.onclick = () => exportTableCSV(btn.dataset.csv));
 }
 
-/** Builds the standard filename used everywhere a backup is saved, so every backup this app
-    ever produces is easy to recognize and sort by date -- Hadrontech_Backup_2026-09-10.json,
-    never a generic "backup(3).json" a person has to guess the origin of later. */
-function backupFilename() {
+/** Builds the filename used every time a backup is saved. Defaults to a dated name so backups
+    never overwrite each other and stay easy to sort -- Hadrontech_Backup_2026-09-10.json. If a
+    custom filename has been set in Settings, that's used verbatim instead (with .json appended
+    if not already present), meaning every save DOES overwrite the same file on purpose -- that
+    tradeoff (only ever having the latest backup, not a history of them) is explained in the
+    Settings UI itself, not re-confirmed on every single save, since that would defeat the point
+    of choosing this for convenience in the first place. */
+function backupFilename(settings) {
+  const custom = ((settings && settings.customBackupFilename) || '').trim();
+  if (custom) return /\.json$/i.test(custom) ? custom : `${custom}.json`;
   return `Hadrontech_Backup_${todayISO()}.json`;
 }
 
@@ -162,7 +181,8 @@ async function exportFullBackup() {
   for (const s of BACKUP_STORES) data[s] = await DB.dbGetAll(s);
   const payload = { appVersion: APP_VERSION, dbVersion: 1, backupDate: new Date().toISOString(), data };
   const json = JSON.stringify(payload, null, 2);
-  const filename = backupFilename();
+  const settings = await DB.getSettings();
+  const filename = backupFilename(settings);
 
   // If a folder has been explicitly chosen and remembered (Settings > Backup Folder), write
   // straight there with no dialog at all -- the whole point of remembering it. Otherwise fall
@@ -202,7 +222,6 @@ async function exportFullBackup() {
   }
   if (!saved) downloadFile(filename, json, 'application/json');
 
-  const settings = await DB.getSettings();
   settings.lastBackupExport = new Date().toISOString();
   await DB.dbPut('settings', settings);
   await DB.logActivity('Exported full JSON backup');
