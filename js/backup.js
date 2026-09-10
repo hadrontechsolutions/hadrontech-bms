@@ -75,18 +75,54 @@ Router.route('/settings/backup', async () => {
   content.querySelectorAll('[data-csv]').forEach(btn => btn.onclick = () => exportTableCSV(btn.dataset.csv));
 });
 
+/** Builds the standard filename used everywhere a backup is saved, so every backup this app
+    ever produces is easy to recognize and sort by date -- Hadrontech_Backup_2026-09-10.json,
+    never a generic "backup(3).json" a person has to guess the origin of later. */
+function backupFilename() {
+  return `Hadrontech_Backup_${todayISO()}.json`;
+}
+
 async function exportFullBackup() {
   const data = {};
   for (const s of BACKUP_STORES) data[s] = await DB.dbGetAll(s);
   const payload = { appVersion: APP_VERSION, dbVersion: 1, backupDate: new Date().toISOString(), data };
-  const stamp = todayISO();
-  downloadFile(`hadrontech-backup-${stamp}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  const json = JSON.stringify(payload, null, 2);
+  const filename = backupFilename();
+
+  // Chrome/Edge support picking a real save location with a native file dialog, which is what
+  // was actually asked for -- the browser remembers the folder used last time, so after the
+  // first save it naturally opens right back where you left it. Firefox/Safari don't support
+  // this API at all, so they fall back to the normal Downloads-folder behavior everyone already
+  // knows, exactly as this app already did before.
+  let savedViaPicker = false;
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: 'Hadrontech Backup', accept: { 'application/json': ['.json'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      savedViaPicker = true;
+    } catch (err) {
+      // AbortError just means the person closed the dialog without saving -- not a real error,
+      // and definitely not something that should still mark a backup as having happened.
+      if (err && err.name === 'AbortError') return;
+      // Any other failure (e.g. this specific site/permission combo behaving oddly) falls
+      // through to the plain download method below rather than leaving the person with nothing.
+    }
+  }
+  if (!savedViaPicker) downloadFile(filename, json, 'application/json');
+
   const settings = await DB.getSettings();
   settings.lastBackupExport = new Date().toISOString();
   await DB.dbPut('settings', settings);
   await DB.logActivity('Exported full JSON backup');
-  toast('Backup downloaded.');
+  toast('Backup saved.');
   if (window.BackupReminder) await BackupReminder.refreshBackupBanner();
+  window.__unbackedActivity = false;
+  if (window.BackupReminder && window.BackupReminder.resetBackupPromptThrottle) window.BackupReminder.resetBackupPromptThrottle();
 }
 window.exportFullBackup = exportFullBackup;
 

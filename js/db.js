@@ -236,6 +236,13 @@ async function getSettings() {
 
 async function logActivity(text) {
   await dbAdd('activity', { text, date: new Date().toISOString() });
+  // A single, central signal that SOMETHING meaningful was saved since the last backup --
+  // logActivity() is already called after every significant save across every module in this
+  // app, so hooking in here catches all of them without needing to touch each one individually.
+  window.__unbackedActivity = true;
+  if (window.BackupReminder && window.BackupReminder.maybeShowBackupPrompt) {
+    window.BackupReminder.maybeShowBackupPrompt();
+  }
 }
 
 async function recentActivity(limit) {

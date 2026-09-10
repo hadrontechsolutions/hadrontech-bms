@@ -62,6 +62,10 @@ As of the fix for the incident that prompted this section: **the app now request
 
 **The practical implication hasn't changed: regular backups are still the only real protection against total data loss.** Persistent storage reduces one risk factor; it doesn't replace backups.
 
+Following the same incident, backups themselves got two improvements:
+- **A real save-location picker** (`showSaveFilePicker`, Chrome/Edge): choose a folder once, and it's remembered by the browser for next time — no more hunting through Downloads. Falls back to the normal download behavior on browsers that don't support it (Firefox/Safari). Every backup now uses a standardized filename, `Hadrontech_Backup_YYYY-MM-DD.json`.
+- **A proactive backup prompt**, not tied to the unreliable moment of closing the browser at all. `logActivity()` — already called after every significant save across the whole app — is the single central hook: it flags that something's unbacked, and `BackupReminder.maybeShowBackupPrompt()` asks the person, while the app is still fully open and responsive, whether they'd like to back up now. Throttled to once per session so it doesn't nag, and resets after a successful backup so a later batch of new work can still prompt again.
+
 ## Currency-handling convention (worth remembering)
 
 Two different, deliberately different rules exist side by side:

@@ -54,3 +54,55 @@ async function refreshBackupBanner() {
 }
 
 window.BackupReminder = { daysSinceBackup, isBackupOverdue, refreshBackupBanner };
+
+/* ------------------------------------------------------------
+   maybeShowBackupPrompt() — the actual feature requested: rather than
+   trying to intercept the browser actually closing (which no website
+   can reliably do — browsers cut off anything slower than instant
+   during that moment, by design), this proactively asks WHILE the
+   app is still fully open and responsive, right after meaningful
+   work has been saved. That directly covers the real scenario this
+   was built for: create/send something important, then step away
+   and close the browser without having backed up yet.
+   ------------------------------------------------------------ */
+let _backupPromptShownThisSession = false;
+
+async function maybeShowBackupPrompt() {
+  if (_backupPromptShownThisSession) return; // don't nag repeatedly in one sitting
+  if (!window.__unbackedActivity) return;
+  if (document.getElementById('backupPromptOverlay')) return; // already showing
+  const settings = await DB.getSettings();
+  // Give the person a little room to work before interrupting them — not the very first save
+  // of the session, but not a full day either, since that was the actual gap that caused the
+  // original incident this feature exists to prevent.
+  const minutesSinceLastBackup = settings.lastBackupExport
+    ? (Date.now() - new Date(settings.lastBackupExport).getTime()) / 60000
+    : Infinity;
+  if (minutesSinceLastBackup < 10) return;
+
+  _backupPromptShownThisSession = true;
+  const overlay = document.createElement('div');
+  overlay.id = 'backupPromptOverlay';
+  overlay.className = 'confirm-modal-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-modal-box">
+      <h3>Save a backup?</h3>
+      <p>You've made changes since your last backup. Since everything in this app lives only in this browser, it's worth saving a copy now — especially before closing your browser.</p>
+      <div class="confirm-modal-actions">
+        <button class="btn-line" id="backupPromptLater">Not Now</button>
+        <button class="btn-amber" id="backupPromptNow">Back Up Now</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  document.getElementById('backupPromptLater').onclick = close;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.getElementById('backupPromptNow').onclick = async () => {
+    close();
+    if (window.exportFullBackup) await exportFullBackup();
+    else Router.navigate('/settings/backup');
+  };
+}
+
+window.BackupReminder.maybeShowBackupPrompt = maybeShowBackupPrompt;
+window.BackupReminder.resetBackupPromptThrottle = () => { _backupPromptShownThisSession = false; };
