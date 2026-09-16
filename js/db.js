@@ -5,7 +5,7 @@
    ============================================================ */
 
 const DB_NAME = 'HadrontechDB';
-const DB_VERSION = 6; // v6 adds the 'expenses' store — existing data is untouched on upgrade.
+const DB_VERSION = 7; // v7 adds the 'notes' store — existing data is untouched on upgrade.
 let _db = null;
 
 /** Opens (and if needed, creates/upgrades) the database. Call once at startup. */
@@ -74,6 +74,12 @@ function openDB() {
       // reimbursements) don't come from a "supplier" in the purchasing sense at all.
       mk('expenses', { keyPath: 'id', autoIncrement: true }, [
         ['expenseNo', 'expenseNo', true], ['date', 'date'], ['category', 'category']
+      ]);
+      // General follow-up / to-do notes with an optional reminder -- kept as their own store
+      // rather than piggybacking on activity log entries, since notes are actionable items with
+      // their own lifecycle (Open -> Done), not a passive audit trail.
+      mk('notes', { keyPath: 'id', autoIncrement: true }, [
+        ['noteNo', 'noteNo', true], ['date', 'date'], ['status', 'status']
       ]);
       mk('counters', { keyPath: 'name' });
       mk('settings', { keyPath: 'key' });
@@ -163,6 +169,7 @@ async function ensureCounters() {
     { name: 'proformaInvoice', prefix: 'HT-PI', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'technicalOffer', prefix: 'HT-TO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'expense', prefix: 'HT-EXP', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'note', prefix: 'HT-NOTE', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {
     const existing = await getCounter(d.name);

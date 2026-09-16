@@ -26,6 +26,7 @@ This document should still be kept current by hand, since it explains *why* thin
 | `proformaInvoices` | proformaInvoices.js | ✅ | ✅ (incl. payment fields) | ✅ | ✅ (Payments) | **Payments Aging** |
 | `technicalOffers` | technicalOffers.js | ✅ | ✅ (incl. status) | ✅ | ✅ (incl. status breakdown) | **Technical Offers Log** |
 | `expenses` | expenses.js (generic entity engine) | ✅ | ✅ | ✅ | — | **Expense Register**, **Expenses by Category** |
+| `notes` | notes.js | ✅ | ✅ | ✅ | ✅ (Notes Needing Action) | — |
 | `counters` | db.js | ✅ | — (internal) | — | — | — |
 | `settings` | settings.js | ✅ | — (internal) | — | — | — |
 | `activity` | db.js | ✅ | — (internal) | — | — | — |

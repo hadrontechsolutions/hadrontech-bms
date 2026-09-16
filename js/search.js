@@ -28,9 +28,9 @@ async function renderSearch(initialQuery) {
 
 async function doSearch(q) {
   const ql = q.toLowerCase();
-  const [customers, suppliers, products, quotations, customerPOs, salesOrders, supplierPOs, proformaInvoices, technicalOffers, expenses] = await Promise.all([
+  const [customers, suppliers, products, quotations, customerPOs, salesOrders, supplierPOs, proformaInvoices, technicalOffers, expenses, notes] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('suppliers'), DB.dbGetAll('products'), DB.dbGetAll('quotations'),
-    DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.dbGetAll('proformaInvoices'), DB.dbGetAll('technicalOffers'), DB.dbGetAll('expenses')
+    DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.dbGetAll('proformaInvoices'), DB.dbGetAll('technicalOffers'), DB.dbGetAll('expenses'), DB.dbGetAll('notes')
   ]);
   const has = (obj, fields) => fields.some(f => String(obj[f] || '').toLowerCase().includes(ql));
 
@@ -44,7 +44,8 @@ async function doSearch(q) {
     { title: 'Supplier POs', hash: '/supplier-pos', rows: supplierPOs.filter(p => has(p, ['poNo'])), label: r => r.poNo },
     { title: 'Proforma Invoices', hash: '/proforma-invoices', rows: proformaInvoices.filter(p => has(p, ['piNo'])), label: r => r.piNo },
     { title: 'Technical Offers', hash: '/technical-offers', rows: technicalOffers.filter(t => has(t, ['offerNo', 'endUser', 'rfqReference'])), label: r => `${r.offerNo} — ${r.endUser || ''}` },
-    { title: 'Expenses', hash: '/expenses', rows: expenses.filter(x => has(x, ['expenseNo', 'description', 'payee', 'category', 'referenceNo'])), label: r => `${r.expenseNo} — ${r.description}` }
+    { title: 'Expenses', hash: '/expenses', rows: expenses.filter(x => has(x, ['expenseNo', 'description', 'payee', 'category', 'referenceNo'])), label: r => `${r.expenseNo} — ${r.description}` },
+    { title: 'Notes', hash: '/notes', rows: notes.filter(n => has(n, ['noteNo', 'title', 'referenceEmail', 'body'])), label: r => `${r.noteNo} — ${r.title}`, badge: r => { const info = getReminderInfo(r); return info.badgeText ? ' ' + statusBadge(info.badgeText) : ''; } }
   ].filter(s => s.rows.length > 0);
 
   const wrap = document.getElementById('searchResults');

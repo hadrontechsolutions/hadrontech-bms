@@ -4,10 +4,10 @@
 
 Router.route('/dashboard', async () => {
   Router.setBreadcrumb([{ label: 'Dashboard' }]);
-  const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity, proformaInvoicesRaw, technicalOffers] = await Promise.all([
+  const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity, proformaInvoicesRaw, technicalOffers, notes] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('suppliers'), DB.dbGetAll('quotations'),
     DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.recentActivity(12),
-    DB.dbGetAll('proformaInvoices'), DB.dbGetAll('technicalOffers')
+    DB.dbGetAll('proformaInvoices'), DB.dbGetAll('technicalOffers'), DB.dbGetAll('notes')
   ]);
   // Migrate any pre-payment-tracking invoices here too, the same way the Payments list does --
   // otherwise an invoice nobody has opened yet could still show a stale ₱0.00 in these stats.
@@ -52,6 +52,9 @@ Router.route('/dashboard', async () => {
   const totalTechnicalOffers = technicalOffers.length;
   const offersAwaitingResponse = technicalOffers.filter(t => t.status === 'Sent').length;
   const offersNeedingRevision = technicalOffers.filter(t => t.status === 'Revision Requested').length;
+  // "Needing action" = overdue or due today specifically -- the same two states that get the
+  // red row highlight on the Notes list itself, so this tile and that page always agree.
+  const notesNeedingAction = notes.filter(n => ['overdue', 'today'].includes(getReminderInfo(n).state)).length;
 
   // sales value by month (last 6 months) from sales orders
   const monthMap = {};
@@ -74,6 +77,7 @@ Router.route('/dashboard', async () => {
       <button class="qa-btn" data-hash="/quotations/new">+ New Quotation</button>
       <button class="qa-btn" data-hash="/customer-pos/new">Record Customer PO</button>
       <button class="qa-btn" data-hash="/technical-offers/new">+ New Technical Offer</button>
+      <button class="qa-btn" data-hash="/notes/new">+ New Note</button>
       <button class="qa-btn" data-hash="/reports">Search Records</button>
       <button class="qa-btn" data-hash="/settings/backup">Backup Data</button>
     </div>
@@ -100,6 +104,7 @@ Router.route('/dashboard', async () => {
       ${statCard(totalTechnicalOffers, 'Technical Offers')}
       ${statCard(offersAwaitingResponse, 'Technical Offers Awaiting Response')}
       ${statCard(offersNeedingRevision, 'Technical Offers Needing Revision')}
+      ${statCard(notesNeedingAction, 'Notes Needing Action')}
     </div>
 
     <div class="dash-grid">
