@@ -5,6 +5,36 @@
 
 const SPO_STATUSES = ['Draft', 'Sent', 'Awaiting Confirmation', 'Confirmed', 'In Production', 'Ready for Shipment', 'Shipped', 'Partially Received', 'Received', 'Cancelled'];
 
+/** Clickable link to the product's Supplier Listing URL (http/https only), shown beside the item description. */
+function listingLinkHTML(url) {
+  const u = String(url || '').trim();
+  if (!/^https?:\/\//i.test(u)) return '';
+  return ` <a class="spo-listing-link" href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer" title="Open the supplier's listing for this item">Open listing ↗</a>`;
+}
+/** itemId -> supplierListingUrl, read live from Products so edits to a product's link show up on old POs too. */
+async function listingUrlMap(po) {
+  const ids = [...new Set((po.lines || []).map(l => l.itemId).filter(Boolean))];
+  const map = {};
+  for (const id of ids) {
+    const prod = await DB.dbGet('products', id);
+    if (prod && prod.supplierListingUrl) map[id] = prod.supplierListingUrl;
+  }
+  return map;
+}
+/** Freight to pre-fill on a new PO = the selected lines' total freight from the quotation (same figure as
+    "Total Freight for This Line"). Only lines whose cost currency equals the PO currency are added -- no guessing a
+    conversion; anything skipped is reported so the person can enter it by hand. */
+function suggestedPOFreight(lines, soCurrency, poCurrency) {
+  let total = 0, skipped = 0;
+  (lines || []).forEach(l => {
+    const raw = Number(l.estimatedFreightCost) || 0;
+    if (!raw) return;
+    if ((l.costCurrency || soCurrency || 'PHP') !== poCurrency) { skipped++; return; }
+    total += (l.freightMode === 'total') ? raw : raw * (Number(l.qty) || 0);   // old lines stored freight per unit
+  });
+  return { amount: r2(total), skipped };
+}
+
 async function createFromSalesOrder(so, supplierId, lines) {
   const settings = await DB.getSettings();
   const supplier = await DB.dbGet('suppliers', supplierId);
@@ -15,16 +45,18 @@ async function createFromSalesOrder(so, supplierId, lines) {
     qty: l.qty, uom: l.uom, unitCost: l.unitCost, discountPercent: 0, receivedQty: 0,
     amount: r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0))
   }));
-  const totalCost = r2(poLines.reduce((s, l) => s + l.amount, 0));
+  const poCurrency = supplier?.currency || 'PHP';
+  const fr = suggestedPOFreight(lines, so.currency, poCurrency);
+  const totalCost = r2(poLines.reduce((s, l) => s + l.amount, 0) + fr.amount);
   const poNo = await DB.nextDocNumber('supplierPO');
   const rec = {
     poNo, supplierId, salesOrderId: so.id, quotationId: so.quotationId || null,
     customerPORef: customerPO ? (customerPO.customerPoNumber || customerPO.poNo) : '',
-    poDate: todayISO(), currency: supplier?.currency || 'PHP', supplierQuoteRef: '',
+    poDate: todayISO(), currency: poCurrency, supplierQuoteRef: '',
     paymentTerms: supplier?.paymentTerms || '', incoterms: supplier?.incoterms || '',
     shippingTerms: '', deliveryAddress: so.shippingAddress || '',
     expectedDeliveryDate: '', lineIds: lines.map(l => l.lineId), lines: poLines,
-    freight: 0, taxes: 0, totalCost, status: 'Draft',
+    freight: fr.amount, freightEstimate: fr.amount, freightSkippedLines: fr.skipped, taxes: 0, totalCost, status: 'Draft',
     statusHistory: [{ status: 'Draft', date: now }],
     notes: '', createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName
   };
@@ -32,6 +64,14 @@ async function createFromSalesOrder(so, supplierId, lines) {
   await DB.logActivity(`Created supplier PO ${poNo} for ${supplier?.companyName || 'supplier'} from sales order ${so.soNo}`);
   toast('Supplier PO created.');
   Router.navigate(`/supplier-pos/${newId}`);
+}
+
+/** Small note comparing the PO's freight with the quotation estimate it was pre-filled from. */
+function freightHintHTML(po) {
+  const parts = [];
+  if (po.freightEstimate > 0 && Math.abs((Number(po.freight) || 0) - po.freightEstimate) > 0.005) parts.push(`Quotation estimate: ${formatMoney(po.freightEstimate, po.currency)}`);
+  if (po.freightSkippedLines > 0) parts.push(`${po.freightSkippedLines} line(s) have freight in another currency — not added automatically`);
+  return parts.join(' · ');
 }
 
 function spoAmountPaid(spo) {
@@ -105,6 +145,7 @@ async function renderSPODetail(id) {
 
   Router.setBreadcrumb([{ label: 'Supplier Purchase Orders', hash: '/supplier-pos' }, { label: po.poNo }]);
 
+  const listingUrls = await listingUrlMap(po);
   const unreceivedLines = (po.lines || []).filter(l => (l.receivedQty || 0) < l.qty);
   const showReceiveMismatch = po.status === 'Received' && unreceivedLines.length > 0;
   const headerBadge = showReceiveMismatch ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
@@ -151,12 +192,13 @@ async function renderSPODetail(id) {
           const receivedCell = (l.receivedQty || 0) >= l.qty
             ? `${l.receivedQty || 0} ${escapeHtml(l.uom)} ✓`
             : `<span class="cell-needs-input">${l.receivedQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
-          return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
+          return `<tr><td>${escapeHtml(l.description)}${listingLinkHTML(listingUrls[l.itemId])}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
         }).join('')}</tbody>
       </table>
       <div class="totals">
         <div class="line"><span>Items Total</span><span>${formatMoney(po.lines.reduce((s, l) => s + l.amount, 0), po.currency)}</span></div>
         <div class="line"><span>Freight</span><span>${formatMoney(po.freight, po.currency)}</span></div>
+        ${freightHintHTML(po) ? `<div class="line"><span class="muted-text" style="font-size:11px;">${freightHintHTML(po)}</span><span></span></div>` : ''}
         <div class="line"><span>Taxes</span><span>${formatMoney(po.taxes, po.currency)}</span></div>
         <div class="line grand"><span>Total Purchase Cost</span><span>${formatMoney(po.totalCost, po.currency)}</span></div>
         <div class="line"><span>Amount Paid</span><span class="text-ok">${formatMoney(spoAmountPaid(po), po.currency)}</span></div>
@@ -270,7 +312,8 @@ function renderRecordPaymentFormSPO(po, id) {
   };
 }
 
-function renderSPOHeaderEdit(po) {
+async function renderSPOHeaderEdit(po) {
+  const listingUrls = await listingUrlMap(po);
   const content = document.getElementById('content');
   const alreadySentToSupplier = !['Draft'].includes(po.status);
   content.innerHTML = `
@@ -283,7 +326,7 @@ function renderSPOHeaderEdit(po) {
         <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(po.incoterms || '')}"></div>
         <div class="field"><label>Shipping Terms</label><input id="f_shippingTerms" value="${escapeHtml(po.shippingTerms || '')}"></div>
         <div class="field"><label>Expected Delivery Date</label><input type="date" id="f_expectedDeliveryDate" value="${po.expectedDeliveryDate || ''}"></div>
-        <div class="field"><label>Freight</label><input type="number" step="0.01" id="f_freight" value="${po.freight || 0}"></div>
+        <div class="field"><label>Freight</label><input type="number" step="0.01" id="f_freight" value="${po.freight || 0}">${freightHintHTML(po) ? `<div class="muted-text" style="font-size:11px; margin-top:3px;">${freightHintHTML(po)}</div>` : ''}</div>
         <div class="field"><label>Taxes</label><input type="number" step="0.01" id="f_taxes" value="${po.taxes || 0}"></div>
         <div class="field field-wide"><label>Delivery Address</label><textarea id="f_deliveryAddress">${escapeHtml(po.deliveryAddress || '')}</textarea></div>
         <div class="field field-wide"><label>Notes</label><textarea id="f_notes">${escapeHtml(po.notes || '')}</textarea></div>
@@ -314,7 +357,7 @@ function renderSPOHeaderEdit(po) {
       const amount = r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0));
       l.amount = amount;
       return `<tr data-idx="${i}">
-        <td class="line-desc-locked" title="Description is locked to keep it consistent across the Quotation/Customer PO/Sales Order/Supplier PO chain — use a Note for any clarification.">${escapeHtml(l.description || '')}</td>
+        <td class="line-desc-locked" title="Description is locked to keep it consistent across the Quotation/Customer PO/Sales Order/Supplier PO chain — use a Note for any clarification.">${escapeHtml(l.description || '')}${listingLinkHTML(listingUrls[l.itemId])}</td>
         <td><input class="spo-qty" type="number" min="0" step="any" value="${l.qty || 0}" style="width:55px;"></td>
         <td><input class="spo-uom" value="${escapeHtml(l.uom || 'pc')}" style="width:45px;"></td>
         <td><input class="spo-cost" type="number" min="0" step="0.01" value="${l.unitCost || 0}" style="width:75px;"></td>

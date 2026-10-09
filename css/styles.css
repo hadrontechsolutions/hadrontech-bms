@@ -359,3 +359,4 @@ th.internal-only-col{color:var(--amber) !important;}
 .ln-info-btn.needs-attention::after{content:''; position:absolute; top:-3px; right:-3px; width:8px; height:8px; border-radius:50%; background:#d97a06;}
 .ln-info-popup{position:fixed; z-index:9999; max-width:300px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:10px 14px; font-size:12.5px; line-height:1.4;}
 .ln-info-popup-title{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--amber); margin-bottom:4px;}
+.spo-listing-link{display:inline-block; margin-left:8px; font-size:11px; white-space:nowrap;}
