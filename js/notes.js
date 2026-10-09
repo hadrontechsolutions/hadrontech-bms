@@ -56,7 +56,7 @@ async function renderNotesList() {
     <div class="card" style="padding:0;">
       ${all.length === 0 ? `<div class="empty-inline">No notes yet. Add one to keep track of something you need to follow up on.</div>` : `
       <table class="data-table">
-        <thead><tr><th>Note No.</th><th>Date</th><th>Title</th><th>Reference Email</th><th>Reminder</th></tr></thead>
+        <thead><tr><th>Note No.</th><th>Date</th><th>For</th><th>Email Subject Reference</th><th>Reminder</th></tr></thead>
         <tbody>${all.map(n => {
           const info = getReminderInfo(n);
           // Urgent rows get a light red tint across the whole row, not just the badge --
@@ -98,7 +98,7 @@ async function renderNoteDetail(id) {
     <div class="card">
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">${formatDate(note.date)}</div></div>
-        <div class="detail-item"><div class="detail-label">Reference Email</div><div class="detail-value">${escapeHtml(note.referenceEmail || '—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Email Subject Reference</div><div class="detail-value">${escapeHtml(note.referenceEmail || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Remind After</div><div class="detail-value">${note.remindAfterDays !== '' && note.remindAfterDays != null ? `${note.remindAfterDays} day${Number(note.remindAfterDays) === 1 ? '' : 's'}` : '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Reminder Status</div><div class="detail-value">${escapeHtml(info.text)}</div></div>
       </div>
@@ -142,8 +142,8 @@ async function renderNoteForm(record) {
     <form id="noteForm" class="form-card">
       <div class="card">
         <div class="form-grid">
-          <div class="field"><label>Title</label><input id="f_title" value="${escapeHtml(record?.title || '')}" required></div>
-          <div class="field"><label>Reference Email</label><input id="f_referenceEmail" type="email" value="${escapeHtml(record?.referenceEmail || '')}" placeholder="e.g. contact@customer.com"></div>
+          <div class="field"><label>For (Customer / Supplier)</label><input id="f_title" value="${escapeHtml(record?.title || '')}" placeholder="e.g. KEYEC, Onsemi Cebu, Pentair" required></div>
+          <div class="field"><label>Email Subject Reference</label><input id="f_referenceEmail" type="text" value="${escapeHtml(record?.referenceEmail || '')}" placeholder="e.g. RE: QRF 566-25631 FCU double inlet centrifugal"></div>
           <div class="field"><label>Date</label><input type="date" id="f_date" value="${record?.date || todayISO()}"></div>
           <div class="field"><label>Remind After (days)</label><input type="number" min="0" id="f_remindAfterDays" value="${record?.remindAfterDays ?? 3}" placeholder="e.g. 3">
             <p class="muted-text" style="margin-top:4px;">You'll be flagged once this many days have passed since the Date above.</p>
@@ -185,7 +185,7 @@ async function renderNoteForm(record) {
         body: document.getElementById('f_body').value,
         updatedAt: now
       };
-      if (!payload.title) { toast('Title is required.', 'err'); btn.disabled = false; return; }
+      if (!payload.title) { toast('Please enter who this reminder is for.', 'err'); btn.disabled = false; return; }
       if (isNew) {
         payload.noteNo = await DB.nextDocNumber('note');
         payload.status = 'Open';

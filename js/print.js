@@ -74,7 +74,9 @@ async function printQuotation(q, customer) {
 
   const rowHTML = (l, i) => {
     const c = QuoteCalc.computeLine(l);
-    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + l.modelNo + (l.modelNo ? ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, q.currency)}</td><td class="p-num">${l.discountPercent || 0}%</td><td class="p-num">${formatMoney(c.net, q.currency)}</td></tr>`;
+    // A line with no Unit Price (blank or 0) prints blank in Unit Price and Amount.
+    const noPrice = !Number(l.unitPrice);
+    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + l.modelNo + (l.modelNo ? ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${noPrice ? '' : formatMoney(l.unitPrice, q.currency)}</td><td class="p-num">${l.discountPercent || 0}%</td><td class="p-num">${noPrice ? '' : formatMoney(c.net, q.currency)}</td></tr>`;
   };
   const itemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Disc.</th><th>Amount</th></tr></thead>`;
   // "VAT: ₱0.00" alone reads the same whether this is a 0%-rated transaction from a VAT-registered

@@ -50,7 +50,8 @@ function spoPaymentStatus(spo) {
 
 Router.route('/supplier-pos', async () => {
   Router.setBreadcrumb([{ label: 'Supplier Purchase Orders' }]);
-  const [all, suppliers, salesOrders] = await Promise.all([DB.dbGetAll('supplierPOs'), DB.dbGetAll('suppliers'), DB.dbGetAll('salesOrders')]);
+  const [allRaw, suppliers, salesOrders] = await Promise.all([DB.dbGetAll('supplierPOs'), DB.dbGetAll('suppliers'), DB.dbGetAll('salesOrders')]);
+  const all = allRaw.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
   const soMap = Object.fromEntries(salesOrders.map(s => [s.id, s]));
   const content = document.getElementById('content');
@@ -59,22 +60,35 @@ Router.route('/supplier-pos', async () => {
     <div class="card">
       <table class="data-table">
         <thead><tr><th>PO #</th><th>Supplier</th><th>Sales Order</th><th>PO Date</th><th>Status</th><th>Payment Status</th><th>Total Cost</th></tr></thead>
-        <tbody>
-          ${all.map(po => {
-            const mismatched = po.status === 'Received' && (po.lines || []).some(l => (l.receivedQty || 0) < l.qty);
-            const badgeHTML = mismatched ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
-            return `
-            <tr class="clickable-row" data-hash="/supplier-pos/${po.id}">
-              <td>${escapeHtml(po.poNo)}</td><td>${escapeHtml(supMap[po.supplierId]?.companyName || '—')}</td>
-              <td>${escapeHtml(soMap[po.salesOrderId]?.soNo || '—')}</td>
-              <td>${formatDate(po.poDate)}</td><td>${badgeHTML}</td><td>${statusBadge(spoPaymentStatus(po))}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
+        <tbody id="spoBody"></tbody>
       </table>
-      ${all.length === 0 ? `<div class="empty-inline">No supplier POs yet. Create one from a Sales Order.</div>` : ''}
+      <div class="empty-inline" id="emptyMsg" style="display:none;">No supplier POs yet. Create one from a Sales Order.</div>
+      <div id="pgWrap"></div>
     </div>
   `;
+
+  // One page at a time -- rebuilding hundreds of rows on every visit gets slower as this list
+  // grows; a fixed-size page keeps this fast regardless of how many supplier POs pile up.
+  let currentPage = 1;
+  function draw(rows) {
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    document.getElementById('spoBody').innerHTML = pageRows.map(po => {
+      const mismatched = po.status === 'Received' && (po.lines || []).some(l => (l.receivedQty || 0) < l.qty);
+      const badgeHTML = mismatched ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
+      return `
+      <tr class="clickable-row" data-hash="/supplier-pos/${po.id}">
+        <td>${escapeHtml(po.poNo)}</td><td>${escapeHtml(supMap[po.supplierId]?.companyName || '—')}</td>
+        <td>${escapeHtml(soMap[po.salesOrderId]?.soNo || '—')}</td>
+        <td>${formatDate(po.poDate)}</td><td>${badgeHTML}</td><td>${statusBadge(spoPaymentStatus(po))}</td><td>${formatMoney(po.totalCost, po.currency)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('pgWrap').innerHTML = rows.length > PAGE_SIZE ? paginationControlsHTML(currentPage, rows.length, PAGE_SIZE) : '';
+    wirePaginationControls((newPage) => { currentPage = Math.max(1, Math.min(newPage, totalPages)); draw(rows); }, currentPage);
+  }
+  draw(all);
 });
 
 Router.route('/supplier-pos/:id', (p) => renderSPODetail(p.id));
@@ -438,3 +452,4 @@ function renderReceiveStockForm(po, id) {
 }
 
 window.SupplierPOs = { createFromSalesOrder, spoAmountPaid, spoBalanceDue, spoPaymentStatus };
+window.SPO_STATUSES = SPO_STATUSES;

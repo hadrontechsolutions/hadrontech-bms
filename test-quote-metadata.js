@@ -45,14 +45,14 @@ async function main() {
   const q = (await win.DB.dbGetAll('quotations'))[0];
   console.log('STEP 1: Saved correctly:', q.rfqRef === 'RFQ-2026-0099' && q.projectName === 'Line 3 Expansion' && q.endUser === 'Luzon Water Treatment Corp.');
 
-  /* ---------- List page shows RFQ Ref and Project columns ---------- */
+  /* ---------- List page shows RFQ Ref; Project intentionally no longer a list column ---------- */
   win.location.hash = '#/quotations';
   await win.Router.resolveRoute();
   await wait(10);
   const listText = doc.getElementById('qBody').textContent;
   console.log('STEP 2: Quotations list shows RFQ Ref:', listText.includes('RFQ-2026-0099'));
-  console.log('STEP 3: Quotations list shows Project:', listText.includes('Line 3 Expansion'));
-  console.log('STEP 4: List header includes new columns:', doc.querySelector('.data-table thead').textContent.includes('RFQ Ref') && doc.querySelector('.data-table thead').textContent.includes('Project'));
+  console.log('STEP 3: Project Name is still fully saved and editable via the form -- just no longer shown as a list column, since it was empty on effectively every real quotation (RFQ Ref already covers this):', q.projectName === 'Line 3 Expansion' && !listText.includes('Line 3 Expansion'));
+  console.log('STEP 4: List header includes RFQ Ref, and no longer includes the removed Project column:', doc.querySelector('.data-table thead').textContent.includes('RFQ Ref') && !doc.querySelector('.data-table thead').textContent.includes('Project'));
 
   /* ---------- List search now matches on these fields ---------- */
   doc.getElementById('listSearch').value = 'Luzon Water';

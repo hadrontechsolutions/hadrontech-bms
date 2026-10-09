@@ -2,6 +2,101 @@
    products.js — Product / Service master records
    ============================================================ */
 
+/* ============================================================
+   PROJECT PACKAGE — one catalog item (ITEM-P-0001) that stands for a whole project and carries
+   its own component items (ITEM-P-0001-01, -02, ...). Components live INSIDE the package record,
+   so they never flood the main Products & Services list; picking the package on a quotation loads
+   the package line plus every component. Numbering: the package gets the next ITEM-P-#### number;
+   components are numbered per project, in order, and a number is never reused after a delete.
+   ============================================================ */
+function pkgAssignComponentNumbers(obj) {
+  const comps = obj.components || [];
+  let seq = Number(obj.nextCompSeq) || 1;
+  comps.forEach(c => { const m = c.compNo && /-(\d+)$/.exec(c.compNo); if (m) seq = Math.max(seq, Number(m[1]) + 1); });
+  comps.forEach(c => { if (!c.compNo) { c.compNo = `${obj.itemNo}-${String(seq).padStart(2, '0')}`; seq += 1; } });
+  obj.nextCompSeq = seq;
+}
+
+function pkgEmptyComponent() {
+  return { compNo: '', description: '', brand: '', modelNo: '', qty: 1, uom: 'pc', unitCost: 0, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0, pricing: 'lot' };
+}
+
+function pkgComponentsPanelHTML(record) {
+  const comps = record.components || [];
+  return `<div class="card"><h3 class="section-title">Package Components <span class="count-pill">${comps.length}</span></h3>
+    ${comps.length === 0 ? '<div class="empty-inline">No components yet.</div>' : `
+    <table class="data-table compact"><thead><tr><th>Item No.</th><th>Description</th><th>Brand / Model</th><th>Qty</th><th>Unit Cost</th><th>Freight (per unit)</th><th>Markup %</th><th>Price</th></tr></thead><tbody>
+    ${comps.map(c => {
+      const covers = Number(c.freightCoversQty) > 0 ? Number(c.freightCoversQty) : 1;
+      return `<tr><td>${escapeHtml(c.compNo || '—')}</td><td>${escapeHtml(c.description)}</td><td>${escapeHtml([c.brand, c.modelNo].filter(Boolean).join(' · ') || '—')}</td><td>${c.qty} ${escapeHtml(c.uom || '')}</td><td>${formatMoney(c.unitCost, c.costCurrency)}</td><td>${formatMoney((Number(c.estimatedFreightCost) || 0) / covers, c.costCurrency)}</td><td>${c.markupPercent || 0}%</td><td>${c.pricing === 'own' ? 'Own price' : 'In lot price'}</td></tr>`;
+    }).join('')}</tbody></table>`}
+    <p class="muted-text" style="margin-top:8px;">Select this package in a quotation's <b>Select Item</b> to load all of these as lines. Edit the package to add or change components.</p></div>`;
+}
+
+/** Turns the generic product form into the Project Package form when Type = Project Package:
+    hides the single-item cost/price fields and shows the component editor. */
+function setupProjectPackageForm(form, record) {
+  const typeSel = form.querySelector('#f_type');
+  if (!typeSel) return;
+  const HIDE = ['defaultSupplierId', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'vatClass', 'countryOfOrigin'];
+  const hideEls = HIDE.map(n => form.querySelector('#f_' + n)).filter(Boolean).map(el => el.closest('.field'));
+  const descLabel = form.querySelector('#f_description') && form.querySelector('#f_description').closest('.field').querySelector('label');
+  const comps = (record && record.components || []).map(c => Object.assign({}, c));
+  form._pkgComps = comps;
+  let ccyOptions = ['PHP', 'USD'];
+  DB.getSettings().then(st => { ccyOptions = currencyList(st); if (host.style.display !== 'none') draw(); });
+
+  if (record) { typeSel.style.pointerEvents = 'none'; typeSel.style.opacity = '.6'; typeSel.tabIndex = -1; typeSel.title = 'The type cannot be changed after the item is created.'; }
+
+  const host = document.createElement('div');
+  host.id = 'pkgEditor'; host.style.cssText = 'margin-top:18px; display:none;';
+  const actions = form.querySelector('.form-actions');
+  form.insertBefore(host, actions);
+
+  function draw() {
+    const numStyle = 'width:70px;';
+    host.innerHTML = `<h3 class="section-title">Package Components</h3>
+      <p class="muted-text">Each component gets its own number under this package (e.g. ITEM-P-0001-01). Choose per item how it is priced on a quotation: <b>Own price</b> = a normal line with its own unit price (cost + freight + markup); <b>In lot price</b> = printed blank, its cost and markup roll into the project's single lot line. Freight is quoted for a quantity, same as a normal item.</p>
+      <div style="overflow-x:auto;"><table class="data-table compact"><thead><tr><th>Item No.</th><th>Description *</th><th>Brand</th><th>Model</th><th>Qty</th><th>UOM</th><th>Unit Cost</th><th>Cost Ccy</th><th>Est. Freight</th><th>Freight Covers Qty</th><th>Markup %</th><th>Price shown as</th><th></th></tr></thead><tbody>
+      ${comps.map((c, i) => `<tr data-i="${i}">
+        <td style="white-space:nowrap;">${escapeHtml(c.compNo || '(new)')}</td>
+        <td><input data-k="description" value="${escapeHtml(c.description)}" style="width:170px;"></td>
+        <td><input data-k="brand" value="${escapeHtml(c.brand)}" style="width:80px;"></td>
+        <td><input data-k="modelNo" value="${escapeHtml(c.modelNo)}" style="width:90px;"></td>
+        <td><input data-k="qty" type="number" step="any" min="0" value="${c.qty}" style="width:60px;"></td>
+        <td><input data-k="uom" value="${escapeHtml(c.uom)}" style="width:50px;"></td>
+        <td><input data-k="unitCost" type="number" step="0.01" min="0" value="${c.unitCost}" style="${numStyle}"></td>
+        <td><select data-k="costCurrency">${(ccyOptions.includes(c.costCurrency) ? ccyOptions : [c.costCurrency, ...ccyOptions]).map(x => `<option ${x === c.costCurrency ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')}</select></td>
+        <td><input data-k="estimatedFreightCost" type="number" step="0.01" min="0" value="${c.estimatedFreightCost}" style="${numStyle}"></td>
+        <td><input data-k="freightCoversQty" type="number" step="any" min="0" value="${c.freightCoversQty}" style="width:60px;"></td>
+        <td><input data-k="markupPercent" type="number" step="0.01" value="${c.markupPercent}" style="width:60px;"></td>
+        <td><select data-k="pricing" title="Own price: a normal quotation line with its own unit price. In lot price: printed blank; its cost and markup roll into the project's lot line."><option value="lot" ${c.pricing !== 'own' ? 'selected' : ''}>In lot price</option><option value="own" ${c.pricing === 'own' ? 'selected' : ''}>Own price</option></select></td>
+        <td class="row-del" data-del="${i}">✕</td></tr>`).join('')}
+      </tbody></table></div>
+      <button type="button" class="btn-line btn-sm" id="pkgAddComp" style="margin-top:8px;">+ Add component</button>`;
+    host.querySelectorAll('tr[data-i]').forEach(tr => {
+      const c = comps[Number(tr.dataset.i)];
+      tr.querySelectorAll('[data-k]').forEach(el => {
+        const k = el.dataset.k;
+        const upd = () => { c[k] = (el.type === 'number') ? (Number(el.value) || 0) : el.value; if (typeof markDirty === 'function') markDirty(); };
+        el.addEventListener('input', upd); el.addEventListener('change', upd);
+      });
+      tr.querySelector('[data-del]').addEventListener('click', () => { comps.splice(Number(tr.dataset.i), 1); draw(); });
+    });
+    host.querySelector('#pkgAddComp').addEventListener('click', () => { comps.push(pkgEmptyComponent()); draw(); });
+  }
+
+  function sync() {
+    const isPkg = typeSel.value === 'Project Package';
+    hideEls.forEach(el => { el.style.display = isPkg ? 'none' : ''; });
+    host.style.display = isPkg ? '' : 'none';
+    if (descLabel) descLabel.textContent = isPkg ? 'Project Name / Description *' : 'Description *';
+    if (isPkg) { if (comps.length === 0) comps.push(pkgEmptyComponent()); draw(); }
+  }
+  typeSel.addEventListener('change', sync);
+  sync();
+}
+
 Entities.defineEntity({
   key: 'products',
   label: 'Product',
@@ -16,11 +111,12 @@ Entities.defineEntity({
     { key: 'description', label: 'Description' },
     { key: 'brand', label: 'Brand' },
     { key: 'modelNo', label: 'Model / Part No.' },
-    { key: 'standardPrice', label: 'Selling Price', render: r => formatMoney(r.standardPrice, r.currency) },
+    { key: 'standardCost', label: 'Standard Cost', render: r => r.type === 'Project Package' ? `<span class="muted-text">Project Package · ${(r.components || []).length} items</span>` : formatMoney(r.standardCost, r.currency) },
+    { key: 'leadTime', label: 'Typical Lead Time', render: r => r.leadTime || '—' },
     { key: 'status', label: 'Status', render: r => statusBadge(r.status) }
   ],
   fields: [
-    { name: 'type', label: 'Type', type: 'select', options: ['Product', 'Service'], default: 'Product' },
+    { name: 'type', label: 'Type', type: 'select', options: ['Product', 'Service', 'Project Package'], default: 'Product' },
     { name: 'category', label: 'Category', type: 'text' },
     { name: 'manufacturer', label: 'Manufacturer', type: 'text' },
     { name: 'brand', label: 'Brand', type: 'text' },
@@ -30,9 +126,11 @@ Entities.defineEntity({
     { name: 'defaultSupplierId', label: 'Default Supplier', type: 'select-dynamic', optionsFrom: 'suppliers', optionsLabel: 'companyName' },
     { name: 'supplierListingUrl', label: 'Supplier Listing URL', type: 'url' },
     { name: 'supplierPartNo', label: 'Supplier Part Number', type: 'text' },
-    { name: 'standardCost', label: 'Standard Cost', type: 'money' },
-    { name: 'standardPrice', label: 'Standard Selling Price', type: 'money' },
-    { name: 'currency', label: 'Currency', type: 'currency-select', default: 'PHP' },
+    { name: 'estimatedFreightCost', label: 'Estimated Freight Cost', type: 'money', highlight: true },
+    { name: 'freightCoversQty', label: 'Freight Covers Qty (pcs)', type: 'number', default: 1, highlight: true },
+    { name: 'standardCost', label: 'Standard Cost', type: 'money', highlight: true },
+    { name: 'currency', label: 'Currency', type: 'currency-select', default: 'USD' },
+    { name: 'standardPrice', label: 'Standard Selling Price (₱ PHP)', type: 'money' },
     { name: 'markupPercent', label: 'Default Markup %', type: 'number' },
     { name: 'vatClass', label: 'VAT Classification', type: 'select', options: ['VATable', 'Zero-Rated', 'VAT Exempt'] },
     { name: 'countryOfOrigin', label: 'Country of Origin', type: 'text' },
@@ -41,6 +139,36 @@ Entities.defineEntity({
     { name: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ],
+  counterFor: (obj) => obj.type === 'Project Package' ? 'projectPackage' : 'product',
+  afterNumber: (obj) => { if (obj.type === 'Project Package') pkgAssignComponentNumbers(obj); },
+  beforeSave: (obj, form, orig) => {
+    if (orig) obj.type = orig.type; // a record's type is fixed once created (it decides its numbering)
+    if (obj.type !== 'Project Package') return null;
+    const comps = (form._pkgComps || []).filter(c => String(c.description || '').trim())
+      .map(c => Object.assign({}, c, { description: String(c.description).trim() }));
+    if (comps.length === 0) return 'Add at least one component item to this project package.';
+    obj.components = comps;
+    if (orig) pkgAssignComponentNumbers(obj); // new records get numbers right after the package number exists
+    return null;
+  },
+  afterFormRender: (form, record) => {
+    const fr = form.querySelector('#f_estimatedFreightCost'), qty = form.querySelector('#f_freightCoversQty'), ccy = form.querySelector('#f_currency');
+    // Shows the per-unit freight the highlighted fields work out to (cost amount / qty it covers).
+    if (fr && qty) {
+      const hint = document.createElement('div');
+      hint.id = 'freightPerUnitHint'; hint.style.cssText = 'font-size:11px; margin-top:4px; color:var(--amber);';
+      qty.parentNode.appendChild(hint);
+      const update = () => {
+        const q = Number(qty.value) > 0 ? Number(qty.value) : 1;
+        const f = Number(fr.value) || 0;
+        hint.textContent = f > 0 ? `= ${formatMoney(f / q, ccy ? ccy.value : 'USD')} freight per unit` : '';
+      };
+      [fr, qty, ccy].forEach(el => el && el.addEventListener('input', update));
+      if (ccy) ccy.addEventListener('change', update);
+      update();
+    }
+    setupProjectPackageForm(form, record);
+  },
   checkRelatedBeforeDelete: async (record) => {
     const [quotations, stockMovements] = await Promise.all([
       DB.dbGetAll('quotations'),
@@ -49,6 +177,7 @@ Entities.defineEntity({
     return quotations.filter(q => (q.lines || []).some(l => String(l.itemId) === String(record.id))).length + stockMovements.length;
   },
   relatedPanels: async (record) => {
+    if (record.type === 'Project Package') return pkgComponentsPanelHTML(record);
     if (record.type === 'Service') return ''; // services don't carry physical stock
     const [movements, salesOrders] = await Promise.all([
       DB.dbQueryIndex('stockMovements', 'productId', record.id),
@@ -86,7 +215,7 @@ Entities.defineEntity({
     `;
   },
   afterRender: (record, id) => {
-    if (record.type === 'Service') return;
+    if (record.type === 'Service' || record.type === 'Project Package') return;
     const btn = document.getElementById('btnAdjustStock');
     if (!btn) return;
     btn.onclick = () => {

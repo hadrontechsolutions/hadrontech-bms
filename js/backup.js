@@ -3,7 +3,7 @@
    This is the primary safety net for an offline, single-device app.
    ============================================================ */
 
-const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'technicalOffers', 'expenses', 'notes', 'counters', 'settings', 'activity'];
+const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'technicalOffers', 'expenses', 'notes', 'partners', 'distributions', 'counters', 'settings', 'activity'];
 const APP_VERSION = '1.0.0';
 
 Router.route('/settings/backup', renderBackupPage);
@@ -78,6 +78,8 @@ async function renderBackupPage() {
         <button class="btn-line btn-sm" data-csv="technicalOffers">TechnicalOffers.csv</button>
         <button class="btn-line btn-sm" data-csv="expenses">Expenses.csv</button>
         <button class="btn-line btn-sm" data-csv="notes">Notes.csv</button>
+        <button class="btn-line btn-sm" data-csv="partners">Partners.csv</button>
+        <button class="btn-line btn-sm" data-csv="distributions">Distributions.csv</button>
       </div>
     </div>
   `;
@@ -251,6 +253,9 @@ async function processRestoreFile(file) {
     // Single atomic transaction across every store: either the whole restore
     // succeeds, or nothing changes at all — no half-restored state possible.
     await DB.restoreAll(BACKUP_STORES, payload.data);
+    // An older backup carries an older set of numbering counters; re-add any counter that did not exist
+    // yet when it was made (e.g. the Project Package counter) so new records can still be numbered.
+    await DB.ensureCounters();
     await DB.logActivity('Restored data from backup file');
     toast('Backup restored successfully.');
     if (window.BackupReminder) await BackupReminder.refreshBackupBanner();
@@ -288,7 +293,7 @@ async function chooseRestoreFile() {
 const CSV_COLUMNS = {
   customers: [{ label: 'Customer No', value: 'customerNo' }, { label: 'Company', value: 'companyName' }, { label: 'Contact', value: 'contactPerson' }, { label: 'Email', value: 'email' }, { label: 'Phone', value: 'telephone' }, { label: 'Status', value: 'status' }],
   suppliers: [{ label: 'Supplier No', value: 'supplierNo' }, { label: 'Company', value: 'companyName' }, { label: 'Contact', value: 'contactPerson' }, { label: 'Email', value: 'email' }, { label: 'Brands', value: 'brandsSupplied' }, { label: 'Status', value: 'status' }],
-  products: [{ label: 'Item No', value: 'itemNo' }, { label: 'Description', value: 'description' }, { label: 'Brand', value: 'brand' }, { label: 'Model', value: 'modelNo' }, { label: 'Cost', value: 'standardCost' }, { label: 'Price', value: 'standardPrice' }],
+  products: [{ label: 'Item No', value: 'itemNo' }, { label: 'Description', value: 'description' }, { label: 'Brand', value: 'brand' }, { label: 'Model', value: 'modelNo' }, { label: 'Cost', value: 'standardCost' }, { label: 'Price', value: 'standardPrice' }, { label: 'Est. Freight Cost', value: 'estimatedFreightCost' }, { label: 'Freight Covers Qty', value: 'freightCoversQty' }],
   quotations: [{ label: 'Quotation No', value: 'quotationNo' }, { label: 'Rev', value: 'revision' }, { label: 'Customer', value: r => r.customerSnapshot?.companyName || '' }, { label: 'Date', value: 'date' }, { label: 'Status', value: 'status' }, { label: 'Total', value: 'grandTotal' }],
   customerPOs: [{ label: 'Record No', value: 'poNo' }, { label: 'Customer PO No', value: 'customerPoNumber' }, { label: 'Date Received', value: 'dateReceived' }, { label: 'Status', value: 'status' }, { label: 'Amount', value: 'poAmount' }],
   salesOrders: [{ label: 'SO No', value: 'soNo' }, { label: 'Order Date', value: 'orderDate' }, { label: 'Status', value: 'status' }, { label: 'Total', value: 'grandTotal' }],
@@ -298,7 +303,9 @@ const CSV_COLUMNS = {
   proformaInvoices: [{ label: 'PI No', value: 'piNo' }, { label: 'Sales Order ID', value: 'salesOrderId' }, { label: 'Date', value: 'date' }, { label: 'Invoice Amount', value: r => r.grandTotal ?? '' }, { label: 'Amount Paid', value: r => (typeof piAmountPaid === 'function' ? piAmountPaid(r) : '') }, { label: 'Balance Due', value: r => (typeof piBalanceDue === 'function' ? piBalanceDue(r) : '') }, { label: 'Payment Status', value: r => (typeof piPaymentStatus === 'function' ? piPaymentStatus(r) : '') }, { label: 'Notes', value: 'notes' }, { label: 'Created By', value: 'createdBy' }],
   technicalOffers: [{ label: 'Offer No', value: 'offerNo' }, { label: 'Customer ID', value: 'customerId' }, { label: 'End User', value: 'endUser' }, { label: 'RFQ Reference', value: 'rfqReference' }, { label: 'Date', value: 'date' }, { label: 'Status', value: r => r.status || 'Draft' }, { label: 'Item Count', value: r => (r.items || []).length }, { label: 'Spec Row Count', value: r => (r.specs || []).length }, { label: 'Created By', value: 'createdBy' }],
   expenses: [{ label: 'Expense No', value: 'expenseNo' }, { label: 'Date', value: 'date' }, { label: 'Category', value: 'category' }, { label: 'Description', value: 'description' }, { label: 'Payee', value: 'payee' }, { label: 'Amount', value: 'amount' }, { label: 'Payment Method', value: 'paymentMethod' }, { label: 'Reference No', value: 'referenceNo' }, { label: 'Created By', value: 'createdBy' }],
-  notes: [{ label: 'Note No', value: 'noteNo' }, { label: 'Date', value: 'date' }, { label: 'Title', value: 'title' }, { label: 'Reference Email', value: 'referenceEmail' }, { label: 'Remind After (days)', value: 'remindAfterDays' }, { label: 'Status', value: 'status' }, { label: 'Created By', value: 'createdBy' }]
+  notes: [{ label: 'Note No', value: 'noteNo' }, { label: 'Date', value: 'date' }, { label: 'For', value: 'title' }, { label: 'Email Subject Reference', value: 'referenceEmail' }, { label: 'Remind After (days)', value: 'remindAfterDays' }, { label: 'Status', value: 'status' }, { label: 'Created By', value: 'createdBy' }],
+  partners: [{ label: 'Partner No', value: 'partnerNo' }, { label: 'Name', value: 'name' }, { label: 'Role', value: 'role' }, { label: 'Default Split %', value: 'defaultSplitPercent' }, { label: 'Status', value: 'status' }],
+  distributions: [{ label: 'Distribution No', value: 'distributionNo' }, { label: 'Month', value: 'month' }, { label: 'Gross Profit', value: 'grossProfitTotal' }, { label: 'Expenses', value: 'expensesTotal' }, { label: 'Net Profit', value: 'netProfit' }, { label: 'Reserve %', value: 'reservePercent' }, { label: 'Reserve Amount', value: 'reserveAmount' }, { label: 'Distributable Amount', value: 'distributableAmount' }, { label: 'Cash Received in Month', value: 'cashReceivedInMonth' }, { label: 'Reference', value: 'reference' }, { label: 'Created By', value: 'createdBy' }]
 };
 
 async function exportTableCSV(storeName) {

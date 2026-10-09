@@ -82,7 +82,7 @@ function emptyLine(defaultVatRate) {
   return { lineId: 'L' + Math.random().toString(36).slice(2, 9), itemId: '', brand: '', modelNo: '',
     description: '', qty: 1, uom: 'pc', unitCost: 0, costCurrency: 'PHP', costExchangeRate: 1,
     markupPercent: 0, unitPrice: 0, discountPercent: 0, vatRate: defaultVatRate ?? 12, supplierId: '',
-    supplierQuoteRef: '', leadTime: '', remarks: '', optionGroup: '' };
+    supplierQuoteRef: '', leadTime: '', estimatedFreightCost: 0, freightMode: 'total', priceOverridden: false, remarks: '', optionGroup: '' };
 }
 
 /** Reference rate to convert an amount FROM fromCur TO toCur, using PHP as the anchor currency.
@@ -98,6 +98,88 @@ function referenceRate(fromCur, toCur, settings) {
   return r2(toPHP * phpToTarget);
 }
 
+/* ============================================================
+   LINE FREIGHT MODEL
+   New lines (freightMode 'total'): `estimatedFreightCost` is the TOTAL freight for the whole row
+   (all units), in the row's own cost currency. Per-unit freight is derived (total / qty).
+   Old saved lines have no freightMode: their `estimatedFreightCost` was a PER-UNIT figure. They
+   are never silently reinterpreted -- they keep their original math ('legacy') and are flagged
+   for review until the user explicitly converts them (convertLegacyFreight).
+   All math here is full precision; only displayed money is rounded.
+   ============================================================ */
+function isTotalFreight(l) { return l.freightMode === 'total'; }
+function lineCostRate(l, quoteCurrency) {
+  const costCcy = l.costCurrency || quoteCurrency || 'PHP';
+  return (quoteCurrency && costCcy !== quoteCurrency) ? (Number(l.costExchangeRate) || 1) : 1;
+}
+/** Freight per unit, in the row's cost currency. Division by zero safe (qty 0 -> 0). */
+function lineFreightPerUnit(l) {
+  const f = Number(l.estimatedFreightCost) || 0;
+  if (!isTotalFreight(l)) return f;
+  const qty = Number(l.qty) || 0;
+  return qty > 0 ? f / qty : 0;
+}
+/** Landed unit cost in the quotation currency = (supplier unit cost + freight per unit) x rate. */
+function lineLandedUnitCost(l, quoteCurrency) {
+  return ((Number(l.unitCost) || 0) + lineFreightPerUnit(l)) * lineCostRate(l, quoteCurrency);
+}
+/** Calculated selling price per unit. New lines: landed unit cost x (1 + markup%).
+    Legacy lines keep their original rule (markup on unit cost only, freight added at cost). */
+function lineCalcPrice(l, quoteCurrency) {
+  const m = 1 + (Number(l.markupPercent) || 0) / 100;
+  if (isTotalFreight(l)) return r2(lineLandedUnitCost(l, quoteCurrency) * m);
+  const rate = lineCostRate(l, quoteCurrency);
+  return r2((Number(l.unitCost) || 0) * rate * m + lineFreightPerUnit(l) * rate);
+}
+/** Explicit conversion of an old per-unit freight line to a total-for-the-line figure.
+    Saved Unit Price is left untouched (and protected from silent recalculation). */
+function convertLegacyFreight(l) {
+  if (isTotalFreight(l)) return l;
+  l.estimatedFreightCost = (Number(l.estimatedFreightCost) || 0) * (Number(l.qty) || 0);
+  l.freightMode = 'total';
+  l.priceOverridden = true;
+  return l;
+}
+
+/** Catalog freight is quoted for a quantity (e.g. USD 60 for 40 pcs). Per-unit = amount / qty it
+    covers. Missing/0 covers-qty (all products saved before this field existed) means 1, so old
+    per-unit values keep their exact meaning. */
+function productFreightPerUnit(p) {
+  const covers = Number(p.freightCoversQty) > 0 ? Number(p.freightCoversQty) : 1;
+  return (Number(p.estimatedFreightCost) || 0) / covers;
+}
+
+/** Splits ONE shipment freight total across several rows so the shares always add up to exactly
+    the shipment total (whole cents, largest-remainder method).
+      method 'cost'   -> in proportion to each row's cost value (unit cost x qty)  [default; fair for mixed goods]
+      method 'qty'    -> in proportion to quantity
+      method 'manual' -> shares typed by the user (manual: {lineId: amount}); nothing is auto-fixed
+    If the chosen weights are all zero it falls back to quantity, then to an equal split.
+    rows: [{ lineId, qty, unitCost }]. Returns { shares, allocated, unassigned }. */
+function allocateFreight(rows, total, method, manual) {
+  const T = Math.round((Number(total) || 0) * 100);
+  const shares = {};
+  if (!rows.length) return { shares, allocated: 0, unassigned: T / 100 };
+  if (method === 'manual') {
+    let sum = 0;
+    rows.forEach(r => { const c = Math.round((Number(manual && manual[r.lineId]) || 0) * 100); shares[r.lineId] = c / 100; sum += c; });
+    return { shares, allocated: sum / 100, unassigned: (T - sum) / 100 };
+  }
+  const weightOf = (r, m) => m === 'qty' ? (Number(r.qty) || 0) : (Number(r.unitCost) || 0) * (Number(r.qty) || 0);
+  let m = method === 'qty' ? 'qty' : 'cost';
+  let w = rows.map(r => Math.max(0, weightOf(r, m)));
+  if (w.reduce((a, b) => a + b, 0) <= 0) { m = 'qty'; w = rows.map(r => Math.max(0, weightOf(r, 'qty'))); }
+  if (w.reduce((a, b) => a + b, 0) <= 0) w = rows.map(() => 1);
+  const W = w.reduce((a, b) => a + b, 0);
+  const raw = w.map(x => x / W * T);
+  const cents = raw.map(Math.floor);
+  let left = T - cents.reduce((a, b) => a + b, 0);
+  raw.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac || a.i - b.i)
+    .forEach(o => { if (left > 0) { cents[o.i] += 1; left -= 1; } });
+  rows.forEach((r, i) => { shares[r.lineId] = cents[i] / 100; });
+  return { shares, allocated: T / 100, unassigned: 0 };
+}
+
 /** Selling price/VAT stay entirely in the quotation's own currency (that's what the customer
  *  sees). Cost is the only value that may be in a different currency (e.g. a USD-priced pump
  *  quoted to a PHP customer) — costExchangeRate converts unitCost INTO the quotation's currency
@@ -106,14 +188,29 @@ function referenceRate(fromCur, toCur, settings) {
  *  matching, i.e. rate 1 — unchanged behavior for old records). */
 function computeLine(l, quoteCurrency) {
   const qty = Number(l.qty) || 0, price = Number(l.unitPrice) || 0, cost = Number(l.unitCost) || 0;
+  const freight = Number(l.estimatedFreightCost) || 0;
   const base = r2(qty * price);
   const discAmt = r2(base * (Number(l.discountPercent) || 0) / 100);
   const net = r2(base - discAmt);
   const vatAmt = r2(net * (Number(l.vatRate) || 0) / 100);
   const costCcy = l.costCurrency || quoteCurrency || 'PHP';
   const needsConversion = quoteCurrency && costCcy !== quoteCurrency;
-  const costInQuoteCurrency = needsConversion ? r2(cost * (Number(l.costExchangeRate) || 1)) : cost;
-  const costTotal = r2(qty * costInQuoteCurrency);
+  const rate = Number(l.costExchangeRate) || 1;
+  const costInQuoteCurrency = needsConversion ? r2(cost * rate) : cost;
+  // True cost = item cost + freight, both converted the same way (freight is quoted in the
+  // same currency as the item itself -- an item sourced from Hong Kong has freight quoted in
+  // HKD too, not PHP). Markup is applied only to the item's own cost elsewhere (see
+  // computeMarkupPrice in quotations.js); this is the actual cost Gross Profit is measured
+  // against, which must include freight or the figure silently understates a real expense.
+  let costTotal;
+  if (isTotalFreight(l)) {
+    // (Supplier unit cost x Qty + Total line freight) x Exchange rate -- full precision, rounded once.
+    costTotal = r2((cost * qty + freight) * lineCostRate(l, quoteCurrency));
+  } else {
+    // Legacy per-unit freight line: original math, so saved totals do not move.
+    const freightInQuoteCurrency = needsConversion ? r2(freight * rate) : freight;
+    costTotal = r2(qty * (costInQuoteCurrency + freightInQuoteCurrency));
+  }
   return { base, discAmt, net, vatAmt, costTotal, lineTotal: r2(net + vatAmt) };
 }
 
@@ -178,7 +275,8 @@ function computeQuotationTotals(q) {
 
 Router.route('/quotations', async () => {
   Router.setBreadcrumb([{ label: 'Quotations' }]);
-  const all = (await DB.dbGetAll('quotations')).filter(q => q.isLatest);
+  const all = (await DB.dbGetAll('quotations')).filter(q => q.isLatest).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const expiredCount = all.filter(q => getExpiryInfo(q).state === 'expired').length;
   const customers = await DB.dbGetAll('customers');
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const content = document.getElementById('content');
@@ -187,38 +285,41 @@ Router.route('/quotations', async () => {
       <h1>Quotations</h1>
       <div class="page-actions">
         <input type="search" id="listSearch" placeholder="Search quotation #, RFQ ref, project, end-user, customer..." class="search-box">
-        <select id="statusFilter"><option value="">All Statuses</option>${QUOTE_STATUSES.map(s => `<option>${s}</option>`).join('')}</select>
-        <select id="expiryFilter">
-          <option value="">All Validity</option>
-          <option value="active">Active</option>
-          <option value="soon">Expiring Soon</option>
-          <option value="today">Expires Today</option>
-          <option value="expired">Past Due</option>
-          <option value="extended">Extended</option>
-        </select>
+        <select id="statusFilter"><option value="">All Statuses</option>${QUOTE_STATUSES.filter(s => s !== 'Expired').map(s => `<option>${s}</option>`).join('')}</select>
         <button class="btn-amber" id="btnNew">+ New Quotation</button>
       </div>
     </div>
+    <label style="display:flex; align-items:center; gap:6px; margin-bottom:14px; font-size:13px;">
+      <input type="checkbox" id="showExpired">
+      Show expired quotations too${expiredCount ? ` (${expiredCount} hidden right now)` : ''}
+    </label>
     <div class="card">
       <table class="data-table">
-        <thead><tr><th>Quotation #</th><th>Customer</th><th>RFQ Ref</th><th>Project</th><th>Date</th><th>Valid Until</th><th>Rev</th><th>Status</th><th>Total</th></tr></thead>
+        <thead><tr><th>Quotation #</th><th>Customer</th><th>RFQ Ref</th><th>Date</th><th>Valid Until</th><th>Rev</th><th>Status</th><th>Total</th></tr></thead>
         <tbody id="qBody"></tbody>
       </table>
       <div class="empty-inline" id="emptyMsg" style="display:none;">No quotations yet. Click "New Quotation" to create one.</div>
+      <div id="pgWrap"></div>
     </div>
   `;
   document.getElementById('btnNew').onclick = () => Router.navigate('/quotations/new');
 
+  // Renders only one page's worth of rows at a time -- at a few hundred quotations, rebuilding
+  // the whole table on every search keystroke (even debounced) is real, measurable work; a
+  // fixed-size page keeps every render fast no matter how large the list grows.
+  let currentPage = 1;
   function draw(rows) {
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
     const body = document.getElementById('qBody');
-    body.innerHTML = rows.map(q => {
+    body.innerHTML = pageRows.map(q => {
       const info = getExpiryInfo(q);
       return `
       <tr class="clickable-row" data-hash="/quotations/${q.id}">
         <td>${escapeHtml(q.quotationNo)}</td>
         <td>${escapeHtml(custMap[q.customerId]?.companyName || q.customerSnapshot?.companyName || '—')}</td>
         <td>${escapeHtml(q.rfqRef || '—')}</td>
-        <td>${escapeHtml(q.projectName || '—')}</td>
         <td>${formatDate(q.date)}</td>
         <td>${validityCellHTML(q)}</td>
         <td>Rev ${padRev(q.revision)}</td>
@@ -227,23 +328,32 @@ Router.route('/quotations', async () => {
       </tr>`;
     }).join('');
     document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('pgWrap').innerHTML = rows.length > PAGE_SIZE ? paginationControlsHTML(currentPage, rows.length, PAGE_SIZE) : '';
+    wirePaginationControls((newPage) => { currentPage = Math.max(1, Math.min(newPage, totalPages)); draw(rows); }, currentPage);
   }
-  draw(all);
 
+  // One clear, single control: expired quotations (still Draft/Sent/Under Review, past their
+  // Valid Until date) are hidden by default, shown only if this box is checked. Deliberately
+  // NOT a second dropdown next to Status -- Status already has its own "Expired" option (a
+  // status someone sets by hand), and having two different "Expired"-sounding filters, in two
+  // separate dropdowns, meaning two different things, is exactly what caused real confusion.
+  // A Won or Lost quotation is never affected by this checkbox either way, since
+  // getExpiryInfo() only flags an open-status quotation as expired to begin with.
   const applyFilters = () => {
     const q = document.getElementById('listSearch').value.trim().toLowerCase();
     const st = document.getElementById('statusFilter').value;
-    const ex = document.getElementById('expiryFilter').value;
+    const showExpired = document.getElementById('showExpired').checked;
     let rows = all;
     if (st) rows = rows.filter(r => r.status === st);
-    if (ex === 'extended') rows = rows.filter(r => r.validityHistory && r.validityHistory.length > 0);
-    else if (ex) rows = rows.filter(r => getExpiryInfo(r).state === ex);
+    if (!showExpired) rows = rows.filter(r => getExpiryInfo(r).state !== 'expired');
     if (q) rows = rows.filter(r => [r.quotationNo, r.rfqRef, r.projectName, r.endUser, custMap[r.customerId]?.companyName].join(' ').toLowerCase().includes(q));
+    currentPage = 1;
     draw(rows);
   };
+  applyFilters();
   document.getElementById('listSearch').addEventListener('input', debounce(applyFilters, 200));
   document.getElementById('statusFilter').addEventListener('change', applyFilters);
-  document.getElementById('expiryFilter').addEventListener('change', applyFilters);
+  document.getElementById('showExpired').addEventListener('change', applyFilters);
 });
 
 /* ---------- FORM (new / edit) ---------- */
@@ -311,19 +421,19 @@ async function renderQuoteForm(id) {
         <thead><tr>
           <th style="width:26px;">#</th><th>Catalog</th><th>Brand</th><th>Model/Part No.</th><th>Description *</th>
           <th>Option</th>
-          <th>Qty</th><th>UOM</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Cost Ccy</th><th class="internal-only-col">Rate→<span id="rateArrowCcy"></span></th><th class="internal-only-col">Markup %</th><th>Unit Price</th><th>Disc %</th><th>VAT %</th>
+          <th>Qty</th><th>UOM</th><th class="internal-only-col">Lead Time</th><th class="internal-only-col">Total Freight for This Line</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Cost Ccy</th><th class="internal-only-col">Rate→<span id="rateArrowCcy"></span></th><th class="internal-only-col">Markup %</th><th>Unit Price</th><th>Disc %</th><th>VAT %</th>
           <th class="internal-only-col">Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th></th>
         </tr></thead>
         <tbody id="linesBody"></tbody>
       </table>
       </div>
       <datalist id="optionSuggestions"><option value="Option 1"><option value="Option 2"><option value="Option 3"></datalist>
-      <button type="button" class="btn-line btn-sm" id="btnAddLine">+ Add Line Item</button>
+      <button type="button" class="btn-line btn-sm" id="btnAddLine">+ Add Line Item</button> <button type="button" class="btn-line btn-sm" id="btnSplitFreight" title="One supplier shipment covering several items? Split its freight across the rows">Split shipment freight…</button>
       <p class="muted-text" style="margin-top:6px;">Tag lines with the same <b>Option</b> label (e.g. "Option 1") when the customer must choose ONE alternative — the system will then total each option separately instead of adding them together. Leave blank for items that apply to every option (e.g. shared freight).</p>
 
       <div class="totals-panel">
         <div class="field"><label>Overall Discount %</label><input type="number" step="0.01" id="f_overallDiscountPercent" value="${q.overallDiscountPercent || 0}"></div>
-        <div class="field"><label>Freight / Shipping Charge</label><input type="number" step="0.01" id="f_freightCharge" value="${q.freightCharge || 0}"></div>
+        <div class="field"><label>Freight / Shipping Charge</label><input type="number" step="0.01" id="f_freightCharge" value="${q.freightCharge || 0}"><div id="freightInfo" style="font-size:11px; margin-top:3px;"></div></div>
         <div class="field"><label>Other Charges</label><input type="number" step="0.01" id="f_otherCharges" value="${q.otherCharges || 0}"></div>
       </div>
 
@@ -360,7 +470,195 @@ async function renderQuoteForm(id) {
     return (Number(line.unitCost) || 0) * rate;
   }
 
+  /** Same conversion as costInQuoteCurrency, for Estimated Freight Cost -- freight is
+      quoted in the same currency as the item itself (an item sourced from Hong Kong has
+      freight quoted in HKD too), so it uses the line's own Cost Currency/rate, not PHP. */
+  function freightInQuoteCurrency(line, qCur) {
+    const costCcy = line.costCurrency || qCur;
+    const rate = costCcy === qCur ? 1 : (Number(line.costExchangeRate) || 1);
+    return (Number(line.estimatedFreightCost) || 0) * rate;
+  }
+
+  /** Unit Price computed from cost + freight + markup (see lineCalcPrice: new lines apply
+      markup to the landed unit cost = supplier cost + freight per unit; old per-unit-freight
+      lines keep their original rule until converted). */
+  function computeMarkupPrice(line, qCur) {
+    return lineCalcPrice(line, qCur);
+  }
+
+  /** Flags Unit Price in red whenever it's at or below TRUE cost (unit cost + freight;
+      zero or negative margin once freight is accounted for) -- most often the result of a
+      0% markup leaving price defaulted straight to cost, but also catches someone manually
+      typing a price that happens to land there. A sanity-check highlight, not a validation
+      error -- the person may genuinely intend to sell at cost sometimes, so nothing is
+      blocked, it just should never happen without them noticing. */
+  function updatePriceWarning(tr, line, qCur) {
+    const priceEl = tr.querySelector('.ln-price');
+    if (!priceEl) return;
+    if (line.lotRole) { priceEl.classList.remove('ln-price-at-cost'); return; }
+    const trueCost = r2(lineLandedUnitCost(line, qCur));
+    const atOrBelowCost = r2(Number(line.unitPrice) || 0) <= trueCost && trueCost > 0;
+    priceEl.classList.toggle('ln-price-at-cost', atOrBelowCost);
+  }
+
+  /** Price suggested for a project's lot line = what its component lines would each sell for
+      (cost + freight + markup) x their quantities. A starting point only -- always editable. */
+  function lotSuggestedPrice(header) {
+    const qCur = currentCurrency();
+    const comps = lines.filter(l => l.lotRole === 'component' && l.itemId === header.itemId)
+      .reduce((sum, l) => sum + lineCalcPrice(l, qCur) * (Number(l.qty) || 0), 0);
+    // The lot line's own cost/markup (if any is typed on it) counts too.
+    const own = lineCalcPrice(header, qCur) * (Number(header.qty) || 0);
+    return r2(comps + own);
+  }
+  /** The lot price follows its components automatically -- exactly like a normal line follows its
+      cost + markup -- until the user types their own lot price (then it is kept; "Use that" returns
+      to automatic). */
+  function autoLotPrices() {
+    lines.forEach(l => { if (l.lotRole === 'header' && !l.priceOverridden) l.unitPrice = lotSuggestedPrice(l); });
+  }
+  function syncLotHeaderDom() {
+    const qCur = currentCurrency();
+    document.querySelectorAll('#linesBody tr').forEach(tr => {
+      const l = lines.find(x => x.lineId === tr.dataset.lid);
+      if (!l || l.lotRole !== 'header') return;
+      const priceEl = tr.querySelector('.ln-price');
+      if (!l.priceOverridden && priceEl && document.activeElement !== priceEl) priceEl.value = l.unitPrice;
+      const c = computeLine(l, qCur);
+      tr.querySelector('.ln-amount').textContent = formatMoney(c.net, qCur);
+      tr.querySelector('.ln-amount-vat').textContent = formatMoney(c.lineTotal, qCur);
+    });
+  }
+  function refreshLotHeaders() {
+    document.querySelectorAll('#linesBody tr').forEach(tr => {
+      const l = lines.find(x => x.lineId === tr.dataset.lid);
+      if (l && l.lotRole === 'header') refreshLineInfo(tr, l);
+    });
+  }
+
+  /** Selecting a Project Package replaces the clicked row with the package's lines, in the order the
+      package defines them. Each component is either:
+        - "Own price": a normal line (cost + freight + markup -> its own unit price), or
+        - "In lot price": a blank-price line whose cost/markup roll into ONE lot line placed just before
+          the first such component (like the "Piping materials ... as detailed below" line + its breakdown).
+      If no component is "In lot price" there is no lot line at all. */
+  function loadProjectPackage(line, p) {
+    const qCur = currentCurrency();
+    const headerVat = document.getElementById('f_vatMode').value;
+    const vatRate = headerVat === 'Standard12' ? 12 : 0;
+    const buildComp = (c) => {
+      const own = c.pricing === 'own';
+      const l = emptyLine(vatRate);
+      const qty = Number(c.qty) || 0;
+      const covers = Number(c.freightCoversQty) > 0 ? Number(c.freightCoversQty) : 1;
+      const perUnit = (Number(c.estimatedFreightCost) || 0) / covers;
+      Object.assign(l, {
+        itemId: p.id, compNo: c.compNo, brand: c.brand || '', modelNo: c.modelNo || '',
+        description: c.description, qty, uom: c.uom || 'pc', unitCost: Number(c.unitCost) || 0,
+        costCurrency: c.costCurrency || qCur, markupPercent: Number(c.markupPercent) || 0,
+        freightMode: 'total', freightSource: 'catalog', catalogFreightPerUnit: perUnit, estimatedFreightCost: perUnit * qty,
+        unitPrice: 0
+      });
+      if (!own) l.lotRole = 'component';
+      l.costExchangeRate = referenceRate(l.costCurrency, qCur, settings);
+      if (own) l.unitPrice = lineCalcPrice(l, qCur);
+      return l;
+    };
+    const out = [];
+    let header = null;
+    (p.components || []).forEach(c => {
+      if (c.pricing !== 'own' && !header) {
+        header = emptyLine(vatRate);
+        Object.assign(header, {
+          itemId: p.id, lotRole: 'header', brand: p.brand || '', modelNo: p.modelNo || '', description: p.description || '',
+          qty: 1, uom: 'lot', costCurrency: qCur, costExchangeRate: 1, unitCost: 0, markupPercent: 0, priceOverridden: false
+        });
+        out.push(header);
+      }
+      out.push(buildComp(c));
+    });
+    const idx = lines.indexOf(line);
+    lines.splice(idx < 0 ? lines.length : idx, 1, ...out);
+    autoLotPrices();
+    drawLines(); refreshTotals(); markDirty();
+  }
+
+  function closeInfoPopup() { document.querySelectorAll('.ln-info-popup').forEach(p => p.remove()); }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeInfoPopup(); });
+  const qtyReminders = new Set();
+
+  /** Beside-the-inputs read-outs: freight per unit, landed unit cost, qty reminder, legacy
+      review flag, manual-price flag. Display only -- rounding happens here, never in the math. */
+  function refreshLineInfo(tr, line) {
+    const qCur = currentCurrency();
+    const costCcy = line.costCurrency || qCur;
+    const info = tr.querySelector('.ln-freight-info');
+    if (info) {
+      // The details live in this hidden holder and are shown in a popup when the eye icon is clicked,
+      // so the row stays one line tall. The eye gets an orange dot when something needs attention.
+      const row = (t) => `<div style="margin:3px 0;">${t}</div>`;
+      if (line.lotRole === 'header') {
+        info.innerHTML = row('Project lot line — carries the lot price for the whole project; the component lines below carry the costs.');
+      } else if (isTotalFreight(line)) {
+        const perUnit = lineFreightPerUnit(line) * lineCostRate(line, qCur);
+        const parts = [
+          row(`Freight/unit: <b>${formatMoney(perUnit, qCur)}</b>`),
+          row(`Landed/unit: <b>${formatMoney(lineLandedUnitCost(line, qCur), qCur)}</b>`)
+        ];
+        if (line.freightSource === 'catalog') parts.push(row(`<span class="muted-text">Catalog rate ${formatMoney(Number(line.catalogFreightPerUnit) || 0, costCcy)}/unit × qty. Type a freight amount to fix a different total.</span>`));
+        if (line.freightNote) parts.push(row(`<span class="muted-text">${escapeHtml(line.freightNote)}</span>`));
+        if ((Number(line.qty) || 0) <= 0 && (Number(line.estimatedFreightCost) || 0) > 0) parts.push(row('<span style="color:#b45309;">Enter a quantity to spread freight per unit.</span>'));
+        if (qtyReminders.has(line.lineId)) parts.push(row('<span style="color:#b45309;">Qty changed — reconfirm supplier pricing and total freight.</span>'));
+        info.innerHTML = parts.join('');
+      } else {
+        info.innerHTML = row('<span style="color:#b45309;">Old per-unit freight — review, then convert to a line total when ready.</span>') + '<button type="button" class="btn-line btn-sm ln-convert-freight">Convert to line total</button>';
+      }
+      const eye = tr.querySelector('.ln-info-btn:not(.ln-flag-btn)');
+      if (eye) eye.classList.toggle('needs-attention',
+        line.lotRole !== 'header' && (!isTotalFreight(line) || qtyReminders.has(line.lineId) || ((Number(line.qty) || 0) <= 0 && (Number(line.estimatedFreightCost) || 0) > 0)));
+    }
+    // Short labels stay under the price; anything long goes in the "!" popup (hidden holder + button).
+    const flag = tr.querySelector('.ln-price-flag');
+    const pInfo = tr.querySelector('.ln-price-info');
+    const pBtn = tr.querySelector('.ln-flag-btn');
+    let short = '', popHtml = '';
+    if (line.lotRole === 'component') {
+      short = '<span class="muted-text" title="Included in the project lot price; prints blank on the quotation.">In lot price</span>';
+    } else if (line.lotRole === 'header') {
+      const sug = lotSuggestedPrice(line);
+      const differs = line.priceOverridden && Math.abs((Number(line.unitPrice) || 0) - sug) > 0.005;
+      short = `<span class="muted-text" title="Lot price for the project's In-lot-price items.">Lot items: ${formatMoney(sug, qCur)}</span>`;
+      if (differs) popHtml = `<div style="margin:3px 0;">The lot items add up to <b>${formatMoney(sug, qCur)}</b>, but the lot price was typed in by hand.</div><button type="button" class="btn-line btn-sm ln-use-lot">Use that</button>`;
+    } else {
+      const calc = lineCalcPrice(line, qCur);
+      const differs = line.priceOverridden && Math.abs((Number(line.unitPrice) || 0) - calc) > 0.005;
+      if (differs) popHtml = `<div style="margin:3px 0;">Manual price — review.</div><div style="margin:3px 0;">Calculated price: <b>${formatMoney(calc, qCur)}</b></div><button type="button" class="btn-line btn-sm ln-use-calc">Use calculated</button>`;
+    }
+    if (flag) flag.innerHTML = short;
+    if (pInfo) pInfo.innerHTML = popHtml;
+    if (pBtn) pBtn.style.display = popHtml ? '' : 'none';
+    const mEl = tr.querySelector('.ln-margin');
+    if (mEl) {
+      if (line.lotRole === 'component') { mEl.textContent = ''; }
+      else {
+        const lc = computeLine(line, qCur);
+        let cost = lc.costTotal;
+        if (line.lotRole === 'header') cost = lines.filter(l => l.itemId === line.itemId && l.lotRole).reduce((sum, l) => sum + computeLine(l, qCur).costTotal, 0);
+        mEl.textContent = (lc.net > 0 && cost > 0) ? `${line.lotRole === 'header' ? 'Lot margin' : 'Margin'} ${(Math.round((lc.net - cost) / lc.net * 1000) / 10).toFixed(1)}%` : '';
+      }
+    }
+    updatePriceWarning(tr, line, qCur);
+    refreshFreightNote();
+  }
+
+  /** The note under Freight / Shipping Charge was removed (it was confusing). Kept as a no-op so callers stay valid. */
+  function refreshFreightNote() {
+    const el = document.getElementById('freightInfo');
+    if (el) el.innerHTML = '';
+  }
+
   function drawLines() {
+    autoLotPrices();
     const body = document.getElementById('linesBody');
     const qCur = currentCurrency();
     const arrowLabel = document.getElementById('rateArrowCcy');
@@ -371,13 +669,21 @@ async function renderQuoteForm(id) {
       return `
       <tr data-lid="${l.lineId}">
         <td>${i + 1}</td>
-        <td><button type="button" class="item-picker-trigger ln-catalog-btn">${l.itemId ? escapeHtml(products.find(p => String(p.id) === String(l.itemId))?.itemNo || '(item removed)') : '+ Select Item'}</button></td>
+        <td><button type="button" class="item-picker-trigger ln-catalog-btn">${l.itemId ? escapeHtml(l.compNo || products.find(p => String(p.id) === String(l.itemId))?.itemNo || '(item removed)') : '+ Select Item'}</button></td>
         <td><input class="ln-brand" value="${escapeHtml(l.brand)}" style="width:70px;"></td>
         <td><input class="ln-model" value="${escapeHtml(l.modelNo)}" style="width:90px;"></td>
         <td><textarea class="ln-desc" rows="1" style="width:160px;">${escapeHtml(l.description)}</textarea></td>
         <td><input class="ln-option" list="optionSuggestions" value="${escapeHtml(l.optionGroup || '')}" placeholder="e.g. Option 1" style="width:85px;"></td>
         <td><input class="ln-qty" type="number" min="0" step="any" value="${l.qty}" style="width:55px;"></td>
         <td><input class="ln-uom" value="${escapeHtml(l.uom)}" style="width:45px;"></td>
+        <td class="internal-only-col" style="text-align:center; font-size:12px;" title="For internal reference only — not shown on the printed quotation">${escapeHtml(l.leadTime || '—')}</td>
+        <td class="internal-only-col" title="For internal reference only — not shown on the printed quotation">
+          <div style="display:flex; align-items:center; gap:4px;">
+            <input class="ln-freight" type="number" min="0" step="0.01" value="${l.estimatedFreightCost || 0}" style="width:70px;">
+            <button type="button" class="ln-info-btn" title="Freight details" aria-label="Freight details"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+          </div>
+          <div class="ln-freight-info" style="display:none;"></div>
+        </td>
         <td class="internal-only-col">
           <input class="ln-cost" type="number" min="0" step="0.01" value="${l.unitCost}" style="width:75px;">
           ${diffCurrency ? `<div class="ln-cost-php muted-text" style="font-size:10px; margin-top:2px; white-space:nowrap;">→${formatMoney((Number(l.unitCost) || 0) * (Number(l.costExchangeRate) || 1), qCur)}</div>` : ''}
@@ -391,11 +697,11 @@ async function renderQuoteForm(id) {
           // that's exactly what was making the dropdown disagree with the value actually
           // driving the calculation.
           const options = list.includes(current) ? list : [current, ...list];
-          return options.map(c2 => `<option ${c2 === current ? 'selected' : ''}>${escapeHtml(c2)}${!list.includes(c2) ? ' (not in Settings)' : ''}</option>`).join('');
+          return options.map(c2 => `<option value="${escapeHtml(c2)}" ${c2 === current ? 'selected' : ''}>${escapeHtml(c2)}${!list.includes(c2) ? ' (not in Settings)' : ''}</option>`).join('');
         })()}</select></td>
         <td class="internal-only-col"><input class="ln-rate" type="number" step="0.0001" min="0" value="${l.costExchangeRate ?? 1}" style="width:60px;" ${diffCurrency ? '' : 'disabled title="Only used when Cost Currency differs from the quotation currency"'}></td>
         <td class="internal-only-col"><input class="ln-markup" type="number" step="0.01" value="${l.markupPercent}" style="width:60px;"></td>
-        <td><input class="ln-price" type="number" min="0" step="0.01" value="${l.unitPrice}" style="width:80px;"></td>
+        <td><div style="display:flex; align-items:center; gap:4px;"><input class="ln-price" type="number" min="0" step="0.01" value="${l.unitPrice}" style="width:80px;"><button type="button" class="ln-info-btn ln-flag-btn needs-attention" title="Price needs review" aria-label="Price needs review" style="display:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button></div><div class="ln-price-info" style="display:none;"></div><div class="ln-margin muted-text" style="font-size:10px; margin-top:2px; white-space:nowrap;" title="Gross margin = profit ÷ selling price (not the same as Markup %, which is profit ÷ cost)"></div><div class="ln-price-flag" style="font-size:10px; margin-top:2px; max-width:110px;"></div></td>
         <td><input class="ln-disc" type="number" step="0.01" value="${l.discountPercent}" style="width:55px;"></td>
         <td><input class="ln-vat" type="number" step="0.01" value="${l.vatRate}" style="width:50px;"></td>
         <td class="internal-only-col"><select class="ln-supplier" style="min-width:100px;">${supplierOptions(l.supplierId)}</select></td>
@@ -412,35 +718,96 @@ async function renderQuoteForm(id) {
         const el = tr.querySelector(sel);
         el.addEventListener('input', () => {
           line[field] = isNum ? (Number(el.value) || 0) : el.value;
-          if (sel === '.ln-cost' || sel === '.ln-markup' || sel === '.ln-rate') {
-            // Keep selling price following cost+markup until the user directly
-            // overrides the Unit Price field itself (that input sets unitPrice
-            // straight through and isn't touched here). Markup is always applied
-            // to the PHP-converted cost, never the raw foreign-currency cost.
-            line.unitPrice = r2(costInQuoteCurrency(line, currentCurrency()) * (1 + (Number(line.markupPercent) || 0) / 100));
-            tr.querySelector('.ln-price').value = line.unitPrice;
+          const qCurNow = currentCurrency();
+          if (sel === '.ln-price') {
+            // Direct edit = manual override. Clears itself if the typed price equals the calculated one.
+            if (line.lotRole === 'header') line.priceOverridden = Math.abs((Number(line.unitPrice) || 0) - lotSuggestedPrice(line)) > 0.005;
+            else if (!line.lotRole) line.priceOverridden = Math.abs((Number(line.unitPrice) || 0) - lineCalcPrice(line, qCurNow)) > 0.005;
+          } else if (['.ln-cost', '.ln-markup', '.ln-rate', '.ln-freight', '.ln-qty'].includes(sel)) {
+            if (sel === '.ln-qty') {
+              if (isTotalFreight(line)) qtyReminders.add(lid);
+              if (line.freightSource === 'catalog' && isTotalFreight(line)) {
+                // Freight that came from the catalog is a per-unit RATE: it follows the quantity.
+                line.estimatedFreightCost = (Number(line.catalogFreightPerUnit) || 0) * (Number(line.qty) || 0);
+                tr.querySelector('.ln-freight').value = line.estimatedFreightCost;
+              }
+            } else if (sel === '.ln-freight' || sel === '.ln-cost') {
+              qtyReminders.delete(lid);
+              if (sel === '.ln-freight') { delete line.freightNote; delete line.freightSource; delete line.catalogFreightPerUnit; }
+            }
+            // Selling price follows cost + freight + markup, but a manually typed price is never
+            // silently replaced: it is kept and flagged for review (see refreshLineInfo).
+            // Qty only affects price for total-freight lines (freight per unit = total / qty).
+            const affectsPrice = sel !== '.ln-qty' || isTotalFreight(line);
+            if (affectsPrice && !line.priceOverridden && !line.lotRole) {
+              line.unitPrice = lineCalcPrice(line, qCurNow);
+              tr.querySelector('.ln-price').value = line.unitPrice;
+            }
           }
+          autoLotPrices(); syncLotHeaderDom();
           const c2 = computeLine(line, currentCurrency());
           tr.querySelector('.ln-amount').textContent = formatMoney(c2.net, currentCurrency());
           tr.querySelector('.ln-amount-vat').textContent = formatMoney(c2.lineTotal, currentCurrency());
           const phpHint = tr.querySelector('.ln-cost-php');
           if (phpHint) phpHint.textContent = `→${formatMoney((Number(line.unitCost) || 0) * (Number(line.costExchangeRate) || 1), currentCurrency())}`;
+          refreshLineInfo(tr, line); refreshLotHeaders();
+          updatePriceWarning(tr, line, currentCurrency());
           refreshTotals();
           markDirty();
         });
       };
       bind('.ln-brand', 'brand'); bind('.ln-model', 'modelNo'); bind('.ln-desc', 'description');
       bind('.ln-option', 'optionGroup');
-      bind('.ln-qty', 'qty', true); bind('.ln-uom', 'uom'); bind('.ln-cost', 'unitCost', true);
+      bind('.ln-qty', 'qty', true); bind('.ln-uom', 'uom'); bind('.ln-freight', 'estimatedFreightCost', true); bind('.ln-cost', 'unitCost', true);
       bind('.ln-markup', 'markupPercent', true); bind('.ln-price', 'unitPrice', true);
       bind('.ln-disc', 'discountPercent', true); bind('.ln-vat', 'vatRate', true);
       bind('.ln-rate', 'costExchangeRate', true);
+      updatePriceWarning(tr, line, qCur);
+      refreshLineInfo(tr, line);
+      const openInfo = (btn, title, holderSel) => btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeInfoPopup();
+        const pop = document.createElement('div');
+        pop.className = 'ln-info-popup';
+        pop.innerHTML = '<div class="ln-info-popup-title">' + title + '</div>' + tr.querySelector(holderSel).innerHTML;
+        document.body.appendChild(pop);
+        const r = btn.getBoundingClientRect();
+        pop.style.top = Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 6) + 'px';
+        pop.style.left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left - 20)) + 'px';
+        const conv = pop.querySelector('.ln-convert-freight');
+        if (conv) conv.addEventListener('click', () => { closeInfoPopup(); convertLegacyFreight(line); drawLines(); refreshTotals(); markDirty(); });
+        const useCalc = pop.querySelector('.ln-use-calc');
+        if (useCalc) useCalc.addEventListener('click', () => { closeInfoPopup(); line.priceOverridden = false; line.unitPrice = lineCalcPrice(line, currentCurrency()); drawLines(); refreshTotals(); markDirty(); });
+        const useLot = pop.querySelector('.ln-use-lot');
+        if (useLot) useLot.addEventListener('click', () => { closeInfoPopup(); line.priceOverridden = false; line.unitPrice = lotSuggestedPrice(line); drawLines(); refreshTotals(); markDirty(); });
+        setTimeout(() => document.addEventListener('click', closeInfoPopup, { once: true }), 0);
+      });
+      const eyeBtn = tr.querySelector('.ln-info-btn:not(.ln-flag-btn)');
+      if (eyeBtn) openInfo(eyeBtn, 'Freight details', '.ln-freight-info');
+      const flagBtn = tr.querySelector('.ln-flag-btn');
+      if (flagBtn) openInfo(flagBtn, 'Price review', '.ln-price-info');
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('.ln-convert-freight')) {
+          convertLegacyFreight(line);
+          drawLines(); refreshTotals(); markDirty();
+        } else if (e.target.closest('.ln-use-lot')) {
+          line.priceOverridden = false;
+          line.unitPrice = lotSuggestedPrice(line);
+          drawLines(); refreshTotals(); markDirty();
+        } else if (e.target.closest('.ln-use-calc')) {
+          line.priceOverridden = false;
+          line.unitPrice = lineCalcPrice(line, currentCurrency());
+          drawLines(); refreshTotals(); markDirty();
+        }
+      });
 
       tr.querySelector('.ln-costccy').addEventListener('change', (e) => {
         line.costCurrency = e.target.value;
+        // A catalog freight rate is in the product's own currency; once the currency is changed it no longer applies.
+        delete line.freightSource; delete line.catalogFreightPerUnit;
         // Pre-fill a sensible starting rate from Settings' reference rates; still fully editable per line.
         line.costExchangeRate = referenceRate(line.costCurrency, currentCurrency(), settings);
-        line.unitPrice = r2(costInQuoteCurrency(line, currentCurrency()) * (1 + (Number(line.markupPercent) || 0) / 100));
+        if (!line.priceOverridden) line.unitPrice = computeMarkupPrice(line, currentCurrency());
         drawLines(); refreshTotals(); markDirty();
       });
       tr.querySelector('.ln-supplier').addEventListener('change', (e) => { line.supplierId = e.target.value; markDirty(); });
@@ -450,16 +817,44 @@ async function renderQuoteForm(id) {
           {
             title: 'Select Item from Catalog',
             getLabel: (p) => `${p.itemNo} — ${p.description || ''}`,
-            getSubLabel: (p) => [p.brand, p.modelNo].filter(Boolean).join(' · '),
+            getSubLabel: (p) => p.type === 'Project Package' ? `Project Package · ${(p.components || []).length} component items` : [p.brand, p.modelNo].filter(Boolean).join(' · '),
             getSearchText: (p) => [p.itemNo, p.description, p.brand, p.modelNo].filter(Boolean).join(' ')
           },
           (p) => {
+            if (p.type === 'Project Package') { loadProjectPackage(line, p); return; }
             line.itemId = p.id;
             line.brand = p.brand || ''; line.modelNo = p.modelNo || ''; line.description = p.description || '';
-            line.unitCost = p.standardCost || 0; line.unitPrice = p.standardPrice || 0; line.uom = p.uom || 'pc';
+            line.unitCost = p.standardCost || 0; line.uom = p.uom || 'pc';
             line.supplierId = p.defaultSupplierId || '';
             line.costCurrency = p.currency || currentCurrency();
             line.costExchangeRate = referenceRate(line.costCurrency, currentCurrency(), settings);
+            // BUG FIX: both of these fields already exist on a quotation line, and the product
+            // catalog already has a value for them, but neither was actually being copied over
+            // when picking an item — Default Markup % and Typical Lead Time were silently
+            // dropped, always left at the line's own blank/zero default instead.
+            line.markupPercent = p.markupPercent || 0;
+            line.leadTime = p.leadTime || '';
+            // Catalog freight is for a quantity (amount / 'covers qty' = per unit); the line stores TOTAL freight for the row.
+            line.freightMode = 'total';
+            line.priceOverridden = false;
+            line.estimatedFreightCost = productFreightPerUnit(p) * (Number(line.qty) || 1);
+            delete line.freightNote;
+            // Remember the catalog RATE so the freight follows the quantity until the user takes over.
+            line.freightSource = 'catalog';
+            line.catalogFreightPerUnit = productFreightPerUnit(p);
+            qtyReminders.delete(line.lineId);
+            // BUG FIX (follow-up, twice now): unitPrice was originally set directly from
+            // p.standardPrice, completely bypassing markup -- a markup-priced product with no
+            // separately-typed Standard Selling Price landed at ₱0.00 despite showing the right
+            // markup value. First fix computed price from cost+markup, but only when
+            // line.markupPercent was truthy -- and 0 is falsy in JS, so an explicit 0% markup
+            // (meaning "sell at cost", exactly what this conversation is about) still fell
+            // through to Standard Selling Price and could still zero out. Always compute from
+            // cost+markup now, unconditionally -- the same formula every other cost/markup edit
+            // on this line already uses. Standard Selling Price is a catalog reference value for
+            // browsing the product list, not something that overrides the live cost+markup
+            // relationship once an item is actually on a quotation line.
+            line.unitPrice = computeMarkupPrice(line, currentCurrency());
             const headerVat = document.getElementById('f_vatMode').value;
             if (p.vatClass === 'Zero-Rated' || p.vatClass === 'VAT Exempt' || headerVat !== 'Standard12') line.vatRate = 0;
             else line.vatRate = 12;
@@ -518,6 +913,82 @@ async function renderQuoteForm(id) {
   }
 
   drawLines(); refreshTotals();
+  document.getElementById('f_freightCharge').addEventListener('input', refreshFreightNote);
+
+  /** One supplier freight total covering several different items -> split across the chosen rows
+      (rows must share the shipment's currency, so no currency conversion can distort the split). */
+  document.getElementById('btnSplitFreight').onclick = () => {
+    const qCur = currentCurrency();
+    const ccys = [...new Set(lines.map(l => l.costCurrency || qCur))];
+    const overlay = document.createElement('div');
+    overlay.className = 'item-picker-overlay';
+    overlay.innerHTML = `<div class="item-picker-box" style="max-width:720px;">
+      <div class="item-picker-header"><h3>Split shipment freight across items</h3></div>
+      <div style="padding:12px 16px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+          <div class="field"><label>Shipment freight total</label><input type="number" min="0" step="0.01" id="sf_total" value="0" style="width:120px;"></div>
+          <div class="field"><label>Currency</label><select id="sf_ccy">${ccys.map(c => `<option>${escapeHtml(c)}</option>`).join('')}</select></div>
+          <div class="field"><label>Split by</label><select id="sf_method"><option value="cost">Item cost (fairest for mixed items)</option><option value="qty">Quantity</option><option value="manual">Manual</option></select></div>
+        </div>
+        <table class="data-table compact" style="margin-top:10px;"><thead><tr><th></th><th>#</th><th>Item</th><th>Qty</th><th>Cost value</th><th>Freight share</th></tr></thead><tbody id="sf_rows"></tbody></table>
+        <div id="sf_summary" style="margin-top:8px; font-weight:600;"></div>
+        <p class="muted-text" style="font-size:12px;">Only rows whose Cost Ccy matches the shipment currency can be included. Applying replaces those rows' Total Freight; you can still edit any row afterwards.</p>
+      </div>
+      <div class="item-picker-footer"><button type="button" class="btn-amber btn-sm" id="sf_apply">Apply</button> <button type="button" class="btn-line btn-sm" id="sf_cancel">Cancel</button></div></div>`;
+    document.body.appendChild(overlay);
+    const $ = (id) => overlay.querySelector('#' + id);
+    const picked = new Set(); const manual = {};
+    let lastCcy = null;
+    const eligible = () => lines.filter(l => (l.costCurrency || qCur) === $('sf_ccy').value);
+    function render(full) {
+      const el = eligible();
+      if (full || lastCcy !== $('sf_ccy').value) { picked.clear(); el.forEach(l => picked.add(l.lineId)); lastCcy = $('sf_ccy').value; }
+      const chosen = el.filter(l => picked.has(l.lineId));
+      const method = $('sf_method').value, total = Number($('sf_total').value) || 0;
+      const res = allocateFreight(chosen.map(l => ({ lineId: l.lineId, qty: l.qty, unitCost: l.unitCost })), total, method, manual);
+      $('sf_rows').innerHTML = lines.map((l, i) => {
+        const ok = el.includes(l), on = picked.has(l.lineId);
+        const share = on ? res.shares[l.lineId] : 0;
+        return `<tr data-lid="${l.lineId}" style="${ok ? '' : 'opacity:.45;'}"><td><input type="checkbox" class="sf_pick" ${on ? 'checked' : ''} ${ok ? '' : 'disabled'}></td><td>${i + 1}</td><td>${escapeHtml(l.description || '(no description)')}${ok ? '' : ' <span class="muted-text">(' + escapeHtml(l.costCurrency || qCur) + ')</span>'}</td><td>${l.qty}</td><td>${formatMoney((Number(l.unitCost) || 0) * (Number(l.qty) || 0), l.costCurrency || qCur)}</td><td>${method === 'manual' && on ? `<input type="number" step="0.01" min="0" class="sf_manual" value="${manual[l.lineId] ?? ''}" style="width:90px;">` : (on ? formatMoney(share, $('sf_ccy').value) : '—')}</td></tr>`;
+      }).join('');
+      overlay.querySelectorAll('.sf_pick').forEach(cb => cb.addEventListener('change', () => { const lid = cb.closest('tr').dataset.lid; cb.checked ? picked.add(lid) : picked.delete(lid); render(); }));
+      overlay.querySelectorAll('.sf_manual').forEach(inp => inp.addEventListener('input', () => { manual[inp.closest('tr').dataset.lid] = inp.value; refreshSummary(); }));
+      refreshSummary();
+    }
+    function refreshSummary() {
+      const el = eligible().filter(l => picked.has(l.lineId));
+      const total = Number($('sf_total').value) || 0, method = $('sf_method').value;
+      const res = allocateFreight(el.map(l => ({ lineId: l.lineId, qty: l.qty, unitCost: l.unitCost })), total, method, manual);
+      const ccy = $('sf_ccy').value;
+      const balanced = el.length > 0 && total > 0 && Math.abs(res.unassigned) < 0.005;
+      $('sf_summary').innerHTML = `Allocated ${formatMoney(res.allocated, ccy)} of ${formatMoney(total, ccy)}` + (balanced ? ' <span style="color:var(--ok, #15803d);">✓</span>' : ` <span style="color:#b45309;">— ${el.length === 0 ? 'select at least one row' : (total <= 0 ? 'enter the shipment total' : 'unassigned ' + formatMoney(res.unassigned, ccy))}</span>`);
+      $('sf_apply').disabled = !balanced;
+      if (method === 'manual') return;
+      overlay.querySelectorAll('#sf_rows tr').forEach(tr => { const c = tr.children[5]; if (picked.has(tr.dataset.lid) && c && !c.querySelector('input')) c.textContent = formatMoney(res.shares[tr.dataset.lid] || 0, ccy); });
+    }
+    const close = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+    $('sf_total').addEventListener('input', () => render());
+    $('sf_ccy').addEventListener('change', () => render(true));
+    $('sf_method').addEventListener('change', () => render());
+    $('sf_cancel').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    $('sf_apply').addEventListener('click', () => {
+      const chosen = eligible().filter(l => picked.has(l.lineId));
+      const total = Number($('sf_total').value) || 0, method = $('sf_method').value, ccy = $('sf_ccy').value;
+      const res = allocateFreight(chosen.map(l => ({ lineId: l.lineId, qty: l.qty, unitCost: l.unitCost })), total, method, manual);
+      if (!chosen.length || Math.abs(res.unassigned) >= 0.005) return;
+      chosen.forEach(l => {
+        l.freightMode = 'total';
+        delete l.freightSource; delete l.catalogFreightPerUnit;
+        l.estimatedFreightCost = res.shares[l.lineId];
+        l.freightNote = `Share of shipment ${formatMoney(total, ccy)} (${method === 'cost' ? 'by cost' : method === 'qty' ? 'by qty' : 'manual'})`;
+        qtyReminders.delete(l.lineId);
+        if (!l.priceOverridden) l.unitPrice = lineCalcPrice(l, qCur);
+      });
+      close(); drawLines(); refreshTotals(); markDirty();
+    });
+    render(true);
+  };
 
   document.getElementById('btnAddLine').onclick = () => {
     const headerVat = document.getElementById('f_vatMode').value;
@@ -699,10 +1170,19 @@ async function renderQuoteDetail(id) {
     const costDisplay = l.costCurrency && l.costCurrency !== q.currency
       ? `${formatMoney(l.unitCost, l.costCurrency)} <span class="muted-text">(→${formatMoney((Number(l.unitCost) || 0) * (Number(l.costExchangeRate) || 1), q.currency)})</span>`
       : formatMoney(l.unitCost, q.currency);
+    const fCcy = l.costCurrency || q.currency;
+    const fRate = Number(l.costExchangeRate) || 1;
+    const fAmt = Number(l.estimatedFreightCost) || 0;
+    const fConv = (fCcy !== q.currency) ? ` <span class="muted-text">(→${formatMoney(fAmt * fRate, q.currency)})</span>` : '';
+    const freightDisplay = isTotalFreight(l)
+      ? `${formatMoney(fAmt, fCcy)}${fConv}<div class="muted-text" style="font-size:10px;">${formatMoney(lineFreightPerUnit(l), fCcy)}/unit</div>`
+      : `${formatMoney(fAmt, fCcy)}${fConv}<div style="font-size:10px; color:#b45309;">per unit (old) — review</div>`;
     return `<tr>
       <td>${i + 1}</td>
       <td>${escapeHtml(l.brand ? l.brand + ' — ' : '')}${escapeHtml(l.modelNo ? l.modelNo + ' — ' : '')}${escapeHtml(l.description)}</td>
       <td>${l.qty} ${escapeHtml(l.uom)}</td>
+      <td class="internal-only-col" title="For internal reference only — not shown on the printed quotation">${escapeHtml(l.leadTime || '—')}</td>
+      <td class="internal-only-col" title="For internal reference only — not shown on the printed quotation">${freightDisplay}</td>
       <td class="internal-only-col">${costDisplay}</td>
       <td class="internal-only-col">${escapeHtml(supMap[l.supplierId]?.companyName || '—')}</td>
       <td>${formatMoney(l.unitPrice, q.currency)}</td>
@@ -713,7 +1193,7 @@ async function renderQuoteDetail(id) {
       <td class="internal-only-col">${formatMoney(c.lineTotal, q.currency)}</td>
     </tr>`;
   };
-  const lineItemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Supplier</th><th>Unit Price</th><th>Disc%</th><th>VAT%</th><th class="internal-only-col">Margin%</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th></tr></thead>`;
+  const lineItemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th class="internal-only-col">Lead Time</th><th class="internal-only-col">Total Freight for This Line</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Supplier</th><th>Unit Price</th><th>Disc%</th><th>VAT%</th><th class="internal-only-col">Margin%</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th></tr></thead>`;
   const totalsBlockHTML = (t, label) => `
     <div class="totals">
       ${label ? `<div style="font-weight:700; margin-bottom:6px;">${escapeHtml(label)}</div>` : ''}
@@ -857,6 +1337,12 @@ async function renderQuoteDetail(id) {
     delete newRev.id;
     Object.assign(newRev, {
       revision: q.revision + 1, isLatest: true, status: 'Draft', statusHistory: [{ status: 'Draft', date: now }],
+      // A revision is meant to be a fresh start -- carrying forward the OLD Valid Until date
+      // would mean revising an already-expired quotation just creates another quotation
+      // that's immediately expired too, the moment it's saved. Reset it the same way a
+      // brand-new quotation gets its default validity period, not left stale.
+      validUntil: addDaysISO(todayISO(), settings.defaultQuotationValidityDays),
+      validityHistory: [],
       createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName,
       lines: q.lines.map(l => Object.assign({}, l))
     });
@@ -967,4 +1453,5 @@ function renderExtendValidityForm(q, id) {
   };
 }
 
-window.QuoteCalc = { computeLine, computeQuotationTotals };
+window.QuoteCalc = { allocateFreight, productFreightPerUnit, computeLine, computeQuotationTotals, lineFreightPerUnit, lineLandedUnitCost, lineCalcPrice, convertLegacyFreight };
+window.QUOTE_STATUSES = QUOTE_STATUSES;

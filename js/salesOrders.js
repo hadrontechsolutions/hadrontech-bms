@@ -84,7 +84,8 @@ async function createFromCustomerPO(po, quotation) {
 
 Router.route('/sales-orders', async () => {
   Router.setBreadcrumb([{ label: 'Sales Orders' }]);
-  const [all, customers, customerPOs, quotations] = await Promise.all([DB.dbGetAll('salesOrders'), DB.dbGetAll('customers'), DB.dbGetAll('customerPOs'), DB.dbGetAll('quotations')]);
+  const [allRaw, customers, customerPOs, quotations] = await Promise.all([DB.dbGetAll('salesOrders'), DB.dbGetAll('customers'), DB.dbGetAll('customerPOs'), DB.dbGetAll('quotations')]);
+  const all = allRaw.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const cpoMap = Object.fromEntries(customerPOs.map(p => [p.id, p]));
   const quoteMap = Object.fromEntries(quotations.map(q => [q.id, q]));
@@ -94,23 +95,36 @@ Router.route('/sales-orders', async () => {
     <div class="card">
       <table class="data-table">
         <thead><tr><th>SO #</th><th>Customer</th><th>Quotation #</th><th>Customer PO #</th><th>Order Date</th><th>Status</th><th>Total</th></tr></thead>
-        <tbody>
-          ${all.map(so => {
-            const mismatched = so.status === 'Delivered' && (so.lines || []).some(l => (l.deliveredQty || 0) < l.qty);
-            const badgeHTML = mismatched ? `<span class="badge badge-lost">DELIVERED — INCOMPLETE</span>` : statusBadge(so.status);
-            return `
-            <tr class="clickable-row" data-hash="/sales-orders/${so.id}">
-              <td>${escapeHtml(so.soNo)}</td><td>${escapeHtml(custMap[so.customerId]?.companyName || '—')}</td>
-              <td>${escapeHtml(quoteMap[so.quotationId]?.quotationNo || '—')}</td>
-              <td>${escapeHtml(cpoMap[so.customerPOId]?.customerPoNumber || cpoMap[so.customerPOId]?.poNo || '—')}</td>
-              <td>${formatDate(so.orderDate)}</td><td>${badgeHTML}</td><td>${formatMoney(so.grandTotal, so.currency)}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
+        <tbody id="soBody"></tbody>
       </table>
-      ${all.length === 0 ? `<div class="empty-inline">No sales orders yet. Convert a won quotation's customer PO to create one.</div>` : ''}
+      <div class="empty-inline" id="emptyMsg" style="display:none;">No sales orders yet. Convert a won quotation's customer PO to create one.</div>
+      <div id="pgWrap"></div>
     </div>
   `;
+
+  // One page at a time -- rebuilding hundreds of rows on every visit gets slower as this list
+  // grows; a fixed-size page keeps this fast regardless of how many sales orders pile up.
+  let currentPage = 1;
+  function draw(rows) {
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+    document.getElementById('soBody').innerHTML = pageRows.map(so => {
+      const mismatched = so.status === 'Delivered' && (so.lines || []).some(l => (l.deliveredQty || 0) < l.qty);
+      const badgeHTML = mismatched ? `<span class="badge badge-lost">DELIVERED — INCOMPLETE</span>` : statusBadge(so.status);
+      return `
+      <tr class="clickable-row" data-hash="/sales-orders/${so.id}">
+        <td>${escapeHtml(so.soNo)}</td><td>${escapeHtml(custMap[so.customerId]?.companyName || '—')}</td>
+        <td>${escapeHtml(quoteMap[so.quotationId]?.quotationNo || '—')}</td>
+        <td>${escapeHtml(cpoMap[so.customerPOId]?.customerPoNumber || cpoMap[so.customerPOId]?.poNo || '—')}</td>
+        <td>${formatDate(so.orderDate)}</td><td>${badgeHTML}</td><td>${formatMoney(so.grandTotal, so.currency)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('pgWrap').innerHTML = rows.length > PAGE_SIZE ? paginationControlsHTML(currentPage, rows.length, PAGE_SIZE) : '';
+    wirePaginationControls((newPage) => { currentPage = Math.max(1, Math.min(newPage, totalPages)); draw(rows); }, currentPage);
+  }
+  draw(all);
 });
 
 Router.route('/sales-orders/:id', (p) => renderSODetail(p.id));
@@ -401,6 +415,7 @@ async function renderRecordDeliveryForm(so, id) {
 }
 
 window.SalesOrders = { createFromCustomerPO };
+window.SO_STATUSES = SO_STATUSES;
 
 async function renderSOHeaderEdit(so) {
   const linkedSupplierPOs = await DB.dbQueryIndex('supplierPOs', 'salesOrderId', so.id);

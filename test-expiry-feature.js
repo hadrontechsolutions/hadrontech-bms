@@ -71,17 +71,20 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(10);
   const listText = doc.getElementById('qBody').textContent;
-  console.log('STEP 8: List shows "Expired 1 day ago" text (not just color):', listText.includes('Expired 1 day ago'));
+  console.log('STEP 8: THE FIX: expired quotations are hidden from the main list by default, with a single, unambiguous checkbox -- not a second dropdown next to Status that could be confused with its own "Expired" status option:', !listText.includes('Expired 1 day ago') && !doc.getElementById('expiryFilter'));
   console.log('STEP 9: List shows "Expires today":', listText.includes('Expires today'));
   console.log('STEP 10: List shows "Valid for 5 more days":', listText.includes('Valid for 5 more days'));
-  console.log('STEP 11: Expiry filter dropdown exists with all required options:', ['active','soon','today','expired','extended'].every(v => !!doc.querySelector(`#expiryFilter option[value="${v}"]`)));
+  console.log('STEP 11: The checkbox is unchecked by default and its label mentions how many are hidden:', !doc.getElementById('showExpired').checked && doc.getElementById('showExpired').closest('label').textContent.includes('1 hidden'));
 
-  doc.getElementById('expiryFilter').value = 'expired';
-  doc.getElementById('expiryFilter').dispatchEvent(new win.Event('change'));
-  await wait(200);
-  console.log('STEP 12: Filtering by "Expired" shows exactly the expired one (Won-old excluded):', doc.querySelectorAll('#qBody tr').length === 1 && doc.getElementById('qBody').textContent.includes('Expired 1 day ago'));
-  doc.getElementById('expiryFilter').value = '';
-  doc.getElementById('expiryFilter').dispatchEvent(new win.Event('change'));
+  doc.getElementById('showExpired').checked = true;
+  doc.getElementById('showExpired').dispatchEvent(new win.Event('change'));
+  await wait(10);
+  console.log('STEP 12: THE FIX: checking the box reveals the expired quotation:', doc.getElementById('qBody').textContent.includes('Expired 1 day ago'));
+  doc.getElementById('showExpired').checked = false;
+  doc.getElementById('showExpired').dispatchEvent(new win.Event('change'));
+  await wait(10);
+  win.location.hash = '#/quotations';
+  await win.Router.resolveRoute();
   await wait(200);
 
   /* ============ SECTION 3: Dashboard — no silent-drop, correct stat counts ============ */
@@ -100,11 +103,11 @@ async function main() {
   console.log('\n--- Reports ---');
   win.location.hash = '#/reports/expiredQuotations';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(150);
   console.log('STEP 18: "Expired Quotations" report exists and lists the expired one:', doc.getElementById('content').textContent.includes('Expired 1 day ago'));
   win.location.hash = '#/reports/expiringSoon';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(150);
   console.log('STEP 19: "Expiring Soon" report still works for the 5-day and today ones:', doc.getElementById('content').textContent.includes('Valid for 5 more days'));
 
   /* ============ SECTION 5: Detail page — banner, badge, guarded actions ============ */
@@ -151,14 +154,7 @@ async function main() {
   console.log('STEP 28: Same quotation number kept (no new record created):', q3check.quotationNo === 'HT-Q-TEST' && (await win.DB.dbGetAll('quotations')).filter(x => x.quotationNo === 'HT-Q-TEST' && x.id === q3.id).length === 1);
   console.log('STEP 29: Audit entry recorded with old date, new date, user, timestamp, and note:', q3check.validityHistory.length === 1 && q3check.validityHistory[0].oldDate === today && q3check.validityHistory[0].newDate === win.addDaysISO(today, 30) && !!q3check.validityHistory[0].by && !!q3check.validityHistory[0].at && q3check.validityHistory[0].note === 'Customer requested more time.');
   console.log('STEP 30: No duplicate audit entries from a single extension:', q3check.validityHistory.length === 1);
-
-  win.location.hash = '#/quotations';
-  await win.Router.resolveRoute();
-  await wait(10);
-  doc.getElementById('expiryFilter').value = 'extended';
-  doc.getElementById('expiryFilter').dispatchEvent(new win.Event('change'));
-  await wait(200);
-  console.log('STEP 31: "Extended" filter correctly shows the quotation that was just extended:', doc.getElementById('qBody').textContent.includes('HT-Q-TEST') && doc.querySelectorAll('#qBody tr').length >= 1);
+  console.log('STEP 31: The extension history itself is still fully tracked on the record (list-page filtering for this was intentionally dropped for simplicity -- the checklist/audit trail data is unaffected):', Array.isArray(q3check.validityHistory) && q3check.validityHistory.length === 1 && !!q3check.validityHistory[0].newDate);
 
   /* ============ SECTION 7: Won quotation exempt from expiry guard (design confirmation) ============ */
   console.log('\n--- Closed-status exemption ---');

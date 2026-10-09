@@ -47,8 +47,9 @@ async function main() {
 
   doc.getElementById('btnNewNote').click();
   await wait(50);
-  doc.getElementById('f_title').value = 'Follow up with KEYEC on Fleck 3150 delivery';
-  doc.getElementById('f_referenceEmail').value = 'procurement@keyec.com';
+  console.log('STEP 11b: THE FIX: Email Subject Reference is now a plain text field, not type="email" — it holds a subject line, not an address:', doc.getElementById('f_referenceEmail').type === 'text');
+  doc.getElementById('f_title').value = 'KEYEC';
+  doc.getElementById('f_referenceEmail').value = 'RE: QRF 566-25631 FCU double inlet centrifugal';
   doc.getElementById('f_date').value = win.addDaysISO(today, -5); // 5 days ago
   doc.getElementById('f_remindAfterDays').value = '3'; // reminder was 3 days after -> 2 days overdue now
   doc.getElementById('f_body').value = 'Waiting on their confirmation of the delivery schedule.';
@@ -67,7 +68,7 @@ async function main() {
   const row = doc.querySelector('tr.clickable-row');
   console.log('STEP 15: THE CORE VISUAL FEATURE: the overdue note\u2019s entire row is highlighted red on the list, not just the badge:', row.getAttribute('style') && row.getAttribute('style').includes('var(--danger-lt)'));
   console.log('STEP 16: The badge itself also correctly shows "Overdue":', row.querySelector('.badge-overdue') !== null);
-  console.log('STEP 17: Reference email shows correctly in its own column:', row.textContent.includes('procurement@keyec.com'));
+  console.log('STEP 17: Email subject reference shows correctly in its own column:', row.textContent.includes('QRF 566-25631'));
 
   /* ============ Detail page ============ */
   const noteId = savedNotes[0].id;
@@ -105,7 +106,7 @@ async function main() {
   searchInput.value = 'KEYEC';
   searchInput.dispatchEvent(new win.Event('input'));
   await wait(300);
-  console.log('STEP 23: Global search finds the note by its title text:', doc.getElementById('searchResults').textContent.includes('Follow up with KEYEC'));
+  console.log('STEP 23: Global search finds the note by the "For" field text:', doc.getElementById('searchResults').textContent.includes('KEYEC'));
 
   /* ============ CSV export ============ */
   let downloaded = null;
@@ -115,7 +116,7 @@ async function main() {
   await wait(50);
   doc.querySelector('[data-csv="notes"]').click();
   await wait(30);
-  console.log('STEP 24: Notes CSV export works and includes the actual data:', downloaded && downloaded.content.includes('KEYEC') && downloaded.content.includes('procurement@keyec.com'));
+  console.log('STEP 24: Notes CSV export works and includes the actual data:', downloaded && downloaded.content.includes('KEYEC') && downloaded.content.includes('QRF 566-25631'));
 
   console.log('\n=== NOTES MODULE WITH REMINDER URGENCY FULLY VERIFIED ===');
 }

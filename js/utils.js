@@ -160,6 +160,36 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms || 250); };
 }
 
+window.PAGE_SIZE = 50;
+
+/** Renders the "Showing X–Y of Z" + Prev/Next controls shared by every paginated list.
+    Deliberately simple (no jump-to-page, no page-size picker) -- this app's scale doesn't
+    need more, and a plain Prev/Next pair is the least that could confuse anyone. */
+function paginationControlsHTML(currentPage, totalItems, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
+  return `
+    <div class="pagination-controls" style="display:flex; align-items:center; gap:10px; justify-content:flex-end; margin-top:10px; font-size:13px;">
+      <span class="muted-text">${totalItems === 0 ? 'No results' : `Showing ${startItem}–${endItem} of ${totalItems}`}</span>
+      <button type="button" class="btn-line btn-sm" id="pgPrev" ${currentPage <= 1 ? 'disabled' : ''}>← Prev</button>
+      <span class="muted-text">Page ${currentPage} of ${totalPages}</span>
+      <button type="button" class="btn-line btn-sm" id="pgNext" ${currentPage >= totalPages ? 'disabled' : ''}>Next →</button>
+    </div>
+  `;
+}
+
+/** Wires the Prev/Next buttons rendered by paginationControlsHTML(). onPageChange receives the
+    new page number; the caller is responsible for clamping it to a valid range and re-drawing.
+    Call this again every time the controls are re-rendered, since the buttons are fresh DOM
+    nodes each time (built via innerHTML) and lose any previously-attached listeners. */
+function wirePaginationControls(onPageChange, currentPage) {
+  const prevBtn = document.getElementById('pgPrev');
+  const nextBtn = document.getElementById('pgNext');
+  if (prevBtn) prevBtn.onclick = () => onPageChange(currentPage - 1);
+  if (nextBtn) nextBtn.onclick = () => onPageChange(currentPage + 1);
+}
+
 function csvEscape(v) {
   const s = String(v == null ? '' : v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;

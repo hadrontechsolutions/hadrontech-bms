@@ -5,7 +5,7 @@
    ============================================================ */
 
 const DB_NAME = 'HadrontechDB';
-const DB_VERSION = 7; // v7 adds the 'notes' store — existing data is untouched on upgrade.
+const DB_VERSION = 8; // v8 adds the 'partners' and 'distributions' stores — existing data is untouched on upgrade.
 let _db = null;
 
 /** Opens (and if needed, creates/upgrades) the database. Call once at startup. */
@@ -80,6 +80,18 @@ function openDB() {
       // their own lifecycle (Open -> Done), not a passive audit trail.
       mk('notes', { keyPath: 'id', autoIncrement: true }, [
         ['noteNo', 'noteNo', true], ['date', 'date'], ['status', 'status']
+      ]);
+      // Partners/team members who share in the business's distributable profit -- a simple,
+      // reusable list (name + a default split %) so a distribution doesn't require retyping
+      // the same names and percentages every single time.
+      mk('partners', { keyPath: 'id', autoIncrement: true }, [
+        ['partnerNo', 'partnerNo', true], ['name', 'name']
+      ]);
+      // Manual profit distributions, entered by date -- deliberately NOT auto-triggered by
+      // payments. Each one snapshots the partners' names/percentages/amounts at the time it was
+      // made, so changing a partner's default % later never rewrites distribution history.
+      mk('distributions', { keyPath: 'id', autoIncrement: true }, [
+        ['distributionNo', 'distributionNo', true], ['date', 'date']
       ]);
       mk('counters', { keyPath: 'name' });
       mk('settings', { keyPath: 'key' });
@@ -161,6 +173,7 @@ async function ensureCounters() {
     { name: 'customer', prefix: 'CUST', next: 1, pattern: 'SEQ', digits: 5 },
     { name: 'supplier', prefix: 'SUP', next: 1, pattern: 'SEQ', digits: 5 },
     { name: 'product', prefix: 'ITEM', next: 1, pattern: 'SEQ', digits: 5 },
+    { name: 'projectPackage', prefix: 'ITEM-P', next: 1, pattern: 'SEQ', digits: 4 },
     { name: 'enquiry', prefix: 'HT-ENQ', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'quotation', prefix: 'HT-Q', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'customerPO', prefix: 'CPO', next: 1, pattern: 'YEARSEQ', digits: 4 },
@@ -170,6 +183,8 @@ async function ensureCounters() {
     { name: 'technicalOffer', prefix: 'HT-TO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'expense', prefix: 'HT-EXP', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'note', prefix: 'HT-NOTE', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'partner', prefix: 'HT-PTR', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'distribution', prefix: 'HT-DIST', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {
     const existing = await getCounter(d.name);

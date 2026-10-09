@@ -336,3 +336,5 @@ async function renderTOForm(record) {
     }
   });
 }
+
+window.TO_STATUSES = TO_STATUSES;

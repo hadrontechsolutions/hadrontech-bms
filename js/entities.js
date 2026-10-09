@@ -24,7 +24,10 @@ function defineEntity(cfg) {
 
 async function renderList(cfg) {
   Router.setBreadcrumb([{ label: cfg.labelPlural }]);
-  const all = (await DB.dbGetAll(cfg.key)).filter(r => !r.archived);
+  // Newest-first by default (most recently created at the top) -- without this, IndexedDB
+  // returns records in primary-key/insertion order, meaning the oldest record sits at the
+  // top and the most recent one is buried at the bottom of an ever-growing list.
+  const all = (await DB.dbGetAll(cfg.key)).filter(r => !r.archived).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const content = document.getElementById('content');
 
   content.innerHTML = `
@@ -41,14 +44,24 @@ async function renderList(cfg) {
         <tbody></tbody>
       </table>
       <div class="empty-inline" id="emptyMsg" style="display:none;">No records found. Click "New ${cfg.label}" to add one.</div>
+      <div id="pgWrap"></div>
     </div>
   `;
 
   document.getElementById('btnNewEntity').onclick = () => Router.navigate(`/${cfg.key}/new`);
 
+  // Renders only one page's worth of rows at a time, not the entire filtered set -- at a few
+  // hundred records, rebuilding the whole table on every keystroke (even debounced) is real,
+  // measurable work; a fixed-size page keeps every render fast regardless of how large the
+  // underlying list grows. currentPage resets to 1 whenever the search term changes, since a
+  // page number from the old, larger result set may no longer be valid.
+  let currentPage = 1;
   function draw(rows) {
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
     const tbody = content.querySelector('tbody');
-    tbody.innerHTML = rows.map(row => `
+    tbody.innerHTML = pageRows.map(row => `
       <tr class="clickable-row" data-id="${row.id}">
         ${cfg.listColumns.map(c => `<td>${c.render ? c.render(row) : escapeHtml(row[c.key] ?? '')}</td>`).join('')}
       </tr>
@@ -57,12 +70,15 @@ async function renderList(cfg) {
       tr.onclick = () => Router.navigate(`/${cfg.key}/${tr.dataset.id}`);
     });
     document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
+    document.getElementById('pgWrap').innerHTML = rows.length > PAGE_SIZE ? paginationControlsHTML(currentPage, rows.length, PAGE_SIZE) : '';
+    wirePaginationControls((newPage) => { currentPage = Math.max(1, Math.min(newPage, totalPages)); draw(rows); }, currentPage);
   }
 
   draw(all);
 
   document.getElementById('listSearch').addEventListener('input', debounce((e) => {
     const q = e.target.value.trim().toLowerCase();
+    currentPage = 1;
     if (!q) return draw(all);
     const filtered = all.filter(r => cfg.searchFields.some(f => String(r[f] || '').toLowerCase().includes(q)));
     draw(filtered);
@@ -154,7 +170,7 @@ async function renderForm(cfg, id) {
     <form class="card form-card" id="entityForm">
       <div class="form-grid">
         ${cfg.fields.map(f => `
-          <div class="field ${f.type === 'textarea' ? 'field-wide' : ''}">
+          <div class="field ${f.type === 'textarea' ? 'field-wide' : ''} ${f.highlight ? 'field-key' : ''}">
             <label>${escapeHtml(f.label)}${f.required ? ' *' : ''}</label>
             ${fieldInputHTML(f, record ? record[f.name] : undefined)}
           </div>
@@ -174,6 +190,7 @@ async function renderForm(cfg, id) {
     Router.navigate(isEdit ? `/${cfg.key}/${id}` : `/${cfg.key}`);
   };
 
+  if (cfg.afterFormRender) cfg.afterFormRender(document.getElementById('entityForm'), record);
   document.getElementById('entityForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -191,6 +208,7 @@ async function renderForm(cfg, id) {
     const settings = await DB.getSettings();
     if (isEdit) {
       obj.updatedAt = now; obj.modifiedBy = settings.userName;
+      if (cfg.beforeSave) { const bad = cfg.beforeSave(obj, e.target, record); if (bad) { toast(bad, 'err'); return; } }
       await DB.dbPut(cfg.key, obj);
       await DB.logActivity(`Updated ${cfg.label.toLowerCase()} ${obj[cfg.titleField]}`);
       toast(`${cfg.label} updated.`);
@@ -198,7 +216,9 @@ async function renderForm(cfg, id) {
       obj.createdAt = now; obj.updatedAt = now;
       obj.createdBy = settings.userName; obj.modifiedBy = settings.userName;
       obj.status = obj.status || (cfg.defaultStatus || 'Active');
-      obj[cfg.numberField] = await DB.nextDocNumber(cfg.counterName);
+      if (cfg.beforeSave) { const bad = cfg.beforeSave(obj, e.target, null, true); if (bad) { toast(bad, 'err'); return; } }
+      obj[cfg.numberField] = await DB.nextDocNumber(cfg.counterFor ? cfg.counterFor(obj) : cfg.counterName);
+      if (cfg.afterNumber) cfg.afterNumber(obj);
       const newId = await DB.dbAdd(cfg.key, obj);
       obj.id = newId;
       await DB.logActivity(`Created ${cfg.label.toLowerCase()} ${obj[cfg.numberField]} — ${obj[cfg.titleField]}`);
@@ -248,7 +268,7 @@ async function renderDetail(cfg, id) {
     <div class="card">
       <div class="detail-grid">
         ${cfg.fields.map(f => `
-          <div class="detail-item">
+          <div class="detail-item ${f.highlight ? 'field-key' : ''}">
             <div class="detail-label">${escapeHtml(f.label)}</div>
             <div class="detail-value">${renderDetailValue(f, record)}</div>
           </div>
@@ -310,7 +330,7 @@ async function renderDetail(cfg, id) {
 function renderDetailValue(f, record) {
   const v = record[f.name];
   if (f.type === 'checkbox') return v ? 'Yes' : 'No';
-  if (f.type === 'money') return formatMoney(v, record.currency || record.defaultCurrency);
+  if (f.type === 'money') return formatMoney(v, f.currency || record.currency || record.defaultCurrency);
   if (f.type === 'date') return formatDate(v);
   if (f.type === 'select-dynamic') {
     const opt = (f._resolvedOptions || []).find(o => String(o.value) === String(v));
