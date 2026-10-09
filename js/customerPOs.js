@@ -55,6 +55,7 @@ Router.route('/customer-pos/:id/edit', (p) => renderCPOForm(p.id));
 async function renderCPOForm(id, query) {
   const isEdit = !!id;
   const record = isEdit ? await DB.dbGet('customerPOs', Number(id)) : null;
+  if (isEdit && !record) { Router.setBreadcrumb([{ label: 'Customer Purchase Orders', hash: '/customer-pos' }, { label: 'Not found' }]); document.getElementById('content').innerHTML = `<div class="empty-state"><h3>Customer PO not found</h3><p><a href="#/customer-pos">Back to Customer POs</a></p></div>`; return; }
   const [customers, quotations, settings, existingSalesOrders, products] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('quotations'), DB.getSettings(),
     isEdit ? DB.dbQueryIndex('salesOrders', 'customerPOId', Number(id)) : [],
@@ -384,7 +385,7 @@ Router.route('/customer-pos/:id', (p) => renderCPODetail(p.id));
 async function renderCPODetail(id) {
   const po = await DB.dbGet('customerPOs', Number(id));
   const content = document.getElementById('content');
-  if (!po) { content.innerHTML = `<div class="empty-state"><h3>Record not found</h3></div>`; return; }
+  if (!po) { content.innerHTML = `<div class="empty-state"><h3>Customer PO not found</h3><p><a href="#/customer-pos">Back to Customer POs</a></p></div>`; return; }
   const [customer, quotation, salesOrders] = await Promise.all([
     DB.dbGet('customers', po.customerId),
     po.quotationId ? DB.dbGet('quotations', po.quotationId) : null,

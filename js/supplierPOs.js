@@ -136,7 +136,7 @@ Router.route('/supplier-pos/:id', (p) => renderSPODetail(p.id));
 async function renderSPODetail(id) {
   const po = await DB.dbGet('supplierPOs', Number(id));
   const content = document.getElementById('content');
-  if (!po) { content.innerHTML = `<div class="empty-state"><h3>Record not found</h3></div>`; return; }
+  if (!po) { content.innerHTML = `<div class="empty-state"><h3>Supplier PO not found</h3><p><a href="#/supplier-pos">Back to Supplier POs</a></p></div>`; return; }
   const [supplier, salesOrder] = await Promise.all([
     DB.dbGet('suppliers', po.supplierId),
     po.salesOrderId ? DB.dbGet('salesOrders', po.salesOrderId) : null

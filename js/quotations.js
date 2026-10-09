@@ -364,6 +364,7 @@ Router.route('/quotations/:id/edit', (p) => renderQuoteForm(p.id));
 async function renderQuoteForm(id) {
   const isEdit = !!id;
   const record = isEdit ? await DB.dbGet('quotations', Number(id)) : null;
+  if (isEdit && !record) { Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: 'Not found' }]); document.getElementById('content').innerHTML = `<div class="empty-state"><h3>Quotation not found</h3><p><a href="#/quotations">Back to Quotations</a></p></div>`; return; }
   if (isEdit && !record.isLatest) { toast('Only the latest revision can be edited.', 'err'); return Router.navigate(`/quotations/${id}`); }
 
   const [customers, products, suppliers, settings] = await Promise.all([

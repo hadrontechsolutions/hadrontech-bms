@@ -157,6 +157,7 @@ async function resolveDynamicOptions(fields, record) {
 async function renderForm(cfg, id) {
   const isEdit = !!id;
   const record = isEdit ? await DB.dbGet(cfg.key, Number(id)) : null;
+  if (isEdit && !record) { Router.setBreadcrumb([{ label: cfg.labelPlural, hash: `/${cfg.key}` }, { label: 'Not found' }]); document.getElementById('content').innerHTML = `<div class="empty-state"><h3>${escapeHtml(cfg.label)} not found</h3><p><a href="#/${cfg.key}">Back to ${escapeHtml(cfg.labelPlural)}</a></p></div>`; return; }
   await resolveDynamicOptions(cfg.fields, record);
 
   Router.setBreadcrumb([
@@ -240,7 +241,7 @@ async function renderForm(cfg, id) {
 async function renderDetail(cfg, id) {
   const record = await DB.dbGet(cfg.key, Number(id));
   const content = document.getElementById('content');
-  if (!record) { content.innerHTML = `<div class="empty-state"><h3>Record not found</h3></div>`; return; }
+  if (!record) { content.innerHTML = `<div class="empty-state"><h3>${escapeHtml(cfg.label)} not found</h3><p><a href="#/${cfg.key}">Back to ${escapeHtml(cfg.labelPlural)}</a></p></div>`; return; }
   await resolveDynamicOptions(cfg.fields, record); // must run here too, independent of whether the edit form was ever opened this session
 
   Router.setBreadcrumb([
