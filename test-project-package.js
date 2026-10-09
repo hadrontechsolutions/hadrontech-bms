@@ -14,6 +14,7 @@ async function main() {
   const near = (a, b) => Math.abs(a - b) < 0.005;
   const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); };
   await win.DB.openDB(); await win.DB.ensureCounters();
+  const pkgSupId = await win.DB.dbAdd('suppliers', { supplierNo: 'S9', companyName: 'Project Supplier', currency: 'USD', status: 'Active', createdAt: new Date().toISOString() });
 
   // ---- a normal product first: numbering must be untouched ----
   await go('#/products/new', 80);
@@ -27,6 +28,7 @@ async function main() {
     await go('#/products/new', 80);
     fire(doc.getElementById('f_type'), 'Project Package', 'change'); await wait(20);
     fire(doc.getElementById('f_description'), name);
+    fire(doc.getElementById('f_defaultSupplierId'), String(pkgSupId), 'change');
     for (let i = 0; i < comps.length; i++) {
       if (i > 0) doc.getElementById('pkgAddComp').click();
       const row = doc.querySelectorAll('#pkgEditor tbody tr')[i];

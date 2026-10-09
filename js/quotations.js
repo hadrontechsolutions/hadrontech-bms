@@ -543,6 +543,36 @@ async function renderQuoteForm(id) {
         - "In lot price": a blank-price line whose cost/markup roll into ONE lot line placed just before
           the first such component (like the "Piping materials ... as detailed below" line + its breakdown).
       If no component is "In lot price" there is no lot line at all. */
+  /** The single "lot" line of a project package: carries the lot price, no cost of its own, no supplier. */
+  function makeLotHeader(itemId, name, vatRate, qCur, leadTime) {
+    const h = emptyLine(vatRate);
+    Object.assign(h, { itemId, lotRole: 'header', description: name || '', qty: 1, uom: 'lot', leadTime: leadTime || '',
+      costCurrency: qCur, costExchangeRate: 1, unitCost: 0, markupPercent: 0, priceOverridden: false });
+    return h;
+  }
+  /** Keeps each package's lot line consistent with its items: a component with a blank/zero price is part of the lot,
+      a component with a price is priced on its own. The lot line sits just above the first in-lot item, exists only while
+      some item is in the lot, and a lot line whose price was typed by hand is never removed. */
+  function normalizeLotGroups() {
+    const ids = [...new Set(lines.filter(l => l.lotRole && l.itemId).map(l => l.itemId))];
+    const headerVat = document.getElementById('f_vatMode') ? document.getElementById('f_vatMode').value : 'Standard12';
+    const vatRate = headerVat === 'Standard12' ? 12 : 0;
+    ids.forEach(id => {
+      const firstComp = lines.find(l => l.itemId === id && l.lotRole === 'component');
+      let header = lines.find(l => l.itemId === id && l.lotRole === 'header');
+      if (firstComp && !header) {
+        const any = lines.find(l => l.itemId === id && l.compNo);
+        header = makeLotHeader(id, (any && any.pkgName) || '', vatRate, currentCurrency(), any && any.leadTime);
+      }
+      if (!firstComp && header && !header.priceOverridden) { lines.splice(lines.indexOf(header), 1); return; }
+      if (firstComp && header) {
+        const hi = lines.indexOf(header);
+        if (hi >= 0) lines.splice(hi, 1);
+        lines.splice(lines.indexOf(firstComp), 0, header);
+      }
+    });
+  }
+
   function loadProjectPackage(line, p) {
     const qCur = currentCurrency();
     const headerVat = document.getElementById('f_vatMode').value;
@@ -554,7 +584,8 @@ async function renderQuoteForm(id) {
       const covers = Number(c.freightCoversQty) > 0 ? Number(c.freightCoversQty) : 1;
       const perUnit = (Number(c.estimatedFreightCost) || 0) / covers;
       Object.assign(l, {
-        itemId: p.id, compNo: c.compNo, brand: c.brand || '', modelNo: c.modelNo || '',
+        itemId: p.id, compNo: c.compNo, pkgName: p.description || '', brand: c.brand || '', modelNo: c.modelNo || '',
+        supplierId: p.defaultSupplierId ? Number(p.defaultSupplierId) : '', leadTime: p.leadTime || '',
         description: c.description, qty, uom: c.uom || 'pc', unitCost: Number(c.unitCost) || 0,
         costCurrency: c.costCurrency || qCur, markupPercent: Number(c.markupPercent) || 0,
         freightMode: 'total', freightSource: 'catalog', catalogFreightPerUnit: perUnit, estimatedFreightCost: perUnit * qty,
@@ -569,17 +600,17 @@ async function renderQuoteForm(id) {
     let header = null;
     (p.components || []).forEach(c => {
       if (c.pricing !== 'own' && !header) {
-        header = emptyLine(vatRate);
-        Object.assign(header, {
-          itemId: p.id, lotRole: 'header', brand: p.brand || '', modelNo: p.modelNo || '', description: p.description || '',
-          qty: 1, uom: 'lot', costCurrency: qCur, costExchangeRate: 1, unitCost: 0, markupPercent: 0, priceOverridden: false
-        });
+        header = makeLotHeader(p.id, p.description, vatRate, qCur, p.leadTime);
         out.push(header);
       }
       out.push(buildComp(c));
     });
     const idx = lines.indexOf(line);
     lines.splice(idx < 0 ? lines.length : idx, 1, ...out);
+    // Lead time and warranty are as per the package: fill the quotation's header fields (warranty always, lead time only if still empty).
+    const wEl = document.getElementById('f_warranty'), dEl = document.getElementById('f_deliveryLeadTime');
+    if (p.warranty && wEl) wEl.value = p.warranty;
+    if (p.leadTime && dEl && !dEl.value.trim()) dEl.value = p.leadTime;
     autoLotPrices();
     drawLines(); refreshTotals(); markDirty();
   }
@@ -623,8 +654,11 @@ async function renderQuoteForm(id) {
     const pInfo = tr.querySelector('.ln-price-info');
     const pBtn = tr.querySelector('.ln-flag-btn');
     let short = '', popHtml = '';
+    let neutralBtn = false;
     if (line.lotRole === 'component') {
       short = '<span class="muted-text" title="Included in the project lot price; prints blank on the quotation.">In lot price</span>';
+      popHtml = `<div style="margin:3px 0;">Part of the project's lot price, so its price prints blank on the quotation.</div><div style="margin:3px 0;">To price it separately, type a price here, or use its calculated price: <b>${formatMoney(lineCalcPrice(line, qCur), qCur)}</b></div><button type="button" class="btn-line btn-sm ln-own-price">Price it separately</button>`;
+      neutralBtn = true;
     } else if (line.lotRole === 'header') {
       const sug = lotSuggestedPrice(line);
       const differs = line.priceOverridden && Math.abs((Number(line.unitPrice) || 0) - sug) > 0.005;
@@ -637,7 +671,7 @@ async function renderQuoteForm(id) {
     }
     if (flag) flag.innerHTML = short;
     if (pInfo) pInfo.innerHTML = popHtml;
-    if (pBtn) pBtn.style.display = popHtml ? '' : 'none';
+    if (pBtn) { pBtn.style.display = popHtml ? '' : 'none'; pBtn.classList.toggle('needs-attention', !neutralBtn); pBtn.title = neutralBtn ? 'In the lot price — click for options' : 'Price needs review'; }
     const mEl = tr.querySelector('.ln-margin');
     if (mEl) {
       if (line.lotRole === 'component') { mEl.textContent = ''; }
@@ -722,6 +756,11 @@ async function renderQuoteForm(id) {
           const qCurNow = currentCurrency();
           if (sel === '.ln-price') {
             // Direct edit = manual override. Clears itself if the typed price equals the calculated one.
+            // A project item with a blank/zero price is part of the lot; give it a price and it is priced on its own.
+            if (line.compNo && line.lotRole !== 'header') {
+              if (Number(line.unitPrice) > 0 && line.lotRole === 'component') line.lotRole = '';
+              else if (!(Number(line.unitPrice) > 0) && !line.lotRole) { line.lotRole = 'component'; line.priceOverridden = false; }
+            }
             if (line.lotRole === 'header') line.priceOverridden = Math.abs((Number(line.unitPrice) || 0) - lotSuggestedPrice(line)) > 0.005;
             else if (!line.lotRole) line.priceOverridden = Math.abs((Number(line.unitPrice) || 0) - lineCalcPrice(line, qCurNow)) > 0.005;
           } else if (['.ln-cost', '.ln-markup', '.ln-rate', '.ln-freight', '.ln-qty'].includes(sel)) {
@@ -761,6 +800,8 @@ async function renderQuoteForm(id) {
       bind('.ln-option', 'optionGroup');
       bind('.ln-qty', 'qty', true); bind('.ln-uom', 'uom'); bind('.ln-freight', 'estimatedFreightCost', true); bind('.ln-cost', 'unitCost', true);
       bind('.ln-markup', 'markupPercent', true); bind('.ln-price', 'unitPrice', true);
+      // Once the price box is left, re-arrange a project's lot line (add / move / remove it) if an item moved in or out of the lot.
+      if (line.compNo) tr.querySelector('.ln-price').addEventListener('change', () => { normalizeLotGroups(); drawLines(); refreshTotals(); markDirty(); });
       bind('.ln-disc', 'discountPercent', true); bind('.ln-vat', 'vatRate', true);
       bind('.ln-rate', 'costExchangeRate', true);
       updatePriceWarning(tr, line, qCur);
@@ -779,6 +820,8 @@ async function renderQuoteForm(id) {
         if (conv) conv.addEventListener('click', () => { closeInfoPopup(); convertLegacyFreight(line); drawLines(); refreshTotals(); markDirty(); });
         const useCalc = pop.querySelector('.ln-use-calc');
         if (useCalc) useCalc.addEventListener('click', () => { closeInfoPopup(); line.priceOverridden = false; line.unitPrice = lineCalcPrice(line, currentCurrency()); drawLines(); refreshTotals(); markDirty(); });
+        const ownBtn = pop.querySelector('.ln-own-price');
+        if (ownBtn) ownBtn.addEventListener('click', () => { closeInfoPopup(); line.lotRole = ''; line.priceOverridden = false; line.unitPrice = lineCalcPrice(line, currentCurrency()); normalizeLotGroups(); drawLines(); refreshTotals(); markDirty(); });
         const useLot = pop.querySelector('.ln-use-lot');
         if (useLot) useLot.addEventListener('click', () => { closeInfoPopup(); line.priceOverridden = false; line.unitPrice = lotSuggestedPrice(line); drawLines(); refreshTotals(); markDirty(); });
         setTimeout(() => document.addEventListener('click', closeInfoPopup, { once: true }), 0);

@@ -15,92 +15,131 @@ async function main() {
   const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); };
   await win.DB.openDB(); await win.DB.ensureCounters();
 
-  // ---- build the package through the real form so the Price-shown-as choice is saved ----
+  const now = new Date().toISOString();
+  const supId = await win.DB.dbAdd('suppliers', { supplierNo: 'S1', companyName: 'Allied Contractor', currency: 'USD', status: 'Active', createdAt: now });
+  const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'SHORR', status: 'Active', createdAt: now });
+
+  // ---- the package form ----
   await go('#/products/new', 80);
   fire(doc.getElementById('f_type'), 'Project Package', 'change'); await wait(20);
+  const shown = (n) => doc.getElementById('f_' + n).closest('.field').style.display !== 'none';
+  console.log('1 package form hides Category, Manufacturer, Brand, Model, UOM; shows Supplier, Lead Time, Warranty:', ['category', 'manufacturer', 'brand', 'modelNo', 'uom'].every(n => !shown(n)) && ['defaultSupplierId', 'leadTime', 'warranty', 'description'].every(shown));
+  console.log('2 no "Price shown as" choice in the component editor:', !doc.querySelector('#pkgEditor [data-k="pricing"]') && !/Price shown as/i.test(doc.getElementById('pkgEditor').textContent));
   fire(doc.getElementById('f_description'), 'Air compressor project');
+  fire(doc.getElementById('f_leadTime'), '3 Weeks'); fire(doc.getElementById('f_warranty'), '2 Years');
   const comps = [
-    { description: 'Compressor 10HP', qty: 3, unitCost: 1000, estimatedFreightCost: 60, freightCoversQty: 3, markupPercent: 20, pricing: 'own' },
-    { description: 'Prefilter', qty: 2, unitCost: 100, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 25, pricing: 'own' },
-    { description: 'GI pipe', qty: 60, unitCost: 10, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 30, pricing: 'lot' },
-    { description: 'Ball valve', qty: 56, unitCost: 5, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 30, pricing: 'lot' },
-    { description: 'Design and PME', qty: 1, unitCost: 700, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 40, pricing: 'own' }
+    { description: 'Compressor 10HP', qty: 3, unitCost: 1000, estimatedFreightCost: 60, freightCoversQty: 3, markupPercent: 20 },
+    { description: 'Prefilter', qty: 2, unitCost: 100, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 25 },
+    { description: 'GI pipe', qty: 60, unitCost: 10, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 30 },
+    { description: 'Ball valve', qty: 56, unitCost: 5, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 30 },
+    { description: 'Design and PME', qty: 1, unitCost: 700, estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 40 }
   ];
   comps.forEach((c, i) => {
     if (i > 0) doc.getElementById('pkgAddComp').click();
     const row = doc.querySelectorAll('#pkgEditor tbody tr')[i];
     for (const [k, v] of Object.entries({ ...c, costCurrency: 'USD' })) { const el = row.querySelector(`[data-k="${k}"]`); fire(el, String(v), el.tagName === 'SELECT' ? 'change' : 'input'); }
   });
-  console.log('1 component editor has a "Price shown as" choice defaulting to In lot price:', (() => { doc.getElementById('pkgAddComp').click(); const last = [...doc.querySelectorAll('#pkgEditor tbody tr')].pop(); const v = last.querySelector('[data-k="pricing"]').value; last.querySelector('[data-del]').click(); return v === 'lot'; })());
+  doc.getElementById('entityForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+  console.log('3 a package without a supplier is refused:', (await win.DB.dbGetAll('products')).filter(p => p.type === 'Project Package').length === 0);
+  fire(doc.getElementById('f_defaultSupplierId'), String(supId), 'change');
   doc.getElementById('entityForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   const pkg = (await win.DB.dbGetAll('products')).find(p => p.type === 'Project Package');
-  console.log('2 choice saved per component:', JSON.stringify(pkg.components.map(c => c.pricing)) === '["own","own","lot","lot","own"]', JSON.stringify(pkg.components.map(c => c.pricing)));
+  console.log('4 saved package: supplier kept, UOM "lot", brand/model/category empty:', JSON.stringify(pkg && { s: pkg.defaultSupplierId, u: pkg.uom, b: pkg.brand, m: pkg.modelNo, c: pkg.category, mf: pkg.manufacturer }), !!pkg && Number(pkg.defaultSupplierId) === supId && pkg.uom === 'lot' && !pkg.brand && !pkg.modelNo && !pkg.category && !pkg.manufacturer);
 
-  // ---- quotation ----
-  const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'SHORR', status: 'Active', createdAt: new Date().toISOString() });
+  // ---- quotation: everything starts in the lot ----
   await go('#/quotations/new');
   doc.querySelector('.ln-catalog-btn').click(); await wait(20);
   [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0001/.test(r.textContent)).click(); await wait(60);
   let trs = [...doc.querySelectorAll('#linesBody tr')];
   const label = (t) => t.querySelector('.ln-catalog-btn').textContent.trim();
-  console.log('3 order: own, own, LOT LINE, lot, lot, own (lot line sits just before its first item):', trs.map(label).join('|') === 'ITEM-P-0001-01|ITEM-P-0001-02|ITEM-P-0001|ITEM-P-0001-03|ITEM-P-0001-04|ITEM-P-0001-05', trs.map(label).join('|'));
-  const rate = +trs[0].querySelector('.ln-rate').value;
+  const rate = +trs[1].querySelector('.ln-rate').value;   // (the lot line itself has rate 1)
   const price = (i) => +doc.querySelectorAll('#linesBody tr')[i].querySelector('.ln-price').value;
   const r2 = (x) => Math.round(x * 100) / 100;
-  // own lines: (cost + freight/unit) x rate x (1+markup)
-  console.log('4 own-priced lines get their own price (compressor (1000+20)*rate*1.20):', near(price(0), r2(1020 * rate * 1.2)) && near(price(1), r2(100 * rate * 1.25)) && near(price(5), r2(700 * rate * 1.4)), price(0), price(1), price(5));
-  const lotExp = r2((60 * 10 * rate * 1.3) + (56 * 5 * rate * 1.3));
-  console.log('5 lot line = ONLY the In-lot items (pipe + valves) at their markups:', near(price(2), lotExp), price(2), lotExp);
-  console.log('6 In-lot items print blank (price 0); own-priced do not:', price(3) === 0 && price(4) === 0 && price(0) > 0);
+  console.log('5 loads lot line + 5 items, all in the lot (blank price), lot price = their sum:', trs.length === 6 && label(trs[0]) === 'ITEM-P-0001' && [1, 2, 3, 4, 5].every(i => price(i) === 0) && price(0) > 0, trs.map(label).join('|'));
+  const all = [...win.__lines || []];
+  const linesNow = () => [...doc.querySelectorAll('#linesBody tr')];
+  console.log('6 every item line carries the package supplier; the lot line has none:', linesNow().slice(1).every(t => t.querySelector('.ln-supplier').value === String(supId)) && linesNow()[0].querySelector('.ln-supplier').value === '');
+  console.log('7 lead time "3 Weeks" on the lines; warranty "2 Years" and delivery lead time filled on the quotation:', linesNow().every(t => /3 Weeks/.test(t.textContent)) && doc.getElementById('f_warranty').value === '2 Years' && doc.getElementById('f_deliveryLeadTime').value === '3 Weeks');
 
-  // editing an OWN line's markup must not touch the lot line; editing a LOT item must not touch own lines
-  const lotBefore = price(2);
-  fire(doc.querySelectorAll('#linesBody tr')[1].querySelector('.ln-markup'), '50'); await wait(30);
-  console.log('7 changing an own-priced line markup updates only that line (lot line unchanged):', near(price(1), r2(100 * rate * 1.5)) && price(2) === lotBefore);
-  const own0 = price(0);
-  fire(doc.querySelectorAll('#linesBody tr')[3].querySelector('.ln-markup'), '60'); await wait(30);
-  console.log('8 changing an In-lot item markup updates only the lot line:', near(price(2), r2((60 * 10 * rate * 1.6) + (56 * 5 * rate * 1.3))) && price(0) === own0);
+  // ---- typing a price takes an item out of the lot ----
+  const setPrice = async (i, v) => { const el = doc.querySelectorAll('#linesBody tr')[i].querySelector('.ln-price'); fire(el, String(v)); el.dispatchEvent(new win.Event('change')); await wait(40); };
+  const lotAll = r2(1020 * rate * 1.2 * 3 * 0 + 0);
+  const lotBefore = price(0);
+  const sumAt = (rows) => rows.reduce((s, [cost, markup, qty]) => s + cost * rate * (1 + markup / 100) * qty, 0);
+  console.log('8 lot price at the start = all five items at their markups:', near(price(0), r2(sumAt([[1020, 20, 3], [100, 25, 2], [10, 30, 60], [5, 30, 56], [700, 40, 1]]))), price(0));
+  await setPrice(1, 5000); await setPrice(2, 800); await setPrice(5, 9000);
+  trs = linesNow();
+  console.log('9 after pricing items 1, 2 and 5: order is own, own, LOT LINE, lot, lot, own:', trs.map(label).join('|') === 'ITEM-P-0001-01|ITEM-P-0001-02|ITEM-P-0001|ITEM-P-0001-03|ITEM-P-0001-04|ITEM-P-0001-05', trs.map(label).join('|'));
+  const lotExp = r2(sumAt([[10, 30, 60], [5, 30, 56]]));
+  console.log('10 lot line now = ONLY pipe + valves (the two items still without a price):', near(price(2), lotExp), price(2), lotExp);
+  console.log('11 typed prices kept; in-lot items still print blank:', price(0) === 5000 && price(1) === 800 && price(5) === 9000 && price(3) === 0 && price(4) === 0);
+  const pop = linesNow()[3].querySelector('.ln-flag-btn'); pop.click(); await wait(10);
+  const ownBtn = doc.querySelector('.ln-info-popup .ln-own-price');
+  console.log('12 an in-lot item has a "!" popup with "Price it separately":', pop.style.display !== 'none' && !!ownBtn && !pop.classList.contains('needs-attention'));
+  ownBtn.click(); await wait(40);
+  trs = linesNow();
+  const pipeExp = r2(10 * rate * 1.3);
+  console.log('13 "Price it separately" gives the pipe its calculated price and leaves the lot:', near(price(2), pipeExp) && near(price(3), r2(sumAt([[5, 30, 56]]))) && trs.map(label).join('|') === 'ITEM-P-0001-01|ITEM-P-0001-02|ITEM-P-0001-03|ITEM-P-0001|ITEM-P-0001-04|ITEM-P-0001-05', trs.map(label).join('|'));
+  await setPrice(2, 0);
+  trs = linesNow();
+  console.log('14 clearing a price puts the item back in the lot (lot line moves above it):', trs.map(label).join('|') === 'ITEM-P-0001-01|ITEM-P-0001-02|ITEM-P-0001|ITEM-P-0001-03|ITEM-P-0001-04|ITEM-P-0001-05' && price(3) === 0);
 
-  // totals and GP
-
-  fire(doc.getElementById('f_customerId'), String(custId), 'change');
+  // ---- totals, GP, print, supplier PO grouping ----
+  doc.getElementById('f_customerId').value = String(custId); doc.getElementById('f_customerId').dispatchEvent(new win.Event('change'));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(180);
   const q = (await win.DB.dbGetAll('quotations'))[0];
   const qt = win.QuoteCalc.computeQuotationTotals(q);
   const priced = q.lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0), 0);
-  console.log('9 quotation total = own-priced lines + lot line (breakdown lines add nothing):', near(q.grandTotal, r2(priced)), q.grandTotal);
-  const allCost = q.lines.reduce((s, l) => s + win.QuoteCalc.computeLine(l, 'PHP').costTotal, 0);
-  console.log('10 gross profit = total minus the cost of EVERY line (own, lot header, lot items):', near(qt.grossProfit, r2(q.grandTotal - allCost)) && allCost > 0, qt.grossProfit);
-
-  // print
+  console.log('15 quotation total = priced items + lot line; gross profit subtracts every item cost:', near(q.grandTotal, r2(priced)) && near(qt.grossProfit, r2(q.grandTotal - q.lines.reduce((s, l) => s + win.QuoteCalc.computeLine(l, 'PHP').costTotal, 0))), q.grandTotal, qt.grossProfit);
   let printed = '';
   win.open = () => ({ document: { write: (h) => { printed = h; }, close: () => {} } });
   await win.Print.printQuotation(q, { companyName: 'SHORR' });
   const rows = printed.split('<tr>').filter(r => /Compressor 10HP|Prefilter|Air compressor project|GI pipe|Ball valve|Design and PME/.test(r));
   const cells = (r) => [...r.matchAll(/<td class="p-num">(.*?)<\/td>/g)].map(m => m[1]);
   const priceCells = rows.map(r => cells(r)[1]);
-  console.log('11 print: own lines + lot line show a price, the 2 breakdown items are blank:', priceCells.length === 6 && priceCells.filter(x => x === '').length === 2 && /GI pipe|Ball valve/.test(rows[3] + rows[4]) && cells(rows[3])[1] === '' && cells(rows[4])[1] === '', JSON.stringify(priceCells));
+  console.log('16 print: priced items + lot line show a price; the two in-lot items are blank:', priceCells.length === 6 && priceCells.filter(x => x === '').length === 2 && priceCells[3] === '' && priceCells[4] === '', JSON.stringify(priceCells));
+  const forPO = q.lines.filter(l => l.supplierId === supId);
+  console.log('17 for the Supplier PO: all 5 items go to the package supplier; the lot line is not included:', forPO.length === 5 && !forPO.some(l => l.lotRole === 'header'));
 
-  // all-lot package: lot line first (original behaviour); all-own package: no lot line
-  const pAll = await win.DB.dbAdd('products', { itemNo: 'ITEM-P-0009', type: 'Project Package', description: 'All own', status: 'Active', createdAt: new Date().toISOString(), nextCompSeq: 2, components: [{ compNo: 'ITEM-P-0009-01', description: 'Solo', qty: 1, uom: 'pc', unitCost: 10, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 10, pricing: 'own' }] });
+  // ---- the whole chain: Won -> Customer PO -> Sales Order -> Supplier PO for the package supplier ----
+  q.status = 'Won'; await win.DB.dbPut('quotations', q);
+  await go('#/customer-pos/new?quotationId=' + q.id);
+  fire(doc.getElementById('f_customerId'), String(custId), 'change');
+  doc.getElementById('cpoForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+  const cpo = (await win.DB.dbGetAll('customerPOs'))[0];
+  await go('#/customer-pos/' + cpo.id);
+  doc.getElementById('btnConvert').click(); await wait(150);
+  const so = (await win.DB.dbGetAll('salesOrders'))[0];
+  await go('#/sales-orders/' + so.id, 150);
+  const createBtn = doc.querySelector('[data-create-spo]');
+  console.log('17b Sales Order offers "Create Supplier PO" for the package supplier (one group, 5 items):', !!createBtn && Number(createBtn.dataset.createSpo) === supId && /5 item/.test(createBtn.closest('.supplier-group').textContent));
+  createBtn.click(); await wait(200);
+  const spo = (await win.DB.dbGetAll('supplierPOs'))[0];
+  console.log('17c Supplier PO has the 5 items (no lot line), freight pre-filled with the compressor freight USD 60, total = items + freight:', !!spo && spo.lines.length === 5 && !spo.lines.some(l => /^Air compressor project$/.test(l.description)) && near(spo.freight, 60) && near(spo.totalCost, spo.lines.reduce((t, l) => t + l.amount, 0) + 60), spo && spo.freight);
+
+  // ---- saved quotation reopens the same ----
+  await go('#/quotations/' + q.id + '/edit', 150);
+  trs = linesNow();
+  console.log('18 reopened quotation keeps the same lines, prices and order:', trs.map(label).join('|') === 'ITEM-P-0001-01|ITEM-P-0001-02|ITEM-P-0001|ITEM-P-0001-03|ITEM-P-0001-04|ITEM-P-0001-05' && price(0) === 5000 && price(3) === 0);
+
+  // ---- pricing every item removes the lot line; legacy packages ----
   await go('#/quotations/new');
   doc.querySelector('.ln-catalog-btn').click(); await wait(20);
-  [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0009/.test(r.textContent)).click(); await wait(60);
-  trs = [...doc.querySelectorAll('#linesBody tr')];
-  console.log('12 package with no In-lot items loads with no lot line (1 line, with its own price):', trs.length === 1 && !doc.querySelector('#linesBody .ln-use-lot') && +trs[0].querySelector('.ln-price').value > 0);
-
-  // old packages saved before this choice existed behave as before (all in lot)
-  const pOld = await win.DB.dbAdd('products', { itemNo: 'ITEM-P-0010', type: 'Project Package', description: 'Old style', status: 'Active', createdAt: new Date().toISOString(), nextCompSeq: 3, components: [
-    { compNo: 'ITEM-P-0010-01', description: 'a', qty: 1, uom: 'pc', unitCost: 10, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0 },
-    { compNo: 'ITEM-P-0010-02', description: 'b', qty: 1, uom: 'pc', unitCost: 10, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0 }] });
+  [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0001/.test(r.textContent)).click(); await wait(60);
+  for (let i = 1; i <= 5; i++) await setPrice(i, 1000 * i);
+  console.log('19 once every item has its own price the lot line goes away:', linesNow().length === 5 && !linesNow().some(t => label(t) === 'ITEM-P-0001'));
+  const pOwn = await win.DB.dbAdd('products', { itemNo: 'ITEM-P-0011', type: 'Project Package', description: 'Old with own', status: 'Active', createdAt: now, defaultSupplierId: supId, nextCompSeq: 3, components: [
+    { compNo: 'ITEM-P-0011-01', description: 'a', qty: 1, uom: 'pc', unitCost: 10, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 10, pricing: 'own' },
+    { compNo: 'ITEM-P-0011-02', description: 'b', qty: 1, uom: 'pc', unitCost: 10, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0 }] });
   await go('#/quotations/new');
   doc.querySelector('.ln-catalog-btn').click(); await wait(20);
-  [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0010/.test(r.textContent)).click(); await wait(60);
-  trs = [...doc.querySelectorAll('#linesBody tr')];
-  console.log('13 package saved before this feature: lot line first + 2 blank items (unchanged behaviour):', trs.length === 3 && label(trs[0]) === 'ITEM-P-0010' && +trs[1].querySelector('.ln-price').value === 0 && +trs[2].querySelector('.ln-price').value === 0);
+  [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0011/.test(r.textContent)).click(); await wait(60);
+  trs = linesNow();
+  console.log('20 a package saved with the old own-price setting still loads that item priced (lot line before the other):', trs.length === 3 && price(0) > 0 && label(trs[1]) === 'ITEM-P-0011' && price(2) === 0, trs.map(label).join('|'));
 
-  // detail page shows the choice
+  // ---- package page ----
   await go('#/products/' + pkg.id, 100);
-  console.log('14 package page shows each item as Own price / In lot price:', /Own price/.test(doc.getElementById('content').textContent) && /In lot price/.test(doc.getElementById('content').textContent));
+  const txt = doc.getElementById('content').textContent;
+  console.log('21 package page: shows supplier, lead time, warranty, components; no Brand/Category/UOM/Price column:', /Allied Contractor/.test(txt) && /3 Weeks/.test(txt) && /2 Years/.test(txt) && /ITEM-P-0001-05/.test(txt) && !/Manufacturer|Category|Unit of Measure|Own price|In lot price/i.test(txt));
 }
 main().catch(e => { console.log('TEST FAILED', e); process.exit(1); });

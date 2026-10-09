@@ -23,6 +23,7 @@ async function main() {
   win.location.hash = '#/products/new'; await win.Router.resolveRoute(); await wait(80);
   const t = doc.getElementById('f_type'); t.value = 'Project Package'; t.dispatchEvent(new win.Event('change'));
   doc.getElementById('f_description').value = 'After restore';
+  { const sid = await win.DB.dbAdd('suppliers', { supplierNo: 'S1', companyName: 'Sup', status: 'Active', createdAt: new Date().toISOString() }); const sel = doc.getElementById('f_defaultSupplierId'); sel.innerHTML += `<option value="${sid}">Sup</option>`; sel.value = String(sid); sel.dispatchEvent(new win.Event('change')); }
   doc.querySelector('#pkgEditor [data-k="description"]').value = 'Part'; doc.querySelector('#pkgEditor [data-k="description"]').dispatchEvent(new win.Event('input'));
   doc.getElementById('entityForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   const pk = (await win.DB.dbGetAll('products'))[0];

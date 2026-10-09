@@ -268,7 +268,7 @@ async function renderDetail(cfg, id) {
 
     <div class="card">
       <div class="detail-grid">
-        ${cfg.fields.map(f => `
+        ${cfg.fields.filter(f => !(cfg.detailHiddenFields && cfg.detailHiddenFields(record).includes(f.name))).map(f => `
           <div class="detail-item ${f.highlight ? 'field-key' : ''}">
             <div class="detail-label">${escapeHtml(f.label)}</div>
             <div class="detail-value">${renderDetailValue(f, record)}</div>
