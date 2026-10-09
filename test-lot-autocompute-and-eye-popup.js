@@ -18,9 +18,19 @@ async function main() {
     components: [
       { compNo: 'ITEM-P-0001-01', description: 'item 1', qty: 11, uom: 'pc', unitCost: 55, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0 },
       { compNo: 'ITEM-P-0001-02', description: 'item 2', qty: 20, uom: 'pc', unitCost: 88, costCurrency: 'USD', estimatedFreightCost: 0, freightCoversQty: 1, markupPercent: 0 }] });
+  const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'X', status: 'Active', createdAt: new Date().toISOString() });
   await go('#/quotations/new');
   doc.querySelector('.ln-catalog-btn').click(); await wait(20);
   [...doc.querySelectorAll('.item-picker-row')].find(r => /ITEM-P-0001/.test(r.textContent)).click(); await wait(60);
+  // New quotations no longer get a package lot line, so this test builds an OLDER quotation (lot line + blank components)
+  // and opens it, to prove the legacy lot-line behaviour keeps working.
+  fire(doc.getElementById('f_customerId'), String(custId), 'change');
+  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(180);
+  const q0 = (await win.DB.dbGetAll('quotations'))[0];
+  const hdr = { ...q0.lines[0], lineId: 'legacy-hdr', lotRole: 'header', compNo: undefined, description: 'Proj', qty: 1, uom: 'lot', unitCost: 0, markupPercent: 0, unitPrice: 0, priceOverridden: false, supplierId: '', costCurrency: q0.currency, costExchangeRate: 1 };
+  q0.lines = [hdr, ...q0.lines.map(l => ({ ...l, lotRole: 'component', unitPrice: 0, priceOverridden: false }))];
+  await win.DB.dbPut('quotations', q0);
+  await go('#/quotations/' + q0.id + '/edit', 150);
   const price = (i) => +doc.querySelectorAll('#linesBody tr')[i].querySelector('.ln-price').value;
   const rate = +doc.querySelectorAll('#linesBody tr')[1].querySelector('.ln-rate').value;
   // components: 11 x 55 x rate + 20 x 88 x rate

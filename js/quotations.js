@@ -417,6 +417,7 @@ async function renderQuoteForm(id) {
       </div>
 
       <h3 class="section-title">Line Items</h3>
+      <div id="pkgNote" style="margin-bottom:6px;"></div>
       <div style="overflow-x:auto; max-width:100%;">
       <table class="data-table items-table" id="linesTable">
         <thead><tr>
@@ -537,13 +538,10 @@ async function renderQuoteForm(id) {
     });
   }
 
-  /** Selecting a Project Package replaces the clicked row with the package's lines, in the order the
-      package defines them. Each component is either:
-        - "Own price": a normal line (cost + freight + markup -> its own unit price), or
-        - "In lot price": a blank-price line whose cost/markup roll into ONE lot line placed just before
-          the first such component (like the "Piping materials ... as detailed below" line + its breakdown).
-      If no component is "In lot price" there is no lot line at all. */
-  /** The single "lot" line of a project package: carries the lot price, no cost of its own, no supplier. */
+  /** Selecting a Project Package replaces the clicked row with the package's component lines (the package itself is
+      NOT a line). Each is priced from cost + freight + markup; one that works out to zero stays blank and counts as
+      part of the lot line above it. */
+  /** Legacy only: older quotations carried a synthetic lot line for the package; new ones never create it. */
   function makeLotHeader(itemId, name, vatRate, qCur, leadTime) {
     const h = emptyLine(vatRate);
     Object.assign(h, { itemId, lotRole: 'header', description: name || '', qty: 1, uom: 'lot', leadTime: leadTime || '',
@@ -559,11 +557,8 @@ async function renderQuoteForm(id) {
     const vatRate = headerVat === 'Standard12' ? 12 : 0;
     ids.forEach(id => {
       const firstComp = lines.find(l => l.itemId === id && l.lotRole === 'component');
-      let header = lines.find(l => l.itemId === id && l.lotRole === 'header');
-      if (firstComp && !header) {
-        const any = lines.find(l => l.itemId === id && l.compNo);
-        header = makeLotHeader(id, (any && any.pkgName) || '', vatRate, currentCurrency(), any && any.leadTime);
-      }
+      // Older quotations may still carry a package lot line; new ones never get one (see loadProjectPackage).
+      const header = lines.find(l => l.itemId === id && l.lotRole === 'header');
       if (!firstComp && header && !header.priceOverridden) { lines.splice(lines.indexOf(header), 1); return; }
       if (firstComp && header) {
         const hi = lines.indexOf(header);
@@ -578,7 +573,6 @@ async function renderQuoteForm(id) {
     const headerVat = document.getElementById('f_vatMode').value;
     const vatRate = headerVat === 'Standard12' ? 12 : 0;
     const buildComp = (c) => {
-      const own = c.pricing === 'own';
       const l = emptyLine(vatRate);
       const qty = Number(c.qty) || 0;
       const covers = Number(c.freightCoversQty) > 0 ? Number(c.freightCoversQty) : 1;
@@ -591,20 +585,15 @@ async function renderQuoteForm(id) {
         freightMode: 'total', freightSource: 'catalog', catalogFreightPerUnit: perUnit, estimatedFreightCost: perUnit * qty,
         unitPrice: 0
       });
-      if (!own) l.lotRole = 'component';
       l.costExchangeRate = referenceRate(l.costCurrency, qCur, settings);
-      if (own) l.unitPrice = lineCalcPrice(l, qCur);
+      // Priced from its cost + freight + markup; a component that works out to zero (e.g. "as detailed below" items)
+      // stays blank and is treated as part of the lot line above it.
+      l.unitPrice = lineCalcPrice(l, qCur);
+      if (!(l.unitPrice > 0)) l.lotRole = 'component';
       return l;
     };
     const out = [];
-    let header = null;
-    (p.components || []).forEach(c => {
-      if (c.pricing !== 'own' && !header) {
-        header = makeLotHeader(p.id, p.description, vatRate, qCur, p.leadTime);
-        out.push(header);
-      }
-      out.push(buildComp(c));
-    });
+    (p.components || []).forEach(c => out.push(buildComp(c)));
     const idx = lines.indexOf(line);
     lines.splice(idx < 0 ? lines.length : idx, 1, ...out);
     // Lead time and warranty are as per the package: fill the quotation's header fields (warranty always, lead time only if still empty).
@@ -613,6 +602,22 @@ async function renderQuoteForm(id) {
     if (p.leadTime && dEl && !dEl.value.trim()) dEl.value = p.leadTime;
     autoLotPrices();
     drawLines(); refreshTotals(); markDirty();
+  }
+
+  /** Reference line above the items (the package itself is not a line) + a reminder when blank-priced items carry cost. */
+  function refreshPackageNote() {
+    const el = document.getElementById('pkgNote');
+    if (!el) return;
+    const qCur = currentCurrency();
+    const ids = [...new Set(lines.filter(l => l.compNo && l.itemId).map(l => String(l.itemId)))];
+    el.innerHTML = ids.map(id => {
+      const p = products.find(x => String(x.id) === id);
+      const mine = lines.filter(l => String(l.itemId) === id && l.compNo);
+      const label = escapeHtml(`${p ? p.itemNo : ''} ${(p && p.description) || (mine[0] && mine[0].pkgName) || ''}`.trim());
+      const unpriced = mine.filter(l => l.lotRole === 'component' && lineLandedUnitCost(l, qCur) * (Number(l.qty) || 0) > 0).map(l => l.compNo.split('-').pop());
+      const warn = unpriced.length ? `<div style="color:#b45309; font-size:12px; margin-top:2px;">Items ${escapeHtml(unpriced.join(', '))} have a cost but no price. Enter a lot price on the line above them, or price them separately — otherwise their cost is not recovered.</div>` : '';
+      return `<div class="muted-text" style="font-size:12px;"><b>Project:</b> ${label}</div>${warn}`;
+    }).join('');
   }
 
   function closeInfoPopup() { document.querySelectorAll('.ln-info-popup').forEach(p => p.remove()); }
@@ -694,6 +699,7 @@ async function renderQuoteForm(id) {
 
   function drawLines() {
     autoLotPrices();
+    refreshPackageNote();
     const body = document.getElementById('linesBody');
     const qCur = currentCurrency();
     const arrowLabel = document.getElementById('rateArrowCcy');
@@ -790,7 +796,7 @@ async function renderQuoteForm(id) {
           tr.querySelector('.ln-amount-vat').textContent = formatMoney(c2.lineTotal, currentCurrency());
           const phpHint = tr.querySelector('.ln-cost-php');
           if (phpHint) phpHint.textContent = `→${formatMoney((Number(line.unitCost) || 0) * (Number(line.costExchangeRate) || 1), currentCurrency())}`;
-          refreshLineInfo(tr, line); refreshLotHeaders();
+          refreshLineInfo(tr, line); refreshLotHeaders(); refreshPackageNote();
           updatePriceWarning(tr, line, currentCurrency());
           refreshTotals();
           markDirty();

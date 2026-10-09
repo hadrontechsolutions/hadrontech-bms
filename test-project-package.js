@@ -111,31 +111,28 @@ async function main() {
   console.log('13 picker lists the package with component count:', !!target && /component items/.test(target.textContent));
   target.click(); await wait(60);
   const trs = [...doc.querySelectorAll('#linesBody tr')];
-  console.log('14 one click loads package line + 3 component lines:', trs.length === 4, trs.length);
-  console.log('15 first column shows ITEM-P-0001 then its component numbers (-01/-03/-04 after the earlier delete):', trs.map(t => t.querySelector('.ln-catalog-btn').textContent.trim()).join('|') === 'ITEM-P-0001|ITEM-P-0001-01|ITEM-P-0001-03|ITEM-P-0001-04', trs.map(t => t.querySelector('.ln-catalog-btn').textContent.trim()).join('|'));
-  console.log('16 components have no price; package line is the lot (qty 1, lot):', trs.slice(1).every(t => +t.querySelector('.ln-price').value === 0) && trs[0].querySelector('.ln-uom').value === 'lot');
-  const rate = +trs[1].querySelector('.ln-rate').value;
-  // suggested lot price: Pump A: landed (100 + 10)*rate*1.25 = x2 ; Valve B 50*rate*1.25 x4 ; Tools 30*rate*1.25 x1
-  // components now: Pump A (2 pcs, cost 100 + freight 10/unit), Tools set (1 x 30), Extra 1 (cost 0)
-  const expLot = Math.round(((110 * 2) + 30) * rate * 1.25 * 100) / 100;
-  console.log('17 package lot price suggested = sum of components at markup:', near(+trs[0].querySelector('.ln-price').value, expLot), +trs[0].querySelector('.ln-price').value, expLot);
-  // component qty change keeps price blank and freight follows (catalog rate)
-  fire(trs[1].querySelector('.ln-qty'), '4'); await wait(30);
-  const t1 = doc.querySelectorAll('#linesBody tr')[1];
-  console.log('18 changing component qty keeps its price at 0 and freight rate follows (4 x 10 = 40):', +t1.querySelector('.ln-price').value === 0 && near(+t1.querySelector('.ln-freight').value, 40));
-  // lot header: user types a price
-  const h = doc.querySelectorAll('#linesBody tr')[0];
-  fire(h.querySelector('.ln-price'), '50000'); await wait(20);
-  console.log('19 typing own lot price is kept and "Use that" offered:', +doc.querySelectorAll('#linesBody tr')[0].querySelector('.ln-price').value === 50000 && !!doc.querySelectorAll('#linesBody tr')[0].querySelector('.ln-use-lot'));
+  console.log('14 one click loads the 3 component lines only (no package line):', trs.length === 3, trs.length);
+  const names = () => [...doc.querySelectorAll('#linesBody tr')].map(t => t.querySelector('.ln-catalog-btn').textContent.trim()).join('|');
+  console.log('15 first line is ITEM-P-0001-01, then -03/-04 (after the earlier delete); ITEM-P-0001 itself is not a line:', names() === 'ITEM-P-0001-01|ITEM-P-0001-03|ITEM-P-0001-04', names());
+  const rate = +trs[0].querySelector('.ln-rate').value;
+  const priceAt = (i) => +doc.querySelectorAll('#linesBody tr')[i].querySelector('.ln-price').value;
+  // Pump A: landed (100 + 10)*rate*1.25 per unit; Tools set 30*rate*1.25; Extra 1 costs nothing -> blank
+  console.log('16 costed items are priced from cost + freight + markup; the zero-cost item is blank:', near(priceAt(0), Math.round(110 * rate * 1.25 * 100) / 100) && near(priceAt(1), Math.round(30 * rate * 1.25 * 100) / 100) && priceAt(2) === 0);
+  // component qty change keeps the calculated price following and freight follows (catalog rate)
+  fire(trs[0].querySelector('.ln-qty'), '4'); await wait(30);
+  const t1 = doc.querySelectorAll('#linesBody tr')[0];
+  console.log('17 changing Pump A qty to 4: freight follows the rate (4 x 10 = 40), unit price unchanged:', near(+t1.querySelector('.ln-freight').value, 40) && near(priceAt(0), Math.round(110 * rate * 1.25 * 100) / 100));
   // save + totals + GP
   fire(doc.getElementById('f_customerId'), String(custId), 'change');
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(180);
   const q = (await win.DB.dbGetAll('quotations'))[0];
   const qt = win.QuoteCalc.computeQuotationTotals(q);
-  console.log('20 quotation total = lot price only (components add nothing):', near(q.grandTotal, 50000), q.grandTotal);
-  const compCost = q.lines.slice(1).reduce((s, l) => s + win.QuoteCalc.computeLine(l, 'PHP').costTotal, 0);
-  console.log('21 gross profit = lot price minus ALL component costs & freight:', near(qt.grossProfit, 50000 - compCost) && compCost > 0, qt.grossProfit, 50000 - compCost);
-  console.log('22 saved lines keep their project roles:', q.lines[0].lotRole === 'header' && q.lines.slice(1).every(l => l.lotRole === 'component' && l.compNo));
+  const pumpPrice = Math.round(110 * rate * 1.25 * 100) / 100, toolPrice = Math.round(30 * rate * 1.25 * 100) / 100;
+  const expSub = Math.round((pumpPrice * 4 + toolPrice) * 100) / 100;
+  console.log('18 quotation total = Pump A x4 + Tools set:', q.lines.length === 3 && near(q.subtotal !== undefined ? q.subtotal : qt.subtotal, expSub), qt.subtotal, expSub);
+  const allCost = q.lines.reduce((s, l) => s + win.QuoteCalc.computeLine(l, 'PHP').costTotal, 0);
+  console.log('19 gross profit = total minus ALL item costs & freight:', near(qt.grossProfit, qt.subtotal - allCost) && allCost > 0, qt.grossProfit, qt.subtotal - allCost);
+  console.log('20 saved lines keep their package number and item numbers:', q.lines.every(l => l.compNo && l.lotRole !== 'header') && q.lines[2].lotRole === 'component');
 
   // print
   let printed = '';
@@ -143,12 +140,12 @@ async function main() {
   await win.Print.printQuotation(q, { companyName: 'KEYEC' });
   const prow = printed.split('<tr>').filter(r => /Pump A|Extra 1|Tools set|SHORR Project/.test(r));
   const cells = (r) => [...r.matchAll(/<td class="p-num">(.*?)<\/td>/g)].map(m => m[1]);
-  console.log('23 print: lot line shows 50,000.00; component lines show blank price + amount:', /50,000\.00/.test(cells(prow[0])[1]) && prow.slice(1).every(r => cells(r)[1] === '' && cells(r)[3] === ''), prow.length);
+  console.log('21 print: no package line; the zero-cost item prints blank price and amount:', prow.length === 3 && !/SHORR Project/.test(prow.join('')) && cells(prow[0])[1] !== '' && cells(prow[2])[1] === '' && cells(prow[2])[3] === '', prow.length);
 
-  // reopen quotation for edit: roles persist and header suggestion renders
+  // reopen quotation for edit
   await go('#/quotations/' + q.id + '/edit');
   const trs2 = [...doc.querySelectorAll('#linesBody tr')];
-  console.log('24 reopened: component rows show "Included in lot price", header shows "Lot margin":', /In lot price/.test(trs2[1].querySelector('.ln-price-flag').innerHTML) && /Lot margin/.test(trs2[0].querySelector('.ln-margin').textContent), trs2[0].querySelector('.ln-margin').textContent);
+  console.log('22 reopened: same three lines, "In lot price" on the blank one, project note shown:', trs2.length === 3 && /In lot price/.test(trs2[2].querySelector('.ln-price-flag').innerHTML) && /Project:\s*ITEM-P-0001/.test(doc.getElementById('pkgNote').textContent));
 
   // delete protection: package used by a quotation
   await go('#/products/' + pkg.id, 100);
