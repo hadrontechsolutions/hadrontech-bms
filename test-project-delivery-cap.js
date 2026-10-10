@@ -1,0 +1,50 @@
+/* Project Package items are not stock items: Record Delivery may only deliver what the Supplier PO has received. */
+const fs = require('fs'); const path = require('path');
+const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
+const APP = __dirname;
+(async () => {
+  const html = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
+  const win = dom.window; const doc = win.document;
+  win.indexedDB = global.indexedDB; win.IDBKeyRange = global.IDBKeyRange; win.confirm = () => true; win.alert = () => {};
+  const errors = []; win.addEventListener('error', e => errors.push(e.message)); win.console.error = (...a) => errors.push(a.join(' '));
+  for (const src of [...doc.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js')) win.eval(fs.readFileSync(path.join(APP, src), 'utf8'));
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const ok = (n, c, x) => console.log(n + ':', !!c, c ? '' : (x === undefined ? '' : x));
+  const toasts = []; const ot = win.toast; win.toast = (m, t) => { toasts.push((t || 'ok') + ': ' + m); return ot && ot(m, t); };
+  await win.DB.openDB(); await win.DB.ensureCounters();
+  const now = new Date().toISOString();
+  const sup = await win.DB.dbAdd('suppliers', { supplierNo: 'S1', companyName: 'Sup', currency: 'PHP', status: 'Active', createdAt: now });
+  const cust = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'Cust', status: 'Active', createdAt: now });
+  const L = (id, n, q) => ({ lineId: id, itemId: '', compNo: 'ITEM-P-0001-0' + n, description: 'Comp ' + n, qty: q, uom: 'pc', unitCost: 10, unitPrice: 20, discountPercent: 0, vatRate: 0, supplierId: sup, deliveredQty: 0 });
+  const soId = await win.DB.dbAdd('salesOrders', { soNo: 'SO-T1', customerId: cust, status: 'Ordered from Supplier', currency: 'PHP', lines: [L('A', 1, 3), L('B', 2, 1)], grandTotal: 80, createdAt: now });
+  const mk = (id, q, r) => ({ lineId: id, itemId: '', compNo: 'x', description: 'd', qty: q, uom: 'pc', unitCost: 10, amount: q * 10, receivedQty: r });
+  const spoId = await win.DB.dbAdd('supplierPOs', { poNo: 'PO-T1', supplierId: sup, salesOrderId: soId, status: 'Partially Received', currency: 'PHP', lineIds: ['A', 'B'], lines: [mk('A', 3, 2), mk('B', 1, 0)], totalCost: 40, payments: [], createdAt: now });
+  const go = async (h) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(200); };
+  await go('#/sales-orders/' + soId);
+  doc.getElementById('btnRecordDelivery').click(); await wait(150);
+  const inputs = [...doc.querySelectorAll('.deliv-qty')];
+  ok('1 line A (2 of 3 received) is capped at 2', inputs[0] && inputs[0].max === '2' && inputs[0].value === '2', inputs[0] && inputs[0].max);
+  ok('2 line B (not received) is capped at 0', inputs[1] && inputs[1].max === '0' && inputs[1].value === '0');
+  const t = doc.getElementById('content').textContent;
+  ok('3 notes explain why ("Only 2 received so far", "Not received yet")', /Only 2 received so far/.test(t) && /Not received yet/.test(t));
+  // force an over-delivery past the input cap
+  inputs[0].value = '3'; inputs[1].value = '1';
+  doc.getElementById('btnConfirmDeliver').click(); await wait(250);
+  let so = await win.DB.dbGet('salesOrders', soId);
+  ok('4 over-delivery is refused; nothing saved', so.lines.every(l => !l.deliveredQty) && toasts.slice(-1)[0].startsWith('err') && /received from the supplier so far/.test(toasts.slice(-1)[0]), toasts.slice(-1)[0]);
+  inputs[0].value = '2'; inputs[1].value = '0';
+  doc.getElementById('btnConfirmDeliver').click(); await wait(250);
+  so = await win.DB.dbGet('salesOrders', soId);
+  ok('5 delivering what was received works; A = 2, B = 0; status Partially Delivered', so.lines[0].deliveredQty === 2 && !so.lines[1].deliveredQty && so.status === 'Partially Delivered', JSON.stringify(so.lines.map(l => l.deliveredQty)) + so.status);
+  // receive the rest, deliver the rest
+  const spo = await win.DB.dbGet('supplierPOs', spoId); spo.lines[0].receivedQty = 3; spo.lines[1].receivedQty = 1; spo.status = 'Received'; await win.DB.dbPut('supplierPOs', spo);
+  await go('#/sales-orders/' + soId);
+  doc.getElementById('btnRecordDelivery').click(); await wait(150);
+  const i2 = [...doc.querySelectorAll('.deliv-qty')];
+  ok('6 after the rest is received: A remaining 1, B remaining 1 offered', i2.length === 2 && i2[0].value === '1' && i2[1].value === '1', i2.map(i => i.value).join(','));
+  doc.getElementById('btnConfirmDeliver').click(); await wait(250);
+  so = await win.DB.dbGet('salesOrders', soId);
+  ok('7 fully delivered -> Delivered', so.status === 'Delivered' && so.lines.every(l => l.deliveredQty === l.qty), so.status);
+  ok('8 no JS errors', errors.length === 0, errors.join('|'));
+})().catch(e => { console.log('TEST FAILED', e); process.exit(1); });

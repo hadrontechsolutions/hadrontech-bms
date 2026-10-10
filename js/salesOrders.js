@@ -382,6 +382,17 @@ async function renderSODetail(id) {
 
 /* ---------- RECORD DELIVERY ---------- */
 
+/** Project Package items aren't kept in stock, so "what can be delivered" is what the Supplier POs have actually received
+    minus what has already gone out. Same idea as the On Hand cap for catalog items. */
+async function projectAvailableByLine(so) {
+  const spos = await DB.dbQueryIndex('supplierPOs', 'salesOrderId', so.id);
+  const recv = soReceiving(so, spos);
+  const out = {};
+  (so.lines || []).filter(l => l.compNo).forEach(l => {
+    out[l.lineId] = Math.max(0, r2(((recv.perLine[l.lineId] || {}).received || 0) - (l.deliveredQty || 0)));
+  });
+  return out;
+}
 async function renderRecordDeliveryForm(so, id) {
   const host = document.getElementById('recordDeliveryHost');
   const deliverableLines = (so.lines || []).filter(l => (l.deliveredQty || 0) < l.qty);
@@ -395,6 +406,7 @@ async function renderRecordDeliveryForm(so, id) {
     const movements = await DB.dbQueryIndex('stockMovements', 'productId', Number(productId));
     return r2(movements.reduce((s, m) => s + m.qty, 0));
   };
+  const projAvail = await projectAvailableByLine(so);
   const onHandByLine = {};
   for (const l of deliverableLines) {
     if (l.itemId && !l.compNo) onHandByLine[l.lineId] = await getOnHand(l.itemId);
@@ -409,9 +421,11 @@ async function renderRecordDeliveryForm(so, id) {
           ${deliverableLines.map(l => {
             const remaining = r2(l.qty - (l.deliveredQty || 0));
             const onHand = (l.itemId && !l.compNo) ? (onHandByLine[l.lineId] ?? 0) : null;
-            const cap = onHand === null ? remaining : Math.min(remaining, Math.max(onHand, 0));
+            const pAvail = l.compNo ? (projAvail[l.lineId] ?? 0) : null;
+            const cap = l.compNo ? Math.min(remaining, pAvail) : (onHand === null ? remaining : Math.min(remaining, Math.max(onHand, 0)));
             const stockNote = onHand !== null && onHand < remaining
-              ? `<br><span class="cell-needs-input">Only ${onHand} in stock — receive more from the supplier first</span>` : '';
+              ? `<br><span class="cell-needs-input">Only ${onHand} in stock — receive more from the supplier first</span>`
+              : (l.compNo && pAvail < remaining ? `<br><span class="cell-needs-input">${pAvail > 0 ? `Only ${pAvail} received so far` : 'Not received yet'} — receive it on the Supplier PO first</span>` : '');
             return `<tr data-lineid="${l.lineId}" data-onhand="${onHand === null ? '' : onHand}">
               <td class="desc-col">${descClip(l.description, (l.compNo ? '<span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? '<span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')) + stockNote)}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
@@ -434,6 +448,7 @@ async function renderRecordDeliveryForm(so, id) {
     const settings = await DB.getSettings();
     const now = new Date().toISOString();
     let anyDelivered = false;
+    const projAvailNow = await projectAvailableByLine(so);
 
     for (const row of rows) {
       const lineId = row.dataset.lineid;
@@ -443,6 +458,11 @@ async function renderRecordDeliveryForm(so, id) {
       if (!line) continue;
       const remaining = r2(line.qty - (line.deliveredQty || 0));
       if (qtyNow > remaining) { toast(`Cannot deliver more than the remaining ${remaining} for "${line.description}".`, 'err'); return; }
+
+      if (line.compNo && qtyNow > (projAvailNow[line.lineId] ?? 0)) {
+        toast(`Cannot deliver ${qtyNow} of "${line.description}" — only ${projAvailNow[line.lineId] ?? 0} received from the supplier so far. Receive it on the Supplier PO first, or reduce the quantity.`, 'err');
+        return;
+      }
 
       if (line.itemId && !line.compNo) {
         const currentOnHand = await getOnHand(line.itemId);
