@@ -331,7 +331,6 @@ async function renderSODetail(id) {
     renderRecordDeliveryForm(so, id);
   };
   document.getElementById('btnEditDetails').onclick = () => renderSOHeaderEdit(so);
-  if (/[?&]deliver=1/.test(window.location.hash)) { const bd = document.getElementById('btnRecordDelivery'); if (bd && !bd.disabled) setTimeout(() => bd.click(), 0); }
   content.querySelectorAll('.ln-assign-supplier').forEach(sel => sel.addEventListener('change', async (e) => {
     const line = so.lines.find(l => l.lineId === e.target.dataset.lineid);
     if (!line) return;

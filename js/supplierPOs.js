@@ -151,11 +151,6 @@ async function renderSPODetail(id) {
   const showReceiveMismatch = po.status === 'Received' && unreceivedLines.length > 0;
   const allReceivedPO = (po.lines || []).length > 0 && unreceivedLines.length === 0;
   const paidInFullPO = (po.totalCost || 0) > 0 && spoBalanceDue(po) <= 0;
-  const anyReceivedPO = (po.lines || []).some(l => (l.receivedQty || 0) > 0);
-  const soNeedsDelivery = !!salesOrder && salesOrder.status !== 'Cancelled' && (salesOrder.lines || []).some(l => (l.deliveredQty || 0) < l.qty);
-  const deliverLinkHTML = salesOrder && anyReceivedPO && soNeedsDelivery
-    ? `<a class="btn-amber" href="#/sales-orders/${salesOrder.id}?deliver=1" title="Delivery to the customer is recorded on the Sales Order ${escapeHtml(salesOrder.soNo)}">Deliver to Customer →</a>`
-    : (salesOrder && anyReceivedPO && !soNeedsDelivery && salesOrder.status !== 'Cancelled' ? `<a class="btn-done" href="#/sales-orders/${salesOrder.id}" title="Everything on ${escapeHtml(salesOrder.soNo)} has been delivered">✓ Delivered to Customer</a>` : '');
   const headerBadge = showReceiveMismatch ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
 
   content.innerHTML = `
@@ -164,7 +159,6 @@ async function renderSPODetail(id) {
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         ${allReceivedPO ? `<button class="btn-done" id="btnReceiveStock" disabled title="Every item on this PO has been received">✓ All Received</button>` : `<button class="btn-amber" id="btnReceiveStock" ${po.status === 'Cancelled' ? 'disabled title="This PO is cancelled"' : ''}>Receive Stock</button>`}
-        ${deliverLinkHTML}
         ${paidInFullPO ? `<button class="btn-done" id="btnRecordPaymentSPO" disabled title="Nothing left to pay">✓ Paid in Full</button>` : `<button class="btn-amber" id="btnRecordPaymentSPO">Record Payment</button>`}
         <button class="btn-line" id="btnEditHeader">Edit / Revise PO</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
