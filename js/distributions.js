@@ -125,7 +125,7 @@ async function renderDistributionsList() {
     <div class="page-head">
       <h1>Distributions</h1>
       <div class="page-actions">
-        <a href="#/partners" class="btn-line">Manage Partners</a>
+        <a href="#/partners" class="btn-line">Manage Partners &amp; Employees</a>
         <button class="btn-amber" id="btnNewDist">+ New Distribution</button>
       </div>
     </div>
@@ -168,6 +168,9 @@ async function renderDistributionDetail(id) {
   if (!dist) { content.innerHTML = `<div class="empty-state"><h3>Distribution not found</h3></div>`; return; }
   Router.setBreadcrumb([{ label: 'Distributions', hash: '/distributions' }, { label: dist.distributionNo }]);
   const exceeds = dist.distributableAmount > (dist.cashReceivedInMonth || 0);
+  const peopleById = {}; (await DB.dbGetAll('partners')).forEach(p => { peopleById[String(p.id)] = p; });
+  // The person's CURRENT type wins (so switching someone to Employee protects their old payslips too), then the saved snapshot.
+  const isEmployeeSplit = (s) => ((peopleById[String(s.partnerId)] || {}).partnerType || s.partnerType) === 'Employee';
 
   content.innerHTML = `
     <div class="page-head">
@@ -197,17 +200,17 @@ async function renderDistributionDetail(id) {
     <div class="card">
       <h3 class="section-title">Partner Splits &amp; Payslips</h3>
       <table class="data-table compact">
-        <thead><tr><th>Partner</th><th>Percent</th><th>Share</th><th>Advances / Adjustments</th><th>Net Pay</th><th>Paid</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Percent</th><th>Share</th><th>Advances / Adjustments</th><th>Net Pay</th><th>Paid</th><th></th></tr></thead>
         <tbody>${(dist.splits || []).map((s, i) => {
           const adj = splitAdjustments(s).reduce((t, a) => t + (a.kind === 'add' ? 1 : -1) * (Number(a.amount) || 0), 0);
-          return `<tr><td>${escapeHtml(s.partnerName)}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td>
+          return `<tr><td>${escapeHtml(s.partnerName)}${isEmployeeSplit(s) ? ' <span class="badge badge-info">Employee</span>' : ''}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td>
             <td>${adj ? (adj > 0 ? '+' : '-') + formatMoney(Math.abs(adj), 'PHP') : '—'}</td>
             <td><b>${formatMoney(splitNetPay(s), 'PHP')}</b></td>
             <td>${s.paidDate ? `<span class="badge badge-paid">Paid ${formatDate(s.paidDate)}</span>` : '<span class="badge badge-pending">Unpaid</span>'}</td>
             <td style="white-space:nowrap;"><button class="btn-line btn-sm" data-slip-edit="${i}">Payslip details</button> <button class="btn-amber btn-sm" data-slip-print="${i}">Print Payslip</button></td></tr>`;
         }).join('')}</tbody>
       </table>
-      <p class="muted-text" style="margin-top:8px;">Each payslip shows only that partner's own share and the month's business totals.</p>
+      <p class="muted-text" style="margin-top:8px;">A partner's payslip shows their own share and the month's business totals. An employee's payslip shows only their own earnings.</p>
     </div>
     <div id="slipHost"></div>
 
@@ -313,7 +316,7 @@ async function renderDistributionForm(record) {
   // originally saved with (its own snapshot), not today's Partners list, so past history never
   // silently shifts if partners or their defaults change later.
   let splits = isNew
-    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, partnerRole: p.role || '', percent: p.defaultSplitPercent ?? 0 }))
+    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, partnerRole: p.role || '', partnerType: p.partnerType || '', percent: p.defaultSplitPercent ?? 0 }))
     : (record.splits || []).map(s => ({ ...s }));
 
   const defaultMonth = record?.month || todayISO().slice(0, 7);
@@ -350,8 +353,8 @@ async function renderDistributionForm(record) {
           <tbody id="splitsBody"></tbody>
         </table>
         <div id="splitTotalWarning" class="muted-text" style="margin-top:8px;"></div>
-        <button type="button" class="btn-line btn-sm" id="btnAddSplit" style="margin-top:10px;">+ Add Partner</button>
-        ${partners.length === 0 ? `<p class="muted-text" style="margin-top:8px;">No partners set up yet — <a href="#/partners/new">add one first</a>, or add a one-off row above.</p>` : ''}
+        <button type="button" class="btn-line btn-sm" id="btnAddSplit" style="margin-top:10px;">+ Add Partner / Employee</button>
+        ${partners.length === 0 ? `<p class="muted-text" style="margin-top:8px;">No partners or employees set up yet — <a href="#/partners/new">add one first</a>, or add a one-off row above.</p>` : ''}
       </div>
 
       <div class="field" style="margin: 0 0 14px;">
@@ -501,7 +504,7 @@ async function renderDistributionForm(record) {
         splits: (() => {
           let nextSeq = Math.max(0, ...computed.splits.map(x => Number(x.slipSeq) || 0)) + 1;
           return computed.splits.map(s => {
-            const out = { partnerId: s.partnerId, partnerName: s.partnerName, partnerRole: s.partnerRole || '', percent: Number(s.percent) || 0, amount: s.amount,
+            const out = { partnerId: s.partnerId, partnerName: s.partnerName, partnerRole: s.partnerRole || '', partnerType: s.partnerType || '', percent: Number(s.percent) || 0, amount: s.amount,
               slipSeq: s.slipSeq || nextSeq++, adjustments: splitAdjustments(s), paidDate: s.paidDate || '', paidMethod: s.paidMethod || '', paidReference: s.paidReference || '' };
             out.netPay = splitNetPay(out);
             return out;

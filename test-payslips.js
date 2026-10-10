@@ -65,5 +65,35 @@ async function main() {
   doc.querySelector('[data-slip-print]').click(); await wait(200);
   ok('14 older distribution prints a payslip numbered -01 with net pay ₱1,000.00', /HT-DIST-OLD-01/.test(printed) && /₱1,000\.00/.test(printed) && !/NaN|undefined/.test(printed));
   await go('#/distributions', 150); ok('15 list still opens', /Distributions/.test(doc.getElementById('content').textContent));
+
+  // ===== Employees get a limited payslip =====
+  await go('#/partners'); const ptxt = doc.getElementById('content').textContent;
+  ok('20 Partners page is now "Partners & Employees" with a Type column', /Partners & Employees/.test(ptxt) && /Type/.test(ptxt) && /Position/.test(ptxt));
+  await go('#/partners/new'); ok('21 partner form has a Type choice (Partner / Employee) and Position / Role', !!doc.getElementById('f_partnerType') && [...doc.getElementById('f_partnerType').options].map(o => o.value).join() === 'Partner,Employee');
+  fire(doc.getElementById('f_name'), 'Willie Sicat'); fire(doc.getElementById('f_partnerType'), 'Employee', 'change'); fire(doc.getElementById('f_role'), 'Business Development Manager'); fire(doc.getElementById('f_defaultSplitPercent'), '10');
+  doc.getElementById('entityForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(200);
+  const willie = (await win.DB.dbGetAll('partners')).find(p => p.name === 'Willie Sicat');
+  ok('22 employee saved with type Employee', willie && willie.partnerType === 'Employee');
+  await go('#/distributions'); ok('23 Distributions button reads "Manage Partners & Employees"', /Manage Partners & Employees/.test(doc.getElementById('content').textContent) || !!([...doc.querySelectorAll('a')].find(a => /Manage Partners/.test(a.textContent) && /Employees/.test(a.textContent))));
+  await go('#/distributions/new');
+  fire(doc.getElementById('f_grossProfit'), '7021.15'); fire(doc.getElementById('f_expenses'), '1457.15'); fire(doc.getElementById('f_reservePercent'), '0');
+  doc.getElementById('distForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(250);
+  const d2 = (await win.DB.dbGetAll('distributions')).find(d => d.id !== dist.id && d.splits.some(s => s.partnerName === 'Willie Sicat'));
+  const wi = d2.splits.findIndex(s => s.partnerName === 'Willie Sicat');
+  await go('#/distributions/' + d2.id, 150);
+  ok('24 the Distribution page tags him as Employee', /Employee/.test(doc.getElementById('content').textContent));
+  doc.querySelectorAll('[data-slip-print]')[wi].click(); await wait(200); if (process.env.DUMP2) fs.writeFileSync(process.env.DUMP2, printed);
+  ok('25 employee payslip: name, position, Employee label, earnings and Net Pay ₱556.40', /Willie Sicat/.test(printed) && /Business Development Manager/.test(printed) && />Employee</.test(printed) && /Incentive for/.test(printed) && /₱556\.40/.test(printed), printed.slice(0, 40));
+  ok('26 employee payslip hides every business figure: no Gross/Net Profit, Expenses, Reserve, Distributable, share %', !/Gross Profit|Net Profit|Operating Expenses|Business Reserve|Distributable|Profit share|7,021|1,457|5,564|10%/.test(printed), (printed.match(/Gross Profit|Net Profit|Operating Expenses|Business Reserve|Distributable|Profit share|7,021|1,457|5,564|10%/g) || []).join());
+  ok('27 and does not call itself a partner payslip / profit distribution', !/partner's share/.test(printed) && /confidential statement of your earnings/.test(printed));
+  const gi = d2.splits.findIndex(s => s.partnerName === 'Gian');
+  doc.querySelectorAll('[data-slip-print]')[gi].click(); await wait(200);
+  ok('28 a partner payslip on the same distribution still shows the business results', /Gross Profit/.test(printed) && /Distributable Amount/.test(printed) && !/Willie/.test(printed));
+  doc.getElementById('btnPrintAllSlips').click(); await wait(200);
+  ok('29 Print All mixes both kinds correctly (business results appear for partners only)', (printed.match(/Gross Profit/g) || []).length === d2.splits.filter(s => s.partnerName !== 'Willie Sicat').length && /Incentive for/.test(printed));
+  // switching an existing person to Employee protects their older payslips too
+  const wife = (await win.DB.dbGetAll('partners')).find(p => p.name === 'Wife'); wife.partnerType = 'Employee'; await win.DB.dbPut('partners', wife);
+  await go('#/distributions/' + dist.id, 150); doc.querySelectorAll('[data-slip-print]')[0].click(); await wait(200);
+  ok('30 switching someone to Employee also limits their older payslips', !/Gross Profit|Distributable/.test(printed) && /Incentive for/.test(printed));
 }
 main().catch(e => { console.log('TEST FAILED', e); process.exit(1); });

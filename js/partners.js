@@ -1,7 +1,7 @@
 /* ============================================================
    partners.js — People who share in the business's distributable
-   profit (family partners today, could include actual employees
-   later). Uses the shared generic entity engine since this is a
+   profit: partners (family) and employees (Type field; an Employee's
+   payslip shows only their own earnings, never the business totals). Uses the shared generic entity engine since this is a
    straightforward reusable list: name + a default split %, so a
    Distribution doesn't require retyping the same people and
    percentages every time.
@@ -14,8 +14,8 @@
 
 Entities.defineEntity({
   key: 'partners',
-  label: 'Partner',
-  labelPlural: 'Partners',
+  label: 'Partner / Employee',
+  labelPlural: 'Partners & Employees',
   numberField: 'partnerNo',
   counterName: 'partner',
   titleField: 'name',
@@ -23,14 +23,16 @@ Entities.defineEntity({
   searchFields: ['name', 'role'],
   listColumns: [
     { key: 'name', label: 'Name' },
-    { key: 'role', label: 'Role' },
+    { key: 'partnerType', label: 'Type', render: r => escapeHtml(r.partnerType || 'Partner') },
+    { key: 'role', label: 'Position / Role' },
     { key: 'defaultSplitPercent', label: 'Default Split %', render: r => `${r.defaultSplitPercent ?? 0}%` },
     { key: 'status', label: 'Status', render: r => statusBadge(r.status) }
   ],
   fields: [
     { name: 'name', label: 'Name', type: 'text', required: true },
-    { name: 'role', label: 'Role', type: 'text' },
-    { name: 'defaultSplitPercent', label: 'Default Split %', type: 'number' },
+    { name: 'partnerType', label: 'Type (an Employee\'s payslip hides the business totals)', type: 'select', options: ['Partner', 'Employee'] },
+    { name: 'role', label: 'Position / Role', type: 'text' },
+    { name: 'defaultSplitPercent', label: 'Default Share %', type: 'number' },
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ]
 });

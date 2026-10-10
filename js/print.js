@@ -31,7 +31,7 @@ function printShell(title, bodyHTML) {
     .p-foot{margin-top:30px; padding-top:10px; border-top:1px solid #e2e6ec; font-size:9px; color:#999; text-align:center;}
     @media print { .no-print{display:none;} }
   </style></head><body>${bodyHTML}
-  <div class="no-print" style="margin-top:24px;"><button onclick="window.print()">Print</button></div>
+  <div class="no-print" style="margin-top:24px; display:flex; gap:10px;"><button onclick="window.print()" style="background:#a85f04; color:#fff; border:0; border-radius:6px; padding:10px 26px; font:700 14px Arial,Helvetica,sans-serif; cursor:pointer;">🖨 Print</button><button onclick="window.close()" style="background:#fff; color:#1c2430; border:1px solid #c9d0da; border-radius:6px; padding:10px 22px; font:600 14px Arial,Helvetica,sans-serif; cursor:pointer;">Close</button></div>
   </body></html>`);
   win.document.close();
 }
@@ -285,33 +285,45 @@ async function printPayslips(dist, onlyIdx) {
   const idxs = onlyIdx === null || onlyIdx === undefined ? (dist.splits || []).map((_, i) => i) : [onlyIdx];
   const pages = idxs.map((i, n) => {
     const s = dist.splits[i];
-    const role = s.partnerRole || (partners.find(p => String(p.id) === String(s.partnerId)) || {}).role || '';
+    const person = partners.find(p => String(p.id) === String(s.partnerId)) || {};
+    const role = s.partnerRole || person.role || '';
+    // Employees see only their own earnings -- never the business's profit figures or the share %. Partners see the full picture.
+    const isEmployee = (person.partnerType || s.partnerType) === 'Employee';
     const adj = D.splitAdjustments(s);
     const net = D.splitNetPay(s);
     const adjRows = adj.map(a => `<tr><td>${escapeHtml(a.label)}</td><td class="p-num">${a.kind === 'add' ? '+' : '−'} ${m(a.amount)}</td></tr>`).join('');
     const paid = s.paidDate ? `Paid on ${formatDate(s.paidDate)}${s.paidMethod ? ' via ' + escapeHtml(s.paidMethod) : ''}${s.paidReference ? ' — Ref: ' + escapeHtml(s.paidReference) : ''}` : 'Not yet paid';
-    return `<div style="${n < idxs.length - 1 ? 'page-break-after:always;' : ''}">
-      <div class="p-head">${coBlock(settings)}
-        <div><div class="p-doc-title">Payslip</div><div class="p-doc-no">${escapeHtml(D.slipNumber(dist, s, i))}</div>
-        <div class="p-dates">Pay Period: ${escapeHtml(D.monthLabel(dist.month))}<br>${s.paidDate ? 'Date Paid: ' + formatDate(s.paidDate) : 'Date Paid: —'}</div></div>
-      </div>
-      <div class="p-grid2">
-        <div><div class="p-label">Partner</div><b style="font-size:15px;">${escapeHtml(s.partnerName)}</b>${role ? `<br><span style="font-size:11px;color:#666;">${escapeHtml(role)}</span>` : ''}</div>
-        <div><div class="p-label">Profit Share</div><div style="font-size:11px;">Share: <b>${Number(s.percent) || 0}%</b> of the Distributable Amount<br>Distribution: ${escapeHtml(dist.distributionNo)}${dist.reference ? '<br>' + escapeHtml(dist.reference) : ''}</div></div>
-      </div>
+    const businessBlock = isEmployee ? '' : `
       <table class="p-items"><thead><tr><th>Business Results — ${escapeHtml(D.monthLabel(dist.month))}</th><th style="text-align:right;">Amount</th></tr></thead><tbody>
         <tr><td>Gross Profit</td><td class="p-num">${m(dist.grossProfitTotal)}</td></tr>
         <tr><td>Less: Operating Expenses</td><td class="p-num">− ${m(dist.expensesTotal)}</td></tr>
         <tr><td><b>Net Profit</b></td><td class="p-num"><b>${m(dist.netProfit)}</b></td></tr>
         <tr><td>Less: Business Reserve (${Number(dist.reservePercent) || 0}%)</td><td class="p-num">− ${m(dist.reserveAmount)}</td></tr>
         <tr><td><b>Distributable Amount</b></td><td class="p-num"><b>${m(dist.distributableAmount)}</b></td></tr>
-      </tbody></table>
-      <table class="p-items"><thead><tr><th>Your Share</th><th style="text-align:right;">Amount</th></tr></thead><tbody>
-        <tr><td>Profit share (${Number(s.percent) || 0}% of ${m(dist.distributableAmount)})</td><td class="p-num">${m(s.amount)}</td></tr>
+      </tbody></table>`;
+    const shareLabel = isEmployee ? `Incentive for ${escapeHtml(D.monthLabel(dist.month))}` : `Profit share (${Number(s.percent) || 0}% of ${m(dist.distributableAmount)})`;
+    const rightBlock = isEmployee
+      ? `<div><div class="p-label">Payment</div><div style="font-size:11px;">${s.paidDate ? 'Paid ' + formatDate(s.paidDate) + (s.paidMethod ? ' via ' + escapeHtml(s.paidMethod) : '') : 'Not yet paid'}${s.paidReference ? '<br>Ref: ' + escapeHtml(s.paidReference) : ''}</div></div>`
+      : `<div><div class="p-label">Profit Share</div><div style="font-size:11px;">Share: <b>${Number(s.percent) || 0}%</b> of the Distributable Amount<br>Distribution: ${escapeHtml(dist.distributionNo)}${dist.reference ? '<br>' + escapeHtml(dist.reference) : ''}</div></div>`;
+    const footNote = isEmployee
+      ? 'This payslip is a confidential statement of your earnings for the period above.'
+      : "This payslip is a statement of the partner's share of the business profit distributed for the period above. It is not a payroll payslip.";
+    return `<div style="${n < idxs.length - 1 ? 'page-break-after:always;' : ''}">
+      <div class="p-head">${coBlock(settings)}
+        <div><div class="p-doc-title">Payslip</div><div class="p-doc-no">${escapeHtml(D.slipNumber(dist, s, i))}</div>
+        <div class="p-dates">Pay Period: ${escapeHtml(D.monthLabel(dist.month))}<br>${s.paidDate ? 'Date Paid: ' + formatDate(s.paidDate) : 'Date Paid: —'}</div></div>
+      </div>
+      <div class="p-grid2">
+        <div><div class="p-label">${isEmployee ? 'Employee' : 'Partner'}</div><b style="font-size:15px;">${escapeHtml(s.partnerName)}</b>${role ? `<br><span style="font-size:11px;color:#666;">${escapeHtml(role)}</span>` : ''}</div>
+        ${rightBlock}
+      </div>
+      ${businessBlock}
+      <table class="p-items"><thead><tr><th>${isEmployee ? 'Earnings' : 'Your Share'}</th><th style="text-align:right;">Amount</th></tr></thead><tbody>
+        <tr><td>${shareLabel}</td><td class="p-num">${m(s.amount)}</td></tr>
         ${adjRows}
       </tbody></table>
       <div class="p-totals"><div class="ln grand"><span>Net Pay</span><span>${m(net)}</span></div></div>
-      <div class="p-terms">Payment: ${paid}\nThis payslip is a statement of the partner's share of the business profit distributed for the period above. It is not a payroll payslip.</div>
+      <div class="p-terms">Payment: ${paid}\n${footNote}</div>
       <div class="p-sign">${signatureBlockHTML(settings, 'Released by')}<div class="box">${escapeHtml(s.partnerName)}<br>Received by (signature / date)</div></div>
       <div class="p-foot">${escapeHtml(settings.companyName)} · System-generated document · Confidential</div>
     </div>`;
