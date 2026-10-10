@@ -330,7 +330,7 @@ async function renderRecordDeliveryForm(so, id) {
   };
   const onHandByLine = {};
   for (const l of deliverableLines) {
-    if (l.itemId) onHandByLine[l.lineId] = await getOnHand(l.itemId);
+    if (l.itemId && !l.compNo) onHandByLine[l.lineId] = await getOnHand(l.itemId);
   }
   host.innerHTML = `
     <div class="card">
@@ -341,12 +341,12 @@ async function renderRecordDeliveryForm(so, id) {
         <tbody>
           ${deliverableLines.map(l => {
             const remaining = r2(l.qty - (l.deliveredQty || 0));
-            const onHand = l.itemId ? (onHandByLine[l.lineId] ?? 0) : null;
+            const onHand = (l.itemId && !l.compNo) ? (onHandByLine[l.lineId] ?? 0) : null;
             const cap = onHand === null ? remaining : Math.min(remaining, Math.max(onHand, 0));
             const stockNote = onHand !== null && onHand < remaining
               ? `<br><span class="cell-needs-input">Only ${onHand} in stock — receive more from the supplier first</span>` : '';
             return `<tr data-lineid="${l.lineId}" data-onhand="${onHand === null ? '' : onHand}">
-              <td>${escapeHtml(l.description)}${!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : ''}${stockNote}</td>
+              <td>${escapeHtml(l.description)}${l.compNo ? ' <span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')}${stockNote}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
               <td>${l.deliveredQty || 0} ${escapeHtml(l.uom)}</td>
               <td><input type="number" min="0" max="${cap}" step="any" class="deliv-qty" value="${cap}" style="width:90px;"></td>
@@ -377,7 +377,7 @@ async function renderRecordDeliveryForm(so, id) {
       const remaining = r2(line.qty - (line.deliveredQty || 0));
       if (qtyNow > remaining) { toast(`Cannot deliver more than the remaining ${remaining} for "${line.description}".`, 'err'); return; }
 
-      if (line.itemId) {
+      if (line.itemId && !line.compNo) {
         const currentOnHand = await getOnHand(line.itemId);
         if (qtyNow > currentOnHand) {
           toast(`Cannot deliver ${qtyNow} of "${line.description}" — only ${currentOnHand} actually in stock. Receive the supplier order first, or reduce the quantity.`, 'err');
@@ -388,7 +388,7 @@ async function renderRecordDeliveryForm(so, id) {
       line.deliveredQty = r2((line.deliveredQty || 0) + qtyNow);
       anyDelivered = true;
 
-      if (line.itemId) {
+      if (line.itemId && !line.compNo) {
         await DB.dbAdd('stockMovements', {
           productId: Number(line.itemId), type: 'Delivery', qty: -qtyNow, date: todayISO(),
           reference: `Sales Order ${so.soNo}`, referenceId: so.id, referenceLineId: lineId,

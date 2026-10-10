@@ -41,7 +41,7 @@ async function createFromSalesOrder(so, supplierId, lines) {
   const customerPO = so.customerPOId ? await DB.dbGet('customerPOs', so.customerPOId) : null;
   const now = new Date().toISOString();
   const poLines = lines.map(l => ({
-    lineId: l.lineId, itemId: l.itemId || '', description: l.description, brand: l.brand, modelNo: l.modelNo,
+    lineId: l.lineId, itemId: l.itemId || '', compNo: l.compNo || '', description: l.description, brand: l.brand, modelNo: l.modelNo,
     qty: l.qty, uom: l.uom, unitCost: l.unitCost, discountPercent: 0, receivedQty: 0,
     amount: r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0))
   }));
@@ -434,7 +434,7 @@ function renderReceiveStockForm(po, id) {
           ${receivableLines.map((l, i) => {
             const remaining = r2(l.qty - (l.receivedQty || 0));
             return `<tr data-lineid="${l.lineId}">
-              <td>${escapeHtml(l.description)}${!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : ''}</td>
+              <td>${escapeHtml(l.description)}${l.compNo ? ' <span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
               <td>${l.receivedQty || 0} ${escapeHtml(l.uom)}</td>
               <td><input type="number" min="0" max="${remaining}" step="any" class="recv-qty" value="${remaining}" style="width:90px;"></td>
@@ -468,7 +468,9 @@ function renderReceiveStockForm(po, id) {
       line.receivedQty = r2((line.receivedQty || 0) + qtyNow);
       anyReceived = true;
 
-      if (line.itemId) {
+      // Project Package items (compNo) are bought for that job and go straight through: they are not stock items,
+      // so nothing is posted to the package record's stock.
+      if (line.itemId && !line.compNo) {
         await DB.dbAdd('stockMovements', {
           productId: Number(line.itemId), type: 'Receipt', qty: qtyNow, date: todayISO(),
           reference: `Supplier PO ${po.poNo}`, referenceId: po.id, referenceLineId: lineId,

@@ -51,6 +51,7 @@ async function doSearch(q) {
   ].filter(s => s.rows.length > 0);
 
   const wrap = document.getElementById('searchResults');
+  if (!wrap) return;   // the person already moved to another page while this search was loading
   if (sections.length === 0) { wrap.innerHTML = `<div class="card"><div class="empty-inline">No matches for "${escapeHtml(q)}".</div></div>`; return; }
   wrap.innerHTML = sections.map(s => `
     <div class="card related-card">

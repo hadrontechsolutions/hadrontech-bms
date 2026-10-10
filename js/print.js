@@ -145,7 +145,8 @@ async function printSalesOrder(so, customer, customerPO, quotation) {
   const settings = await DB.getSettings();
   const rows = so.lines.map((l, i) => {
     const c = QuoteCalc.computeLine(l);
-    return `<tr><td>${i + 1}</td><td>${escapeHtml(l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, so.currency)}</td><td class="p-num">${formatMoney(c.net, so.currency)}</td></tr>`;
+    const noPrice = !Number(l.unitPrice);   // blank-price line (part of a lot): prints blank, like the quotation
+    return `<tr><td>${i + 1}</td><td>${escapeHtml(l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${noPrice ? '' : formatMoney(l.unitPrice, so.currency)}</td><td class="p-num">${noPrice ? '' : formatMoney(c.net, so.currency)}</td></tr>`;
   }).join('');
   const custPoNo = customerPO ? (customerPO.customerPoNumber || customerPO.poNo) : '';
   printShell(so.soNo, `
@@ -202,7 +203,8 @@ async function printProformaInvoice(pi, so, customer) {
   // numbers are frozen as of when it was generated, exactly what payment tracking is anchored to.
   const rows = (pi.lines || []).map((l, i) => {
     const c = QuoteCalc.computeLine(l);
-    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${formatMoney(l.unitPrice, pi.currency)}</td><td class="p-num">${formatMoney(c.net, pi.currency)}</td></tr>`;
+    const noPrice = !Number(l.unitPrice);   // blank-price line (part of a lot): prints blank, like the quotation
+    return `<tr><td>${i + 1}</td><td>${escapeHtml((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + l.description)}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${noPrice ? '' : formatMoney(l.unitPrice, pi.currency)}</td><td class="p-num">${noPrice ? '' : formatMoney(c.net, pi.currency)}</td></tr>`;
   }).join('');
 
   printShell(pi.piNo, `
