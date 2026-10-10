@@ -199,7 +199,7 @@ async function renderSPODetail(id) {
         <thead><tr><th>Description</th><th>Ordered Qty</th><th>Received Qty</th><th>Unit Cost</th><th>Amount</th></tr></thead>
         <tbody>${po.lines.map(l => {
           const receivedCell = (l.receivedQty || 0) >= l.qty
-            ? `${l.receivedQty || 0} ${escapeHtml(l.uom)} ✓`
+            ? `<span class="cell-ok">${l.receivedQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`
             : `<span class="cell-needs-input">${l.receivedQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
           return `<tr><td class="desc-col">${descClip(l.description, listingLinkHTML(listingUrls[l.itemId]))}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
         }).join('')}</tbody>
