@@ -75,9 +75,15 @@ async function main() {
   win.location.hash = '#/proforma-invoices/' + pi.id;
   await win.Router.resolveRoute();
   await wait(10);
+  { const b = doc.getElementById('btnRecordPayment'); console.log('STEP 12b: Fully paid invoice shows a disabled "Paid in Full" button:', b.disabled && /Paid in Full/.test(b.textContent)); }
+  // reopen the balance (drop the last payment) so the overpayment warning can still be exercised from the form
+  { const cur = await win.DB.dbGet('proformaInvoices', pi.id); cur.payments.pop(); await win.DB.dbPut('proformaInvoices', cur); }
+  win.location.hash = '#/proforma-invoices/' + pi.id + '?x=1';
+  await win.Router.resolveRoute();
+  await wait(10);
   doc.getElementById('btnRecordPayment').click();
   await wait(10);
-  doc.getElementById('pay_amount').value = '500';
+  doc.getElementById('pay_amount').value = '2980';
   let confirmMsg = '';
   win.confirm = (msg) => { confirmMsg = msg; return true; };
   doc.getElementById('btnConfirmPayment').click();

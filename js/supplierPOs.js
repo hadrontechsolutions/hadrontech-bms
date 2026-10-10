@@ -63,6 +63,7 @@ async function createFromSalesOrder(so, supplierId, lines) {
   const newId = await DB.dbAdd('supplierPOs', rec);
   await DB.logActivity(`Created supplier PO ${poNo} for ${supplier?.companyName || 'supplier'} from sales order ${so.soNo}`);
   toast('Supplier PO created.');
+  if (window.SalesOrders && window.SalesOrders.syncStatus) await window.SalesOrders.syncStatus(so.id);
   Router.navigate(`/supplier-pos/${newId}`);
 }
 
@@ -148,6 +149,8 @@ async function renderSPODetail(id) {
   const listingUrls = await listingUrlMap(po);
   const unreceivedLines = (po.lines || []).filter(l => (l.receivedQty || 0) < l.qty);
   const showReceiveMismatch = po.status === 'Received' && unreceivedLines.length > 0;
+  const allReceivedPO = (po.lines || []).length > 0 && unreceivedLines.length === 0;
+  const paidInFullPO = (po.totalCost || 0) > 0 && spoBalanceDue(po) <= 0;
   const headerBadge = showReceiveMismatch ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
 
   content.innerHTML = `
@@ -155,8 +158,8 @@ async function renderSPODetail(id) {
       <div><div class="doc-number-tag">${escapeHtml(po.poNo)}</div><h1>${escapeHtml(supplier?.companyName || '—')} ${headerBadge} ${statusBadge(spoPaymentStatus(po))}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
-        <button class="btn-amber" id="btnReceiveStock">Receive Stock</button>
-        <button class="btn-amber" id="btnRecordPaymentSPO">Record Payment</button>
+        ${allReceivedPO ? `<button class="btn-done" id="btnReceiveStock" disabled title="Every item on this PO has been received">✓ All Received</button>` : `<button class="btn-amber" id="btnReceiveStock" ${po.status === 'Cancelled' ? 'disabled title="This PO is cancelled"' : ''}>Receive Stock</button>`}
+        ${paidInFullPO ? `<button class="btn-done" id="btnRecordPaymentSPO" disabled title="Nothing left to pay">✓ Paid in Full</button>` : `<button class="btn-amber" id="btnRecordPaymentSPO">Record Payment</button>`}
         <button class="btn-line" id="btnEditHeader">Edit / Revise PO</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
@@ -491,6 +494,7 @@ function renderReceiveStockForm(po, id) {
     po.updatedAt = now; po.modifiedBy = settings.userName;
     await DB.dbPut('supplierPOs', po);
     await DB.logActivity(`Received stock against supplier PO ${po.poNo}`);
+    if (po.salesOrderId && window.SalesOrders && window.SalesOrders.syncStatus) await window.SalesOrders.syncStatus(po.salesOrderId);
     toast('Stock received.');
     renderSPODetail(id);
   };

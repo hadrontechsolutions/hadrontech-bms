@@ -71,7 +71,7 @@ async function renderPIDetail(id) {
       <div><div class="doc-number-tag">${escapeHtml(pi.piNo)}</div><h1>Proforma Invoice ${statusBadge(status)}</h1></div>
       <div class="page-actions">
         <button class="btn-line" id="btnPrintPI">Print</button>
-        <button class="btn-amber" id="btnRecordPayment">Record Payment</button>
+        ${(pi.grandTotal || 0) > 0 && balanceDue <= 0 ? `<button class="btn-done" id="btnRecordPayment" disabled title="Nothing left to pay">✓ Paid in Full</button>` : `<button class="btn-amber" id="btnRecordPayment">Record Payment</button>`}
         <button class="btn-danger" id="btnDeletePI">Delete</button>
       </div>
     </div>

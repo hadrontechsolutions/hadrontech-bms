@@ -139,9 +139,8 @@ async function main() {
   win.location.hash = '#/supplier-pos/' + spo.id;
   await win.Router.resolveRoute();
   await wait(10);
-  doc.getElementById('btnReceiveStock').click();
-  await wait(10);
-  console.log('STEP 20: Confirmed empty state message shown once nothing is left to receive:', doc.getElementById('content').textContent.includes('already been received'));
+  { const b = doc.getElementById('btnReceiveStock'); b.click(); await wait(10);
+  console.log('STEP 20: Once everything is received the Receive Stock button is disabled ("All Received") and opens nothing:', b.disabled && /All Received/.test(b.textContent) && !doc.getElementById('btnConfirmReceive')); }
 
   win.location.hash = '#/products/' + prodId;
   await win.Router.resolveRoute();

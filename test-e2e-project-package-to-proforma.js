@@ -137,6 +137,7 @@ async function main() {
   doc.querySelector('[data-create-spo]').click(); await wait(300);
   let spo = (await win.DB.dbGetAll('supplierPOs'))[0];
   ok('19 supplier PO created with all items for the supplier', spo && spo.supplierId == supId && spo.lines.length >= 7, spo && spo.lines.length);
+  { const soA = await win.DB.dbGet('salesOrders', so.id); ok('19b SO moved to Ordered from Supplier automatically', soA.status === 'Ordered from Supplier', soA.status); }
   const spoLineSum = spo.lines.reduce((s, l) => s + (l.amount || 0), 0);
   ok('20 PO total = line amounts + freight; freight from the dryer & drains (USD 120 + 24 PHP-rate lines)', near(spo.totalCost, r2(spoLineSum + (spo.freight || 0))) && spo.freight > 0, `${spo.totalCost} ${spoLineSum} ${spo.freight}`);
   ok('20b no line has NaN / negative amount', spo.lines.every(l => Number.isFinite(l.amount) && l.amount >= 0));
@@ -158,6 +159,19 @@ async function main() {
   spo = await win.DB.dbGet('supplierPOs', spo.id);
   const moves = await win.DB.dbGetAll('stockMovements');
   ok('23 receiving the PO marks every line received', spo.lines.every(l => l.receivedQty === l.qty), spo.status);
+  {
+    const soB = await win.DB.dbGet('salesOrders', so.id);
+    ok('23b receiving everything moves SO to Ready for Delivery', soB.status === 'Ready for Delivery', soB.status);
+    const rb = doc.getElementById('btnReceiveStock');
+    ok('23c Receive Stock button is disabled and says All Received', rb && rb.disabled && /All Received/.test(rb.textContent), rb && rb.textContent);
+    rb.click(); await wait(50);
+    ok('23d clicking the finished button opens nothing', !doc.getElementById('btnConfirmReceive'));
+    await go('#/sales-orders/' + so.id, 200);
+    const t = doc.getElementById('content').textContent;
+    ok('23e SO shows Received column, ready-to-deliver note and Next step', /Received/.test(t) && /ready to deliver/.test(t) && /Next step/i.test(t) && !/NaN|undefined/.test(t), t.slice(0, 200));
+    ok('23f SO Record Delivery still enabled', !doc.getElementById('btnRecordDelivery').disabled);
+    await go('#/supplier-pos/' + spo.id, 200);
+  }
   ok('23b package components must NOT create stock on the package record (not a stock item)', !moves.some(m => m.productId == pkg.id), `${moves.filter(m => m.productId == pkg.id).length} stock movements on the package`);
   await go('#/supplier-pos/' + spo.id, 200);
   doc.getElementById('btnRecordPaymentSPO').click(); await wait(60);
@@ -194,6 +208,8 @@ async function main() {
   doc.getElementById('btnRecordPayment').click(); await wait(60);
   doc.getElementById('btnConfirmPayment').click(); await wait(300);
   ok('30 paying the balance makes it Paid', win.ProformaInvoices.piPaymentStatus(await win.DB.dbGet('proformaInvoices', pi.id)) === 'Paid');
+  await go('#/proforma-invoices/' + pi.id, 150);
+  { const b = doc.getElementById('btnRecordPayment'); ok('30b fully paid PI: Record Payment disabled "Paid in Full"', b && b.disabled && /Paid in Full/.test(b.textContent), b && b.textContent); b.click(); await wait(40); }
 
   // 6. Reports/search/dashboard/links -------------------------------------------
   for (const h of ['#/dashboard', '#/payments', '#/reports', '#/reports/quotationRegister', '#/search?q=ITEM-P-0001', '#/search?q=Air%20Compressor', '#/products', '#/supplier-pos', '#/sales-orders', '#/customer-pos', '#/quotations', '#/distributions']) await go(h, 200);
@@ -249,9 +265,14 @@ async function main() {
   const spos = (await win.DB.dbGetAll('supplierPOs')).filter(p => p.salesOrderId == so3.id);
   ok('44 two Supplier POs exist; the package PO has freight, the pump PO has the pump at its cost', spos.length === 2 && spos.find(p => p.supplierId == supId).freight > 0 && near(spos.find(p => p.supplierId == sup2).lines[0].unitCost, 500), spos.map(p => p.poNo + ':' + p.lines.length + ':' + p.freight).join(' '));
   ok('45 each PO has a real total (no NaN)', spos.every(p => Number.isFinite(p.totalCost) && p.totalCost > 0), spos.map(p => p.totalCost + ' ' + p.currency).join(' | '));
-  for (const p of spos) {
+  { const so3a = await win.DB.dbGet('salesOrders', so3.id); ok('44b both POs raised -> Ordered from Supplier', so3a.status === 'Ordered from Supplier', so3a.status); }
+  { const p = spos[0]; await go('#/supplier-pos/' + p.id, 200); doc.getElementById('btnReceiveStock').click(); await wait(80); doc.getElementById('btnConfirmReceive').click(); await wait(300);
+    const so3b = await win.DB.dbGet('salesOrders', so3.id); ok('44c first PO received -> Partially Received', so3b.status === 'Partially Received', so3b.status);
+    await go('#/sales-orders/' + so3.id, 200); ok('44d SO Next step says waiting on suppliers', /Waiting on suppliers/i.test(doc.getElementById('content').textContent)); }
+  for (const p of spos.slice(1)) {
     await go('#/supplier-pos/' + p.id, 200); doc.getElementById('btnReceiveStock').click(); await wait(80); doc.getElementById('btnConfirmReceive').click(); await wait(300);
   }
+  { const so3c = await win.DB.dbGet('salesOrders', so3.id); ok('45b all received -> Ready for Delivery', so3c.status === 'Ready for Delivery', so3c.status); }
   const mv2 = await win.DB.dbGetAll('stockMovements');
   ok('46 stock: only the normal pump received (+2); nothing on the package', mv2.length === 1 && mv2[0].productId == normalId && mv2[0].qty === 2, JSON.stringify(mv2.map(m => [m.productId, m.qty])));
   await go('#/sales-orders/' + so3.id, 200); doc.getElementById('btnRecordDelivery').click(); await wait(80);
@@ -259,6 +280,8 @@ async function main() {
   doc.getElementById('btnConfirmDeliver').click(); await wait(300);
   const mv3 = await win.DB.dbGetAll('stockMovements');
   ok('48 after delivery the pump stock is back to 0 and the package still has no movements', mv3.reduce((t, m) => t + m.qty, 0) === 0 && !mv3.some(m => m.productId == pkg.id), mv3.length);
+  await go('#/sales-orders/' + so3.id, 200);
+  { const d = doc.getElementById('btnRecordDelivery'); ok('48b after full delivery the button is disabled All Delivered', d && d.disabled && /All Delivered/.test(d.textContent), d && d.textContent); }
   await go('#/sales-orders/' + so3.id, 200); doc.getElementById('btnProforma').click(); await wait(300);
   const pi3 = (await win.DB.dbGetAll('proformaInvoices')).find(x => x.salesOrderId == so3.id);
   ok('49 proforma generated; total equals the sales order', pi3 && near(pi3.grandTotal, (await win.DB.dbGet('salesOrders', so3.id)).grandTotal), pi3 && pi3.grandTotal);

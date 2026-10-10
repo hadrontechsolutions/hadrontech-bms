@@ -127,6 +127,44 @@ Router.route('/sales-orders', async () => {
   draw(all);
 });
 
+
+/* ---- Receiving progress & automatic status ----
+   A Supplier PO line carries the same lineId as the Sales Order line it sourced, so what has actually
+   arrived for each order line is read straight from the Supplier POs (cancelled POs don't count). */
+const SO_RANK = Object.fromEntries(SO_STATUSES.map((s, i) => [s, i]));
+function soReceiving(so, supplierPOs) {
+  const live = (supplierPOs || []).filter(p => p.status !== 'Cancelled');
+  const perLine = {};
+  live.forEach(p => (p.lines || []).forEach(pl => {
+    const r = perLine[pl.lineId] = perLine[pl.lineId] || { received: 0 };
+    r.received = r2(r.received + (Number(pl.receivedQty) || 0));
+  }));
+  const sourcedIds = new Set(live.flatMap(p => p.lineIds || []));
+  // Lines that are ordered from a supplier (or have one assigned) must arrive before the order is ready to deliver.
+  const needed = (so.lines || []).filter(l => l.supplierId || sourcedIds.has(l.lineId));
+  const fullyIn = needed.filter(l => ((perLine[l.lineId] || {}).received || 0) >= l.qty);
+  const anyIn = needed.some(l => ((perLine[l.lineId] || {}).received || 0) > 0);
+  return { perLine, sourcedIds, needed, fullyIn, anyIn, hasSPO: live.length > 0 };
+}
+/** Moves a Sales Order forward on its own as Supplier POs are created and received. Never moves it backwards and
+    never touches Cancelled / Partially Delivered / Delivered. The "Mark: ..." buttons stay as manual overrides. */
+async function syncSOStatusFromSupplierPOs(soId) {
+  if (soId === undefined || soId === null || soId === '' || !Number.isFinite(Number(soId))) return null;
+  const so = await DB.dbGet('salesOrders', Number(soId));
+  if (!so || ['Cancelled', 'Partially Delivered', 'Delivered'].includes(so.status)) return so;
+  const spos = await DB.dbQueryIndex('supplierPOs', 'salesOrderId', so.id);
+  const r = soReceiving(so, spos);
+  if (!r.hasSPO) return so;
+  const target = r.needed.length > 0 && r.fullyIn.length === r.needed.length ? 'Ready for Delivery' : (r.anyIn ? 'Partially Received' : 'Ordered from Supplier');
+  if ((SO_RANK[target] ?? 0) <= (SO_RANK[so.status] ?? 0)) return so;
+  so.status = target;
+  so.statusHistory = (so.statusHistory || []).concat([{ status: target, date: new Date().toISOString(), auto: true }]);
+  so.updatedAt = new Date().toISOString();
+  await DB.dbPut('salesOrders', so);
+  await DB.logActivity(`Sales order ${so.soNo} moved to ${target} automatically`);
+  return so;
+}
+
 Router.route('/sales-orders/:id', (p) => renderSODetail(p.id));
 
 async function renderSODetail(id) {
@@ -154,9 +192,32 @@ async function renderSODetail(id) {
   const pendingBySupplier = {};
   pendingLines.forEach(l => { (pendingBySupplier[l.supplierId] = pendingBySupplier[l.supplierId] || []).push(l); });
 
+  const recv = soReceiving(so, supplierPOs);
   const undeliveredLines = (so.lines || []).filter(l => (l.deliveredQty || 0) < l.qty);
+  const allDelivered = (so.lines || []).length > 0 && undeliveredLines.length === 0;
+  const readyToDeliver = (so.lines || []).filter(l => ((recv.perLine[l.lineId] || {}).received || 0) > (l.deliveredQty || 0));
   const showDeliveryMismatch = so.status === 'Delivered' && undeliveredLines.length > 0;
   const headerBadge = showDeliveryMismatch ? `<span class="badge badge-lost">DELIVERED — INCOMPLETE</span>` : statusBadge(so.status);
+
+  // "Next step": one plain line saying what this order needs from you now.
+  let nextStep = null;
+  if (so.status !== 'Cancelled') {
+    const pendingCount = pendingLines.length;
+    const waiting = recv.needed.length - recv.fullyIn.length;
+    if (allDelivered) {
+      let bal = '';
+      if (existingPI) { try { const piS = await ProformaInvoices.ensurePISnapshot(existingPI); const due = ProformaInvoices.piBalanceDue(piS); bal = due > 0 ? ` Proforma invoice balance: ${formatMoney(due, piS.currency)}.` : ' Proforma invoice paid in full.'; } catch (e) { /* hint only */ } }
+      nextStep = { done: true, text: `All items delivered.${bal}` };
+    } else if (pendingCount > 0) {
+      nextStep = { text: `Create a Supplier PO — ${pendingCount} item${pendingCount === 1 ? '' : 's'} ready to order.` };
+    } else if (readyToDeliver.length > 0) {
+      nextStep = { text: `Record Delivery — ${readyToDeliver.length} item${readyToDeliver.length === 1 ? '' : 's'} received and ready to deliver${waiting > 0 ? `; ${waiting} still waiting on suppliers` : ''}.` };
+    } else if (waiting > 0 && recv.hasSPO) {
+      nextStep = { text: `Waiting on suppliers — ${recv.fullyIn.length} of ${recv.needed.length} item${recv.needed.length === 1 ? '' : 's'} received.` };
+    } else if ((so.lines || []).some(l => !l.supplierId && !recv.sourcedIds.has(l.lineId) && ((l.deliveredQty || 0) < l.qty))) {
+      nextStep = { text: 'Some items have no supplier yet — assign one in the table below if they need ordering.' };
+    }
+  }
 
   content.innerHTML = `
     <div class="page-head">
@@ -164,11 +225,13 @@ async function renderSODetail(id) {
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         <button class="btn-line" id="btnProforma">${existingPI ? `View Proforma Invoice (${escapeHtml(existingPI.piNo)})` : 'Generate Proforma Invoice'}</button>
-        <button class="btn-amber" id="btnRecordDelivery">Record Delivery</button>
+        ${allDelivered && so.status !== 'Cancelled' ? `<button class="btn-done" id="btnRecordDelivery" disabled title="Every item has been delivered">✓ All Delivered</button>` : `<button class="btn-amber" id="btnRecordDelivery" ${so.status === 'Cancelled' ? 'disabled title="This order is cancelled"' : ''}>Record Delivery</button>`}
         <button class="btn-line" id="btnEditDetails">Edit / Revise Order</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
+
+    ${nextStep ? `<div class="card next-step ${nextStep.done ? 'done' : ''}"><div class="ns-label">Next step</div><div class="ns-text">${nextStep.done ? '✓ ' : ''}${escapeHtml(nextStep.text)}</div></div>` : ''}
 
     ${showDeliveryMismatch ? `<div class="card danger-card">⚠ This order is marked <b>Delivered</b>, but ${undeliveredLines.length} line(s) don't actually have their delivered quantity recorded — the "Delivered" column below still shows less than what was ordered. This usually means the status was set manually instead of through "Record Delivery," so stock was never actually moved. Use <b>Record Delivery</b> above to correct this.</div>` : ''}
 
@@ -199,7 +262,7 @@ async function renderSODetail(id) {
       <h3 class="section-title">Order Items</h3>
       <div style="overflow-x:auto; max-width:100%;">
       <table class="data-table compact">
-        <thead><tr><th>Description</th><th>Qty</th><th>Delivered</th><th>Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th>Sourcing</th></tr></thead>
+        <thead><tr><th>Description</th><th>Qty</th><th>Received</th><th>Delivered</th><th>Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th>Sourcing</th></tr></thead>
         <tbody>
           ${(so.lines || []).map(l => {
             const lineCalc = QuoteCalc.computeLine(l);
@@ -230,7 +293,11 @@ async function renderSODetail(id) {
             const deliveredCell = (l.deliveredQty || 0) >= l.qty
               ? `${l.deliveredQty || 0} ${escapeHtml(l.uom)} ✓`
               : `<span class="cell-needs-input">${l.deliveredQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
-            return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
+            const gotQty = (recv.perLine[l.lineId] || {}).received || 0;
+            const receivedCell = !recv.sourcedIds.has(l.lineId) ? '<span class="muted-text">—</span>'
+              : (gotQty >= l.qty ? `<span style="color:var(--ok); font-weight:600;">${gotQty} of ${l.qty} ${escapeHtml(l.uom)} ✓</span>` : `<span class="cell-needs-input">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>`)
+              + (gotQty > (l.deliveredQty || 0) ? `<div class="small muted-text">${r2(gotQty - (l.deliveredQty || 0))} ready to deliver</div>` : '');
+            return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -414,7 +481,7 @@ async function renderRecordDeliveryForm(so, id) {
   };
 }
 
-window.SalesOrders = { createFromCustomerPO };
+window.SalesOrders = { createFromCustomerPO, syncStatus: syncSOStatusFromSupplierPOs, receiving: soReceiving };
 window.SO_STATUSES = SO_STATUSES;
 
 async function renderSOHeaderEdit(so) {
