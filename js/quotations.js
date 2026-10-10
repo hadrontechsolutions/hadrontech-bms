@@ -628,6 +628,15 @@ async function renderQuoteForm(id) {
       review flag, manual-price flag. Display only -- rounding happens here, never in the math. */
   function refreshLineInfo(tr, line) {
     const qCur = currentCurrency();
+    // A line with no price (blank or 0) shows no discount either; the stored value is kept and returns once a price is typed.
+    const discEl = tr.querySelector('.ln-disc');
+    if (discEl) {
+      const noPrice = !(Number(line.unitPrice) > 0);
+      if (noPrice) { if (document.activeElement !== discEl) discEl.value = ''; }
+      else if (discEl.value === '' && document.activeElement !== discEl) discEl.value = line.discountPercent || 0;
+      discEl.disabled = noPrice;
+      discEl.title = noPrice ? 'No price on this line, so no discount' : '';
+    }
     const costCcy = line.costCurrency || qCur;
     const info = tr.querySelector('.ln-freight-info');
     if (info) {
@@ -1236,7 +1245,7 @@ async function renderQuoteDetail(id) {
       <td class="internal-only-col">${costDisplay}</td>
       <td class="internal-only-col">${escapeHtml(supMap[l.supplierId]?.companyName || '—')}</td>
       <td>${formatMoney(l.unitPrice, q.currency)}</td>
-      <td>${l.discountPercent || 0}%</td>
+      <td>${Number(l.unitPrice) > 0 ? (l.discountPercent || 0) + '%' : ''}</td>
       <td>${l.vatRate || 0}%</td>
       <td class="internal-only-col">${lineMarginPct}%</td>
       <td>${formatMoney(c.net, q.currency)}</td>
