@@ -370,3 +370,14 @@ th.internal-only-col{color:var(--amber) !important;}
 .ln-info-popup{position:fixed; z-index:9999; max-width:300px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:10px 14px; font-size:12.5px; line-height:1.4;}
 .ln-info-popup-title{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--amber); margin-bottom:4px;}
 .spo-listing-link{display:inline-block; margin-left:8px; font-size:11px; white-space:nowrap;}
+
+.cell-ok{background:var(--ok-lt); color:var(--ok); font-weight:700; border-radius:var(--radius-sm); padding:3px 9px; display:inline-block; white-space:nowrap;}
+.cell-needs-input{white-space:nowrap;}
+td.nowrap{white-space:nowrap;}
+td.deliv-col{min-width:110px;}
+td.desc-col{max-width:320px; width:320px;}
+.desc-clip{display:flex; align-items:flex-start; gap:6px;}
+.desc-clip .desc-text{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.desc-clip.open .desc-text{white-space:normal; overflow:visible;}
+.desc-more{flex:none; border:1px solid var(--border,#d8dce3); background:#fff; color:inherit; border-radius:6px; padding:0 7px; line-height:18px; font-weight:700; cursor:pointer;}
+.desc-more:hover{background:#f0f2f6;}

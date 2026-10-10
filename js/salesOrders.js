@@ -291,13 +291,13 @@ async function renderSODetail(id) {
               sourcingCell = '<span class="badge badge-pending">Pending</span>';
             }
             const deliveredCell = (l.deliveredQty || 0) >= l.qty
-              ? `${l.deliveredQty || 0} ${escapeHtml(l.uom)} ✓`
+              ? `<span class="cell-ok">${l.deliveredQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`
               : `<span class="cell-needs-input">${l.deliveredQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
             const gotQty = (recv.perLine[l.lineId] || {}).received || 0;
             const receivedCell = !recv.sourcedIds.has(l.lineId) ? '<span class="muted-text">—</span>'
-              : (gotQty >= l.qty ? `<span style="color:var(--ok); font-weight:600;">${gotQty} of ${l.qty} ${escapeHtml(l.uom)} ✓</span>` : `<span class="cell-needs-input">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>`)
-              + (gotQty > (l.deliveredQty || 0) ? `<div class="small muted-text">${r2(gotQty - (l.deliveredQty || 0))} ready to deliver</div>` : '');
-            return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
+              : (gotQty >= l.qty ? `<span class="cell-ok">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>` : `<span class="cell-needs-input">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>`);
+            const descCell = `<div class="desc-clip" title="${escapeHtml(l.description || '')}"><span class="desc-text">${escapeHtml(l.description || '')}</span><button type="button" class="desc-more" title="Show full description" aria-label="Show full description" aria-expanded="false">…</button></div>`;
+            return `<tr><td class="desc-col">${descCell}</td><td class="nowrap">${l.qty} ${escapeHtml(l.uom)}</td><td class="nowrap">${receivedCell}</td><td class="nowrap deliv-col">${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -331,6 +331,10 @@ async function renderSODetail(id) {
     renderRecordDeliveryForm(so, id);
   };
   document.getElementById('btnEditDetails').onclick = () => renderSOHeaderEdit(so);
+  content.querySelectorAll('.desc-more').forEach(btn => btn.addEventListener('click', () => {
+    const box = btn.closest('.desc-clip'); const open = box.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false'); btn.title = open ? 'Show less' : 'Show full description';
+  }));
   content.querySelectorAll('.ln-assign-supplier').forEach(sel => sel.addEventListener('change', async (e) => {
     const line = so.lines.find(l => l.lineId === e.target.dataset.lineid);
     if (!line) return;

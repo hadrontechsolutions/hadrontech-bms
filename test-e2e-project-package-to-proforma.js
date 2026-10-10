@@ -169,6 +169,9 @@ async function main() {
     await go('#/sales-orders/' + so.id, 200);
     const t = doc.getElementById('content').textContent;
     ok('23e SO shows Received column, ready-to-deliver note and Next step', /Received/.test(t) && /ready to deliver/.test(t) && /Next step/i.test(t) && !/NaN|undefined/.test(t), t.slice(0, 200));
+    { const m = doc.querySelector('.desc-more'); const box = m && m.closest('.desc-clip'); const was = box && box.classList.contains('open'); m.click();
+      ok('23g description is clipped; the … button expands it and the full text stays in the page', m && !was && box.classList.contains('open') && box.querySelector('.desc-text').textContent.length > 5); m.click(); ok('23h … again collapses it', !box.classList.contains('open')); }
+    ok('23i fully received lines are green with no tick or per-line "ready to deliver" text', doc.querySelectorAll('.cell-ok').length >= 1 && !/✓/.test([...doc.querySelectorAll('.cell-ok')].map(e => e.textContent).join('')) && !doc.querySelector('td .small.muted-text'));
     ok('23f SO Record Delivery still enabled', !doc.getElementById('btnRecordDelivery').disabled);
     await go('#/supplier-pos/' + spo.id, 200);
   }
