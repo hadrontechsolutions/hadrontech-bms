@@ -120,3 +120,9 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Delivery to the customer is recorded only on the Sales Order (Record Delivery); the Supplier PO has no delivery button (it only receives from the supplier).
 - **Project items can only be delivered once received**: in Record Delivery, a Project Package line (`compNo`) is capped at (received on its Supplier PO − already delivered), with a red note ("Not received yet" / "Only n received so far"), and Confirm refuses anything above it. Catalog items keep the On Hand cap. Test: `test-project-delivery-cap.js`.
 - **Quotations list — "Expired" in the Status filter**: shows expired quotations only (open status past Valid Until, plus any hand-marked Expired) and disables the "Show expired quotations too" box meanwhile; "All Statuses" returns to the normal view. Still no stored "expired" state. Test: `test-expiry-filter-simplification.js` (3, 3c, 3d).
+
+## Dashboard (v2)
+- Layout: quick actions → **Needs your attention** chips (orders ready to deliver, Supplier POs to receive, invoices to collect, Supplier POs to pay, quotations expiring/expired, notes) → charts → "All the numbers" tiles → expired/expiring lists → recent activity.
+- Charts are plain inline SVG/HTML in `dashboard.js` (`barChartSVG`, `donutSVG`, `hbarsHTML`; one shared hover tooltip via `data-tip`) — no library, works offline. Colors: validated categorical palette (blue, orange, amber, aqua, red) for the quotation donut; amber bars for sales; green = to collect, orange = to pay.
+- Counting rules: Cancelled Supplier POs and zero-cost POs are never "owed"; "Supplier POs to receive" = ordered (not Draft/Received/Cancelled) with unreceived lines; "ready to deliver" = Ready for Delivery + Partially Delivered; monthly sales ignore Draft and Cancelled orders.
+- Every tile/chip/bar opens its list; `#/quotations?status=Expired` deep-links to the Expired filter. Test: `test-dashboard-v2.js`.

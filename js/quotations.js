@@ -355,6 +355,8 @@ Router.route('/quotations', async () => {
     currentPage = 1;
     draw(rows);
   };
+  { const m = /[?&]status=([^&]+)/.exec(window.location.hash); // deep link from the Dashboard, e.g. #/quotations?status=Expired
+    if (m) { const sel = document.getElementById('statusFilter'); const v = decodeURIComponent(m[1]); if ([...sel.options].some(op => op.value === v)) sel.value = v; } }
   applyFilters();
   document.getElementById('listSearch').addEventListener('input', debounce(applyFilters, 200));
   document.getElementById('statusFilter').addEventListener('change', applyFilters);
