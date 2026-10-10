@@ -118,7 +118,11 @@ async function renderDistributionsList() {
   const content = document.getElementById('content');
   Router.setBreadcrumb([{ label: 'Distributions' }]);
   const all = (await DB.dbGetAll('distributions')).sort((a, b) => (b.month || '').localeCompare(a.month || ''));
+  const settings = await DB.getSettings();
+  const withdrawals = (settings.reserveWithdrawals || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const totalReserve = r2(all.reduce((s, d) => s + (d.reserveAmount || 0), 0));
+  const totalUsed = r2(withdrawals.reduce((s, w) => s + (Number(w.amount) || 0), 0));
+  const reserveBalance = r2(totalReserve - totalUsed);
   const totalDistributed = r2(all.reduce((s, d) => s + (d.distributableAmount || 0), 0));
 
   content.innerHTML = `
@@ -126,14 +130,21 @@ async function renderDistributionsList() {
       <h1>Distributions</h1>
       <div class="page-actions">
         <a href="#/partners" class="btn-line">Manage Partners &amp; Employees</a>
+        <button class="btn-line" id="btnUseReserve">Use Reserve</button>
         <button class="btn-amber" id="btnNewDist">+ New Distribution</button>
       </div>
     </div>
     <div class="stat-grid" style="margin-bottom:16px;">
-      ${statCardLocal(formatMoney(totalReserve, 'PHP'), 'Business Reserve (Total Held Back)')}
-      ${statCardLocal(formatMoney(totalDistributed, 'PHP'), 'Total Distributed to Partners')}
+      ${statCardLocal(formatMoney(reserveBalance, 'PHP'), 'Business Reserve Balance')}
+      ${statCardLocal(formatMoney(totalReserve, 'PHP'), 'Reserve Set Aside (all time)')}
+      ${statCardLocal(formatMoney(totalUsed, 'PHP'), 'Reserve Used')}
+      ${statCardLocal(formatMoney(totalDistributed, 'PHP'), 'Total Distributed')}
       ${statCardLocal(all.length, 'Distributions Made')}
     </div>
+    <div id="reserveHost"></div>
+    ${withdrawals.length ? `<div class="card"><h3 class="section-title">Reserve Used</h3>
+      <table class="data-table compact"><thead><tr><th>Date</th><th>Reason</th><th>Amount</th><th>Recorded by</th><th></th></tr></thead>
+      <tbody>${withdrawals.map(w => `<tr><td>${formatDate(w.date)}</td><td>${escapeHtml(w.reason)}</td><td>-${formatMoney(w.amount, 'PHP')}</td><td>${escapeHtml(w.createdBy || '—')}</td><td class="row-del" data-wdel="${escapeHtml(w.id)}" title="Remove this entry">✕</td></tr>`).join('')}</tbody></table></div>` : ''}
     <div class="card" style="padding:0;">
       ${all.length === 0 ? `<div class="empty-inline">No distributions yet. Create one once a month has real profit worth splitting.</div>` : `
       <table class="data-table">
@@ -154,6 +165,47 @@ async function renderDistributionsList() {
     </div>
   `;
   document.getElementById('btnNewDist').onclick = () => Router.navigate('/distributions/new');
+  document.getElementById('btnUseReserve').onclick = () => {
+    const host = document.getElementById('reserveHost');
+    host.innerHTML = `
+      <div class="card">
+        <h3 class="section-title">Use Reserve</h3>
+        <p class="muted-text">Record money taken out of the Business Reserve. Available now: <b>${formatMoney(reserveBalance, 'PHP')}</b>.</p>
+        <div class="form-grid">
+          <div class="field"><label>Date</label><input type="date" id="rv_date" value="${todayISO()}"></div>
+          <div class="field"><label>Amount</label><input type="number" min="0" step="0.01" id="rv_amount"></div>
+          <div class="field field-wide"><label>Reason *</label><input id="rv_reason" placeholder="e.g. Equipment purchase, tax payment, slow-month shortfall"></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn-amber btn-sm" id="btnSaveReserveUse">Save</button>
+          <button class="btn-line btn-sm" id="btnCancelReserveUse">Cancel</button>
+        </div>
+      </div>`;
+    host.scrollIntoView && host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById('btnCancelReserveUse').onclick = () => { host.innerHTML = ''; };
+    document.getElementById('btnSaveReserveUse').onclick = async () => {
+      const amount = r2(Number(document.getElementById('rv_amount').value) || 0);
+      const reason = document.getElementById('rv_reason').value.trim();
+      if (amount <= 0) { toast('Enter an amount greater than 0.', 'err'); return; }
+      if (!reason) { toast('Give a reason for using the reserve.', 'err'); return; }
+      if (amount > reserveBalance) { toast(`Only ${formatMoney(reserveBalance, 'PHP')} is in the reserve.`, 'err'); return; }
+      const fresh = await DB.getSettings();
+      fresh.reserveWithdrawals = (fresh.reserveWithdrawals || []).concat([{ id: 'R' + Math.random().toString(36).slice(2, 9), date: document.getElementById('rv_date').value || todayISO(), amount, reason, createdBy: fresh.userName, createdAt: new Date().toISOString() }]);
+      await DB.dbPut('settings', fresh);
+      await DB.logActivity(`Used ${formatMoney(amount, 'PHP')} from the business reserve: ${reason}`);
+      toast('Reserve use recorded.');
+      renderDistributionsList();
+    };
+  };
+  content.querySelectorAll('[data-wdel]').forEach(el => el.onclick = async () => {
+    if (!confirm('Remove this reserve entry? The amount goes back into the reserve balance.')) return;
+    const fresh = await DB.getSettings();
+    fresh.reserveWithdrawals = (fresh.reserveWithdrawals || []).filter(w => w.id !== el.dataset.wdel);
+    await DB.dbPut('settings', fresh);
+    await DB.logActivity('Removed a business reserve entry');
+    toast('Entry removed.');
+    renderDistributionsList();
+  });
 }
 
 // A small local stat-card helper, matching the Dashboard's own visual style without depending
@@ -301,6 +353,7 @@ function openSlipDetails(dist, idx) {
 async function renderDistributionForm(record) {
   const content = document.getElementById('content');
   const isNew = !record;
+  const companySettings = await DB.getSettings();
   const partners = (await DB.dbGetAll('partners')).filter(p => p.status !== 'Archived' && p.status !== 'Inactive');
   const [salesOrders, expenses, proformaInvoicesRaw] = await Promise.all([
     DB.dbGetAll('salesOrders'), DB.dbGetAll('expenses'), DB.dbGetAll('proformaInvoices')
@@ -337,8 +390,8 @@ async function renderDistributionForm(record) {
           <div class="field"><label>Expenses (PHP)</label><input type="number" min="0" step="0.01" id="f_expenses" value="${record?.expensesTotal ?? 0}">
             <p class="muted-text" style="margin-top:4px;">Auto-filled from this month's recorded Expenses — adjustable if needed.</p>
           </div>
-          <div class="field"><label>Reserve %</label><input type="number" min="0" max="100" step="0.01" id="f_reservePercent" value="${record?.reservePercent ?? 0}">
-            <p class="muted-text" style="margin-top:4px;">Optional extra buffer on top of Net Profit — real expenses are already subtracted above.</p>
+          <div class="field"><label>Reserve %</label><input type="number" min="0" max="100" step="0.01" id="f_reservePercent" value="${record?.reservePercent ?? (companySettings.defaultReservePercent ?? 10)}">
+            <p class="muted-text" style="margin-top:4px;">Set aside for the business before the split. Starts at your default from Settings → Defaults &amp; Terms; change it for this month if needed.</p>
           </div>
         </div>
 

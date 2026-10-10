@@ -90,6 +90,7 @@ Router.route('/settings', async () => {
         <div class="field"><label>Default Quotation Validity (days)</label><input type="number" id="s_defaultQuotationValidityDays" value="${settings.defaultQuotationValidityDays}"></div>
         <div class="field"><label>Default Warranty</label><input id="s_defaultWarranty" value="${escapeHtml(settings.defaultWarranty)}"></div>
         <div class="field"><label>Default Incoterms</label><input id="s_defaultIncoterms" value="${escapeHtml(settings.defaultIncoterms)}"></div>
+        <div class="field"><label>Default Business Reserve % (Distributions)</label><input type="number" min="0" max="100" step="0.01" id="s_defaultReservePercent" value="${settings.defaultReservePercent ?? 10}"><p class="muted-text" style="margin-top:4px;">Every new Distribution starts with this Reserve %. You can still change it on any single distribution.</p></div>
         <div class="field field-wide"><label>Quotation Footer / Terms &amp; Conditions</label><textarea id="s_footerTerms" rows="5">${escapeHtml(settings.footerTerms)}</textarea></div>
       </div>
       </div>
@@ -279,6 +280,7 @@ Router.route('/settings', async () => {
       defaultQuotationValidityDays: Number(document.getElementById('s_defaultQuotationValidityDays').value) || 30,
       defaultWarranty: document.getElementById('s_defaultWarranty').value,
       defaultIncoterms: document.getElementById('s_defaultIncoterms').value,
+      defaultReservePercent: Math.min(100, Math.max(0, Number(document.getElementById('s_defaultReservePercent').value) || 0)),
       footerTerms: document.getElementById('s_footerTerms').value
     });
     await DB.dbPut('settings', updated);

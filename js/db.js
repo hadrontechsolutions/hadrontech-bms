@@ -238,6 +238,8 @@ const DEFAULT_SETTINGS = {
   authorizedSignatory: 'Authorized Signatory',
   bankName: '', bankAccountName: '', bankAccountNumber: '', bankSwiftCode: '', bankAddress: '',
   userName: 'Admin',
+  defaultReservePercent: 10, // starting Reserve % on every new Distribution (editable per distribution)
+  reserveWithdrawals: [], // money taken OUT of the Business Reserve: [{ id, date, amount, reason, createdBy, createdAt }]
   lastBackupExport: null, // ISO date string of the last successful full JSON backup export
   backupReminderDays: 7, // show the "please back up" banner once this many days pass without one
   footerTerms:

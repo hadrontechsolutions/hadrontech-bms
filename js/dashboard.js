@@ -58,7 +58,9 @@ Router.route('/dashboard', async () => {
   // Running total of everything ever held back as reserve, across every distribution made --
   // the same figure the Distributions page itself shows, kept in sync since both read from the
   // same underlying records rather than a separately-maintained balance that could drift.
-  const totalReserve = r2(distributions.reduce((s, d) => s + (d.reserveAmount || 0), 0));
+  // Balance = everything set aside minus what was recorded as used (Distributions -> Use Reserve).
+  const reserveSettings = await DB.getSettings();
+  const totalReserve = r2(distributions.reduce((s, d) => s + (d.reserveAmount || 0), 0) - (reserveSettings.reserveWithdrawals || []).reduce((s, w) => s + (Number(w.amount) || 0), 0));
 
   // sales value by month (last 6 months) from sales orders
   const monthMap = {};
