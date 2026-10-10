@@ -101,6 +101,19 @@ function computeDistribution(grossProfitTotal, expensesTotal, reservePercent, sp
   return { gross, expenses, netProfit, reserveAmount, distributableAmount, splits: splitsWithAmounts, totalPercent };
 }
 
+
+/** Payslip figures for one partner's split: gross share + additions (e.g. bonus) - deductions (e.g. cash advance) = net pay. */
+function splitAdjustments(s) { return Array.isArray(s.adjustments) ? s.adjustments : []; }
+function splitNetPay(s) {
+  const adds = splitAdjustments(s).filter(a => a.kind === 'add').reduce((t, a) => t + (Number(a.amount) || 0), 0);
+  const less = splitAdjustments(s).filter(a => a.kind !== 'add').reduce((t, a) => t + (Number(a.amount) || 0), 0);
+  return r2((Number(s.amount) || 0) + adds - less);
+}
+/** Stable payslip number: the distribution number + the split's own sequence (kept even if other rows are removed later). */
+function slipNumber(dist, s, i) {
+  return `${dist.distributionNo}-${String(s.slipSeq || (i + 1)).padStart(2, '0')}`;
+}
+
 async function renderDistributionsList() {
   const content = document.getElementById('content');
   Router.setBreadcrumb([{ label: 'Distributions' }]);
@@ -160,6 +173,7 @@ async function renderDistributionDetail(id) {
     <div class="page-head">
       <div><div class="doc-number-tag">${escapeHtml(dist.distributionNo)}</div><h1>Distribution — ${escapeHtml(monthLabel(dist.month))}</h1></div>
       <div class="page-actions">
+        <button class="btn-amber" id="btnPrintAllSlips">Print All Payslips</button>
         <button class="btn-line" id="btnEditDist">Edit</button>
         <button class="btn-danger" id="btnDeleteDist">Delete</button>
       </div>
@@ -181,12 +195,21 @@ async function renderDistributionDetail(id) {
     </div>
 
     <div class="card">
-      <h3 class="section-title">Partner Splits</h3>
+      <h3 class="section-title">Partner Splits &amp; Payslips</h3>
       <table class="data-table compact">
-        <thead><tr><th>Partner</th><th>Percent</th><th>Amount</th></tr></thead>
-        <tbody>${(dist.splits || []).map(s => `<tr><td>${escapeHtml(s.partnerName)}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td></tr>`).join('')}</tbody>
+        <thead><tr><th>Partner</th><th>Percent</th><th>Share</th><th>Advances / Adjustments</th><th>Net Pay</th><th>Paid</th><th></th></tr></thead>
+        <tbody>${(dist.splits || []).map((s, i) => {
+          const adj = splitAdjustments(s).reduce((t, a) => t + (a.kind === 'add' ? 1 : -1) * (Number(a.amount) || 0), 0);
+          return `<tr><td>${escapeHtml(s.partnerName)}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td>
+            <td>${adj ? (adj > 0 ? '+' : '-') + formatMoney(Math.abs(adj), 'PHP') : '—'}</td>
+            <td><b>${formatMoney(splitNetPay(s), 'PHP')}</b></td>
+            <td>${s.paidDate ? `<span class="badge badge-paid">Paid ${formatDate(s.paidDate)}</span>` : '<span class="badge badge-pending">Unpaid</span>'}</td>
+            <td style="white-space:nowrap;"><button class="btn-line btn-sm" data-slip-edit="${i}">Payslip details</button> <button class="btn-amber btn-sm" data-slip-print="${i}">Print Payslip</button></td></tr>`;
+        }).join('')}</tbody>
       </table>
+      <p class="muted-text" style="margin-top:8px;">Each payslip shows only that partner's own share and the month's business totals.</p>
     </div>
+    <div id="slipHost"></div>
 
     ${dist.reference || dist.notes ? `<div class="card">
       ${dist.reference ? `<div class="detail-item"><div class="detail-label">Reference</div><div class="detail-value">${escapeHtml(dist.reference)}</div></div>` : ''}
@@ -197,6 +220,9 @@ async function renderDistributionDetail(id) {
   `;
 
   document.getElementById('btnEditDist').onclick = () => Router.navigate(`/distributions/${dist.id}/edit`);
+  document.getElementById('btnPrintAllSlips').onclick = () => Print.printPayslips(dist, null);
+  content.querySelectorAll('[data-slip-print]').forEach(b => b.onclick = () => Print.printPayslips(dist, Number(b.dataset.slipPrint)));
+  content.querySelectorAll('[data-slip-edit]').forEach(b => b.onclick = () => openSlipDetails(dist, Number(b.dataset.slipEdit)));
   document.getElementById('btnDeleteDist').onclick = async () => {
     if (!confirm(`Delete ${dist.distributionNo}? This cannot be undone.`)) return;
     await DB.dbDelete('distributions', dist.id);
@@ -204,6 +230,69 @@ async function renderDistributionDetail(id) {
     toast('Deleted.');
     Router.navigate('/distributions');
   };
+}
+
+
+/** Payslip details for one partner: advances / deductions / bonus lines, and when and how the share was paid. */
+function openSlipDetails(dist, idx) {
+  const s = dist.splits[idx];
+  const host = document.getElementById('slipHost');
+  let adj = splitAdjustments(s).map(a => ({ ...a }));
+  const draw = () => {
+    const net = splitNetPay({ amount: s.amount, adjustments: adj });
+    host.innerHTML = `
+      <div class="card">
+        <h3 class="section-title">Payslip details — ${escapeHtml(s.partnerName)} (${escapeHtml(slipNumber(dist, s, idx))})</h3>
+        <p class="muted-text">Share for the month: <b>${formatMoney(s.amount, 'PHP')}</b>. Add anything already taken (a cash advance) as a deduction, or anything extra (a bonus) as an addition.</p>
+        <table class="data-table compact"><thead><tr><th>Description</th><th style="width:130px;">Type</th><th style="width:140px;">Amount</th><th></th></tr></thead>
+          <tbody>${adj.map((a, i) => `<tr data-ai="${i}">
+            <td><input class="adj-label" value="${escapeHtml(a.label || '')}" placeholder="e.g. Cash advance, Sept 12" style="width:100%;"></td>
+            <td><select class="adj-kind"><option value="less" ${a.kind !== 'add' ? 'selected' : ''}>Deduction</option><option value="add" ${a.kind === 'add' ? 'selected' : ''}>Addition</option></select></td>
+            <td><input class="adj-amount" type="number" min="0" step="0.01" value="${a.amount ?? ''}"></td>
+            <td class="row-del" data-adel="${i}">✕</td></tr>`).join('') || '<tr><td colspan="4" class="muted-text">No advances or adjustments.</td></tr>'}</tbody></table>
+        <button type="button" class="btn-line btn-sm" id="btnAddAdj" style="margin-top:8px;">+ Add line</button>
+        <div class="totals" style="margin-top:12px;"><div class="line grand"><span>Net Pay</span><span id="slipNet">${formatMoney(net, 'PHP')}</span></div></div>
+        <div class="form-grid" style="margin-top:12px;">
+          <div class="field"><label>Date Paid</label><input type="date" id="slip_paidDate" value="${s.paidDate || ''}"></div>
+          <div class="field"><label>Method</label><select id="slip_method">${['Bank Transfer', 'Cash', 'GCash', 'Check', 'Other'].map(m => `<option ${s.paidMethod === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+          <div class="field field-wide"><label>Reference / Note</label><input id="slip_ref" value="${escapeHtml(s.paidReference || '')}" placeholder="e.g. bank reference number"></div>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn-amber btn-sm" id="btnSaveSlip">Save</button>
+          <button class="btn-line btn-sm" id="btnCancelSlip">Cancel</button>
+        </div>
+      </div>`;
+    host.scrollIntoView && host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const sync = () => {
+      host.querySelectorAll('tr[data-ai]').forEach(tr => {
+        const a = adj[Number(tr.dataset.ai)];
+        a.label = tr.querySelector('.adj-label').value; a.kind = tr.querySelector('.adj-kind').value; a.amount = Number(tr.querySelector('.adj-amount').value) || 0;
+      });
+      document.getElementById('slipNet').textContent = formatMoney(splitNetPay({ amount: s.amount, adjustments: adj }), 'PHP');
+    };
+    host.querySelectorAll('tr[data-ai] input, tr[data-ai] select').forEach(el => el.addEventListener('input', sync));
+    host.querySelectorAll('[data-adel]').forEach(el => el.onclick = () => { sync(); adj.splice(Number(el.dataset.adel), 1); draw(); });
+    document.getElementById('btnAddAdj').onclick = () => { sync(); adj.push({ label: '', kind: 'less', amount: 0 }); draw(); };
+    document.getElementById('btnCancelSlip').onclick = () => { host.innerHTML = ''; };
+    document.getElementById('btnSaveSlip').onclick = async () => {
+      sync();
+      const clean = adj.filter(a => (a.label && a.label.trim()) || a.amount > 0);
+      if (clean.some(a => !a.label || !a.label.trim())) { toast('Give each advance / adjustment a description.', 'err'); return; }
+      const net = splitNetPay({ amount: s.amount, adjustments: clean });
+      if (net < 0) { toast('Deductions are more than the share — Net Pay cannot be negative.', 'err'); return; }
+      s.adjustments = clean.map(a => ({ label: a.label.trim(), kind: a.kind === 'add' ? 'add' : 'less', amount: r2(a.amount) }));
+      s.netPay = net;
+      s.paidDate = document.getElementById('slip_paidDate').value || '';
+      s.paidMethod = s.paidDate ? document.getElementById('slip_method').value : '';
+      s.paidReference = document.getElementById('slip_ref').value.trim();
+      if (!s.slipSeq) s.slipSeq = idx + 1;
+      await DB.dbPut('distributions', dist);
+      await DB.logActivity(`Updated payslip ${slipNumber(dist, s, idx)} (${s.partnerName}): net pay ${formatMoney(net, 'PHP')}${s.paidDate ? ', paid ' + s.paidDate : ''}`);
+      toast('Payslip details saved.');
+      renderDistributionDetail(dist.id);
+    };
+  };
+  draw();
 }
 
 async function renderDistributionForm(record) {
@@ -224,7 +313,7 @@ async function renderDistributionForm(record) {
   // originally saved with (its own snapshot), not today's Partners list, so past history never
   // silently shifts if partners or their defaults change later.
   let splits = isNew
-    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, percent: p.defaultSplitPercent ?? 0 }))
+    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, partnerRole: p.role || '', percent: p.defaultSplitPercent ?? 0 }))
     : (record.splits || []).map(s => ({ ...s }));
 
   const defaultMonth = record?.month || todayISO().slice(0, 7);
@@ -408,7 +497,16 @@ async function renderDistributionForm(record) {
         reserveAmount: computed.reserveAmount,
         distributableAmount: computed.distributableAmount,
         cashReceivedInMonth: currentCashReceived,
-        splits: computed.splits.map(s => ({ partnerId: s.partnerId, partnerName: s.partnerName, percent: Number(s.percent) || 0, amount: s.amount })),
+        // Payslip data (advances, payment details, payslip number) rides along on each split so editing the distribution never loses it.
+        splits: (() => {
+          let nextSeq = Math.max(0, ...computed.splits.map(x => Number(x.slipSeq) || 0)) + 1;
+          return computed.splits.map(s => {
+            const out = { partnerId: s.partnerId, partnerName: s.partnerName, partnerRole: s.partnerRole || '', percent: Number(s.percent) || 0, amount: s.amount,
+              slipSeq: s.slipSeq || nextSeq++, adjustments: splitAdjustments(s), paidDate: s.paidDate || '', paidMethod: s.paidMethod || '', paidReference: s.paidReference || '' };
+            out.netPay = splitNetPay(out);
+            return out;
+          });
+        })(),
         reference: document.getElementById('f_reference').value.trim(),
         notes: document.getElementById('f_notes').value,
         updatedAt: now
@@ -435,3 +533,5 @@ async function renderDistributionForm(record) {
     }
   });
 }
+
+window.Distributions = Object.assign(window.Distributions || {}, { splitAdjustments, splitNetPay, slipNumber, monthLabel });

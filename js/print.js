@@ -274,4 +274,49 @@ async function printTechnicalOffer(t, customer) {
   `);
 }
 
-window.Print = { printQuotation, printSalesOrder, printSupplierPO, printProformaInvoice, printTechnicalOffer };
+
+/** Payslip(s) for a profit Distribution. onlyIdx = one partner's index, or null = every partner (one page each).
+    Each payslip shows only THAT partner's own share plus the month's business totals -- never the other partners' amounts. */
+async function printPayslips(dist, onlyIdx) {
+  const settings = await DB.getSettings();
+  const partners = await DB.dbGetAll('partners');
+  const D = window.Distributions;
+  const m = (n) => formatMoney(n, 'PHP');
+  const idxs = onlyIdx === null || onlyIdx === undefined ? (dist.splits || []).map((_, i) => i) : [onlyIdx];
+  const pages = idxs.map((i, n) => {
+    const s = dist.splits[i];
+    const role = s.partnerRole || (partners.find(p => String(p.id) === String(s.partnerId)) || {}).role || '';
+    const adj = D.splitAdjustments(s);
+    const net = D.splitNetPay(s);
+    const adjRows = adj.map(a => `<tr><td>${escapeHtml(a.label)}</td><td class="p-num">${a.kind === 'add' ? '+' : '−'} ${m(a.amount)}</td></tr>`).join('');
+    const paid = s.paidDate ? `Paid on ${formatDate(s.paidDate)}${s.paidMethod ? ' via ' + escapeHtml(s.paidMethod) : ''}${s.paidReference ? ' — Ref: ' + escapeHtml(s.paidReference) : ''}` : 'Not yet paid';
+    return `<div style="${n < idxs.length - 1 ? 'page-break-after:always;' : ''}">
+      <div class="p-head">${coBlock(settings)}
+        <div><div class="p-doc-title">Payslip</div><div class="p-doc-no">${escapeHtml(D.slipNumber(dist, s, i))}</div>
+        <div class="p-dates">Pay Period: ${escapeHtml(D.monthLabel(dist.month))}<br>${s.paidDate ? 'Date Paid: ' + formatDate(s.paidDate) : 'Date Paid: —'}</div></div>
+      </div>
+      <div class="p-grid2">
+        <div><div class="p-label">Partner</div><b style="font-size:15px;">${escapeHtml(s.partnerName)}</b>${role ? `<br><span style="font-size:11px;color:#666;">${escapeHtml(role)}</span>` : ''}</div>
+        <div><div class="p-label">Profit Share</div><div style="font-size:11px;">Share: <b>${Number(s.percent) || 0}%</b> of the Distributable Amount<br>Distribution: ${escapeHtml(dist.distributionNo)}${dist.reference ? '<br>' + escapeHtml(dist.reference) : ''}</div></div>
+      </div>
+      <table class="p-items"><thead><tr><th>Business Results — ${escapeHtml(D.monthLabel(dist.month))}</th><th style="text-align:right;">Amount</th></tr></thead><tbody>
+        <tr><td>Gross Profit</td><td class="p-num">${m(dist.grossProfitTotal)}</td></tr>
+        <tr><td>Less: Operating Expenses</td><td class="p-num">− ${m(dist.expensesTotal)}</td></tr>
+        <tr><td><b>Net Profit</b></td><td class="p-num"><b>${m(dist.netProfit)}</b></td></tr>
+        <tr><td>Less: Business Reserve (${Number(dist.reservePercent) || 0}%)</td><td class="p-num">− ${m(dist.reserveAmount)}</td></tr>
+        <tr><td><b>Distributable Amount</b></td><td class="p-num"><b>${m(dist.distributableAmount)}</b></td></tr>
+      </tbody></table>
+      <table class="p-items"><thead><tr><th>Your Share</th><th style="text-align:right;">Amount</th></tr></thead><tbody>
+        <tr><td>Profit share (${Number(s.percent) || 0}% of ${m(dist.distributableAmount)})</td><td class="p-num">${m(s.amount)}</td></tr>
+        ${adjRows}
+      </tbody></table>
+      <div class="p-totals"><div class="ln grand"><span>Net Pay</span><span>${m(net)}</span></div></div>
+      <div class="p-terms">Payment: ${paid}\nThis payslip is a statement of the partner's share of the business profit distributed for the period above. It is not a payroll payslip.</div>
+      <div class="p-sign">${signatureBlockHTML(settings, 'Released by')}<div class="box">${escapeHtml(s.partnerName)}<br>Received by (signature / date)</div></div>
+      <div class="p-foot">${escapeHtml(settings.companyName)} · System-generated document · Confidential</div>
+    </div>`;
+  }).join('');
+  printShell(onlyIdx === null || onlyIdx === undefined ? `Payslips ${dist.distributionNo}` : `Payslip ${D.slipNumber(dist, dist.splits[onlyIdx], onlyIdx)}`, pages);
+}
+
+window.Print = { printPayslips, printQuotation, printSalesOrder, printSupplierPO, printProformaInvoice, printTechnicalOffer };
