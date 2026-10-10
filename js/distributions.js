@@ -129,7 +129,7 @@ async function renderDistributionsList() {
     <div class="page-head">
       <h1>Distributions</h1>
       <div class="page-actions">
-        <a href="#/partners" class="btn-line">Manage Partners &amp; Employees</a>
+        <button class="btn-line" id="btnManagePeople">Manage Partners &amp; Employees</button>
         <button class="btn-line" id="btnUseReserve">Use Reserve</button>
         <button class="btn-amber" id="btnNewDist">+ New Distribution</button>
       </div>
@@ -139,7 +139,6 @@ async function renderDistributionsList() {
       ${statCardLocal(formatMoney(totalReserve, 'PHP'), 'Reserve Set Aside (all time)')}
       ${statCardLocal(formatMoney(totalUsed, 'PHP'), 'Reserve Used')}
       ${statCardLocal(formatMoney(totalDistributed, 'PHP'), 'Total Distributed')}
-      ${statCardLocal(all.length, 'Distributions Made')}
     </div>
     <div id="reserveHost"></div>
     ${withdrawals.length ? `<div class="card"><h3 class="section-title">Reserve Used</h3>
@@ -164,6 +163,7 @@ async function renderDistributionsList() {
       </table>`}
     </div>
   `;
+  document.getElementById('btnManagePeople').onclick = () => Router.navigate('/partners');
   document.getElementById('btnNewDist').onclick = () => Router.navigate('/distributions/new');
   document.getElementById('btnUseReserve').onclick = () => {
     const host = document.getElementById('reserveHost');
