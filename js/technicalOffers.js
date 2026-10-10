@@ -90,7 +90,7 @@ async function renderTODetail(id) {
       ${(t.items || []).length === 0 ? `<div class="empty-inline">No items added.</div>` : `
       <table class="data-table compact">
         <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Manufacturer / Origin</th></tr></thead>
-        <tbody>${t.items.map((it, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(it.description)}</td><td>${escapeHtml(it.qty)}</td><td>${escapeHtml(it.manufacturer)}</td></tr>`).join('')}</tbody>
+        <tbody>${t.items.map((it, i) => `<tr><td>${i + 1}</td><td class="desc-col">${descClip(it.description)}</td><td>${escapeHtml(it.qty)}</td><td>${escapeHtml(it.manufacturer)}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
 

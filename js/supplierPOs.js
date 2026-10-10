@@ -151,6 +151,11 @@ async function renderSPODetail(id) {
   const showReceiveMismatch = po.status === 'Received' && unreceivedLines.length > 0;
   const allReceivedPO = (po.lines || []).length > 0 && unreceivedLines.length === 0;
   const paidInFullPO = (po.totalCost || 0) > 0 && spoBalanceDue(po) <= 0;
+  const anyReceivedPO = (po.lines || []).some(l => (l.receivedQty || 0) > 0);
+  const soNeedsDelivery = !!salesOrder && salesOrder.status !== 'Cancelled' && (salesOrder.lines || []).some(l => (l.deliveredQty || 0) < l.qty);
+  const deliverLinkHTML = salesOrder && anyReceivedPO && soNeedsDelivery
+    ? `<a class="btn-amber" href="#/sales-orders/${salesOrder.id}?deliver=1" title="Delivery to the customer is recorded on the Sales Order ${escapeHtml(salesOrder.soNo)}">Deliver to Customer →</a>`
+    : (salesOrder && anyReceivedPO && !soNeedsDelivery && salesOrder.status !== 'Cancelled' ? `<a class="btn-done" href="#/sales-orders/${salesOrder.id}" title="Everything on ${escapeHtml(salesOrder.soNo)} has been delivered">✓ Delivered to Customer</a>` : '');
   const headerBadge = showReceiveMismatch ? `<span class="badge badge-lost">RECEIVED — INCOMPLETE</span>` : statusBadge(po.status);
 
   content.innerHTML = `
@@ -159,6 +164,7 @@ async function renderSPODetail(id) {
       <div class="page-actions">
         <button class="btn-line" id="btnPrint">Print</button>
         ${allReceivedPO ? `<button class="btn-done" id="btnReceiveStock" disabled title="Every item on this PO has been received">✓ All Received</button>` : `<button class="btn-amber" id="btnReceiveStock" ${po.status === 'Cancelled' ? 'disabled title="This PO is cancelled"' : ''}>Receive Stock</button>`}
+        ${deliverLinkHTML}
         ${paidInFullPO ? `<button class="btn-done" id="btnRecordPaymentSPO" disabled title="Nothing left to pay">✓ Paid in Full</button>` : `<button class="btn-amber" id="btnRecordPaymentSPO">Record Payment</button>`}
         <button class="btn-line" id="btnEditHeader">Edit / Revise PO</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
@@ -195,7 +201,7 @@ async function renderSPODetail(id) {
           const receivedCell = (l.receivedQty || 0) >= l.qty
             ? `${l.receivedQty || 0} ${escapeHtml(l.uom)} ✓`
             : `<span class="cell-needs-input">${l.receivedQty || 0} of ${l.qty} ${escapeHtml(l.uom)}</span>`;
-          return `<tr><td>${escapeHtml(l.description)}${listingLinkHTML(listingUrls[l.itemId])}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
+          return `<tr><td class="desc-col">${descClip(l.description, listingLinkHTML(listingUrls[l.itemId]))}</td><td>${l.qty} ${escapeHtml(l.uom)}</td><td>${receivedCell}</td><td>${formatMoney(l.unitCost, po.currency)}</td><td>${formatMoney(l.amount, po.currency)}</td></tr>`;
         }).join('')}</tbody>
       </table>
       <div class="totals">
@@ -437,7 +443,7 @@ function renderReceiveStockForm(po, id) {
           ${receivableLines.map((l, i) => {
             const remaining = r2(l.qty - (l.receivedQty || 0));
             return `<tr data-lineid="${l.lineId}">
-              <td>${escapeHtml(l.description)}${l.compNo ? ' <span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')}</td>
+              <td class="desc-col">${descClip(l.description, l.compNo ? '<span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? '<span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : ''))}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
               <td>${l.receivedQty || 0} ${escapeHtml(l.uom)}</td>
               <td><input type="number" min="0" max="${remaining}" step="any" class="recv-qty" value="${remaining}" style="width:90px;"></td>

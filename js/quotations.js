@@ -1238,7 +1238,7 @@ async function renderQuoteDetail(id) {
       : `${formatMoney(fAmt, fCcy)}${fConv}<div style="font-size:10px; color:#b45309;">per unit (old) — review</div>`;
     return `<tr>
       <td>${i + 1}</td>
-      <td>${escapeHtml(l.brand ? l.brand + ' — ' : '')}${escapeHtml(l.modelNo ? l.modelNo + ' — ' : '')}${escapeHtml(l.description)}</td>
+      <td class="desc-col">${descClip((l.brand ? l.brand + ' — ' : '') + (l.modelNo ? l.modelNo + ' — ' : '') + (l.description || ''))}</td>
       <td>${l.qty} ${escapeHtml(l.uom)}</td>
       <td class="internal-only-col" title="For internal reference only — not shown on the printed quotation">${escapeHtml(l.leadTime || '—')}</td>
       <td class="internal-only-col" title="For internal reference only — not shown on the printed quotation">${freightDisplay}</td>

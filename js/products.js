@@ -28,7 +28,7 @@ function pkgComponentsPanelHTML(record) {
     <table class="data-table compact"><thead><tr><th>Item No.</th><th>Description</th><th>Brand / Model</th><th>Qty</th><th>Unit Cost</th><th>Freight (per unit)</th><th>Markup %</th></tr></thead><tbody>
     ${comps.map(c => {
       const covers = Number(c.freightCoversQty) > 0 ? Number(c.freightCoversQty) : 1;
-      return `<tr><td>${escapeHtml(c.compNo || '—')}</td><td>${escapeHtml(c.description)}</td><td>${escapeHtml([c.brand, c.modelNo].filter(Boolean).join(' · ') || '—')}</td><td>${c.qty} ${escapeHtml(c.uom || '')}</td><td>${formatMoney(c.unitCost, c.costCurrency)}</td><td>${formatMoney((Number(c.estimatedFreightCost) || 0) / covers, c.costCurrency)}</td><td>${c.markupPercent || 0}%</td></tr>`;
+      return `<tr><td>${escapeHtml(c.compNo || '—')}</td><td class="desc-col">${descClip(c.description)}</td><td>${escapeHtml([c.brand, c.modelNo].filter(Boolean).join(' · ') || '—')}</td><td>${c.qty} ${escapeHtml(c.uom || '')}</td><td>${formatMoney(c.unitCost, c.costCurrency)}</td><td>${formatMoney((Number(c.estimatedFreightCost) || 0) / covers, c.costCurrency)}</td><td>${c.markupPercent || 0}%</td></tr>`;
     }).join('')}</tbody></table>`}
     <p class="muted-text" style="margin-top:8px;">Select this package in a quotation's <b>Select Item</b> to load all of these as lines. Edit the package to add or change components.</p></div>`;
 }

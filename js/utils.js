@@ -61,6 +61,23 @@ function escapeHtml(s) {
   }[c]));
 }
 
+/* Clipped description with a "…" button that expands/collapses the full text. Pair with the delegated
+   click handler below (one listener for the whole app, so it works on every page). `suffixHtml` is
+   trusted markup shown after the text (e.g. an "Open listing" link or a note). */
+function descClip(text, suffixHtml) {
+  const t = escapeHtml(text || '');
+  return `<div class="desc-clip" title="${t}"><span class="desc-text">${t}</span><button type="button" class="desc-more" title="Show full description" aria-label="Show full description" aria-expanded="false">…</button></div>${suffixHtml ? `<div class="desc-extra">${suffixHtml}</div>` : ''}`;
+}
+if (typeof document !== 'undefined' && !window.__descMoreBound) {
+  window.__descMoreBound = true;
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.desc-more'); if (!btn) return;
+    e.preventDefault();
+    const box = btn.closest('.desc-clip'); const open = box.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false'); btn.title = open ? 'Show less' : 'Show full description';
+  });
+}
+
 /* ---------- Toast notifications ---------- */
 function toast(msg, type) {
   let host = document.getElementById('toastHost');

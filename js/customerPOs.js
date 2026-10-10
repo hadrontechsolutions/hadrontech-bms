@@ -439,7 +439,7 @@ async function renderCPODetail(id) {
         <tbody>${po.lines.map(l => {
           const vatRate = l.vatRate ?? 12;
           const amountWithVat = l.amountWithVat ?? r2((l.amount || 0) * (1 + vatRate / 100));
-          return `<tr><td>${escapeHtml(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom || 'pc')}</td><td>${formatMoney(l.unitPrice, po.currency)}</td><td>${vatRate}%</td><td>${formatMoney(l.amount, po.currency)}</td><td class="internal-only-col">${formatMoney(amountWithVat, po.currency)}</td></tr>`;
+          return `<tr><td class="desc-col">${descClip(l.description)}</td><td>${l.qty} ${escapeHtml(l.uom || 'pc')}</td><td>${formatMoney(l.unitPrice, po.currency)}</td><td>${vatRate}%</td><td>${formatMoney(l.amount, po.currency)}</td><td class="internal-only-col">${formatMoney(amountWithVat, po.currency)}</td></tr>`;
         }).join('')}</tbody>
       </table>` : `<div class="empty-inline">No itemized lines — Freight only.</div>`}
       ${po.freight ? `<div class="totals" style="margin-top:10px;"><div class="line"><span>Freight / Shipping</span><span>${formatMoney(po.freight, po.currency)}</span></div><div class="line grand"><span>PO Amount</span><span>${formatMoney(po.poAmount, po.currency)}</span></div></div>` : ''}

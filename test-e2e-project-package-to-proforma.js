@@ -174,6 +174,12 @@ async function main() {
     ok('23i fully received lines are green with no tick or per-line "ready to deliver" text', doc.querySelectorAll('.cell-ok').length >= 1 && !/✓/.test([...doc.querySelectorAll('.cell-ok')].map(e => e.textContent).join('')) && !doc.querySelector('td .small.muted-text'));
     ok('23f SO Record Delivery still enabled', !doc.getElementById('btnRecordDelivery').disabled);
     await go('#/supplier-pos/' + spo.id, 200);
+    { const dl = [...doc.querySelectorAll('.page-actions a')].find(x => /Deliver to Customer/.test(x.textContent));
+      ok('23j SPO shows Deliver to Customer link to its Sales Order once stock is received', dl && dl.getAttribute('href') === '#/sales-orders/' + so.id + '?deliver=1', dl && dl.outerHTML);
+      ok('23k SPO items use the clipped description with …', !!doc.querySelector('#content .desc-clip .desc-more'));
+      await go('#/sales-orders/' + so.id + '?deliver=1', 250);
+      ok('23l following the link opens the Record Delivery panel', !!doc.getElementById('btnConfirmDeliver'));
+      await go('#/supplier-pos/' + spo.id, 200); }
   }
   ok('23b package components must NOT create stock on the package record (not a stock item)', !moves.some(m => m.productId == pkg.id), `${moves.filter(m => m.productId == pkg.id).length} stock movements on the package`);
   await go('#/supplier-pos/' + spo.id, 200);

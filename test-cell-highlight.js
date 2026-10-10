@@ -33,7 +33,7 @@ async function main() {
   await wait(10);
   const soHtml = doc.getElementById('content').innerHTML;
   console.log('STEP 1: The partially-delivered line (2 of 3) shows the red "cell-needs-input" highlight:', soHtml.includes('cell-needs-input') && doc.getElementById('content').textContent.includes('2 of 3 pc'));
-  console.log('STEP 2: The fully-delivered line (1 of 1) shows a plain checkmark, no red highlight for that line:', doc.getElementById('content').textContent.includes('1 lot ✓'));
+  console.log('STEP 2: The fully-delivered line (1 of 1) shows a green pill (no red highlight) for that line:', !!doc.querySelector('#content .cell-ok') && doc.getElementById('content').textContent.includes('1 of 1 lot'));
 
   const rows = [...doc.querySelectorAll('#content table tr')].filter(r => r.textContent.includes('Fully delivered item'));
   console.log('STEP 3: Specifically, the fully-delivered row itself contains no cell-needs-input span:', rows.length > 0 && !rows[0].innerHTML.includes('cell-needs-input'));
@@ -52,7 +52,7 @@ async function main() {
   await wait(10);
   const spoHtml = doc.getElementById('content').innerHTML;
   console.log('STEP 4: The partially-received line (2 of 3) shows the red "cell-needs-input" highlight:', spoHtml.includes('cell-needs-input') && doc.getElementById('content').textContent.includes('2 of 3 pc'));
-  console.log('STEP 5: The fully-received line (1 of 1) shows a plain checkmark, no red highlight for that line:', doc.getElementById('content').textContent.includes('1 lot ✓'));
+  console.log('STEP 5: The fully-received line (1 of 1) shows a green pill (no red highlight) for that line:', !!doc.querySelector('#content .cell-ok') && doc.getElementById('content').textContent.includes('1 of 1 lot'));
 
   const spoRows = [...doc.querySelectorAll('#content table tr')].filter(r => r.textContent.includes('Fully received item'));
   console.log('STEP 6: Specifically, the fully-received row itself contains no cell-needs-input span:', spoRows.length > 0 && !spoRows[0].innerHTML.includes('cell-needs-input'));

@@ -296,7 +296,7 @@ async function renderSODetail(id) {
             const gotQty = (recv.perLine[l.lineId] || {}).received || 0;
             const receivedCell = !recv.sourcedIds.has(l.lineId) ? '<span class="muted-text">—</span>'
               : (gotQty >= l.qty ? `<span class="cell-ok">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>` : `<span class="cell-needs-input">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>`);
-            const descCell = `<div class="desc-clip" title="${escapeHtml(l.description || '')}"><span class="desc-text">${escapeHtml(l.description || '')}</span><button type="button" class="desc-more" title="Show full description" aria-label="Show full description" aria-expanded="false">…</button></div>`;
+            const descCell = descClip(l.description);
             return `<tr><td class="desc-col">${descCell}</td><td class="nowrap">${l.qty} ${escapeHtml(l.uom)}</td><td class="nowrap">${receivedCell}</td><td class="nowrap deliv-col">${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
           }).join('')}
         </tbody>
@@ -331,10 +331,7 @@ async function renderSODetail(id) {
     renderRecordDeliveryForm(so, id);
   };
   document.getElementById('btnEditDetails').onclick = () => renderSOHeaderEdit(so);
-  content.querySelectorAll('.desc-more').forEach(btn => btn.addEventListener('click', () => {
-    const box = btn.closest('.desc-clip'); const open = box.classList.toggle('open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false'); btn.title = open ? 'Show less' : 'Show full description';
-  }));
+  if (/[?&]deliver=1/.test(window.location.hash)) { const bd = document.getElementById('btnRecordDelivery'); if (bd && !bd.disabled) setTimeout(() => bd.click(), 0); }
   content.querySelectorAll('.ln-assign-supplier').forEach(sel => sel.addEventListener('change', async (e) => {
     const line = so.lines.find(l => l.lineId === e.target.dataset.lineid);
     if (!line) return;
@@ -417,7 +414,7 @@ async function renderRecordDeliveryForm(so, id) {
             const stockNote = onHand !== null && onHand < remaining
               ? `<br><span class="cell-needs-input">Only ${onHand} in stock — receive more from the supplier first</span>` : '';
             return `<tr data-lineid="${l.lineId}" data-onhand="${onHand === null ? '' : onHand}">
-              <td>${escapeHtml(l.description)}${l.compNo ? ' <span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? ' <span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')}${stockNote}</td>
+              <td class="desc-col">${descClip(l.description, (l.compNo ? '<span class="muted-text">(project item — not kept in stock)</span>' : (!l.itemId ? '<span class="muted-text">(not linked to a catalog product — won\'t affect stock)</span>' : '')) + stockNote)}</td>
               <td>${l.qty} ${escapeHtml(l.uom)}</td>
               <td>${l.deliveredQty || 0} ${escapeHtml(l.uom)}</td>
               <td><input type="number" min="0" max="${cap}" step="any" class="deliv-qty" value="${cap}" style="width:90px;"></td>
