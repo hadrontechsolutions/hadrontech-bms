@@ -47,7 +47,13 @@ async function main() {
 
   /* ============ THE ACTUAL FIX: "Expired" is no longer even offered as a Status option here ============ */
   const statusOptions = [...doc.getElementById('statusFilter').options].map(o => o.value);
-  console.log('STEP 3: THE REAL FIX: "Expired" is no longer offered in the Status filter at all -- this is exactly what was picked by mistake, expecting the date-based meaning:', !statusOptions.includes('Expired'));
+  console.log('STEP 3: "Expired" is offered in the Status filter again (by request) and means "show expired quotations only":', statusOptions.includes('Expired'));
+  { const sf = doc.getElementById('statusFilter'); const cb = doc.getElementById('showExpired');
+    sf.value = 'Expired'; sf.dispatchEvent(new win.Event('change')); await wait(250);
+    const b = doc.getElementById('qBody').textContent;
+    console.log('STEP 3c: Choosing Expired shows the past-due quotation without ticking the checkbox, and the checkbox is disabled meanwhile:', b.includes(pastDueQ.quotationNo) && cb.disabled && !cb.checked);
+    sf.value = ''; sf.dispatchEvent(new win.Event('change')); await wait(250);
+    console.log('STEP 3d: Back to All Statuses: past-due is hidden again and the checkbox works as before:', !doc.getElementById('qBody').textContent.includes(pastDueQ.quotationNo) && !cb.disabled); }
   console.log('STEP 3b: Every OTHER real status is still there, untouched:', ['Draft', 'Sent', 'Under Review', 'Won', 'Lost'].every(s => statusOptions.includes(s)));
 
   /* ============ A quotation that genuinely has status=Expired set is unaffected -- still visible normally, findable by search ============ */

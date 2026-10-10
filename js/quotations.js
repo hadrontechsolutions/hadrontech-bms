@@ -285,7 +285,7 @@ Router.route('/quotations', async () => {
       <h1>Quotations</h1>
       <div class="page-actions">
         <input type="search" id="listSearch" placeholder="Search quotation #, RFQ ref, project, end-user, customer..." class="search-box">
-        <select id="statusFilter"><option value="">All Statuses</option>${QUOTE_STATUSES.filter(s => s !== 'Expired').map(s => `<option>${s}</option>`).join('')}</select>
+        <select id="statusFilter"><option value="">All Statuses</option>${[...QUOTE_STATUSES.filter(s => s !== 'Expired'), 'Expired'].map(s => `<option>${s}</option>`).join('')}</select>
         <button class="btn-amber" id="btnNew">+ New Quotation</button>
       </div>
     </div>
@@ -344,8 +344,13 @@ Router.route('/quotations', async () => {
     const st = document.getElementById('statusFilter').value;
     const showExpired = document.getElementById('showExpired').checked;
     let rows = all;
-    if (st) rows = rows.filter(r => r.status === st);
-    if (!showExpired) rows = rows.filter(r => getExpiryInfo(r).state !== 'expired');
+    // "Expired" in the Status box means: past its Valid Until date while still open (or hand-marked Expired).
+    // It shows them on their own, so the "Show expired" box is not needed and is disabled meanwhile.
+    const expiredOnly = st === 'Expired';
+    document.getElementById('showExpired').disabled = expiredOnly;
+    if (expiredOnly) rows = rows.filter(r => getExpiryInfo(r).state === 'expired' || r.status === 'Expired');
+    else if (st) rows = rows.filter(r => r.status === st);
+    if (!showExpired && !expiredOnly) rows = rows.filter(r => getExpiryInfo(r).state !== 'expired');
     if (q) rows = rows.filter(r => [r.quotationNo, r.rfqRef, r.projectName, r.endUser, custMap[r.customerId]?.companyName].join(' ').toLowerCase().includes(q));
     currentPage = 1;
     draw(rows);
