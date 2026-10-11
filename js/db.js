@@ -183,6 +183,7 @@ async function ensureCounters() {
     { name: 'technicalOffer', prefix: 'HT-TO', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'expense', prefix: 'HT-EXP', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'note', prefix: 'HT-NOTE', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'rfq', prefix: 'HT-RFQ', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'partner', prefix: 'HT-PTR', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'distribution', prefix: 'HT-DIST', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];

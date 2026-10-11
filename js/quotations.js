@@ -386,6 +386,11 @@ async function renderQuoteForm(id) {
     overallDiscountPercent: 0, freightCharge: 0, otherCharges: 0,
     internalNotes: '', customerNotes: '', lines: [emptyLine(0)]
   };
+  // Coming from "Convert to Quotation" on an RFQ: carry the customer, reference and end-user over once.
+  if (!record && window.RFQ_PREFILL) {
+    const pre = window.RFQ_PREFILL; window.RFQ_PREFILL = null;
+    q.customerId = pre.customerId; q.rfqRef = pre.rfqRef || ''; q.endUser = pre.endUser || ''; q.rfqNoteId = pre.rfqId;
+  }
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: isEdit ? q.quotationNo : 'New Quotation' }]);
 
@@ -1148,7 +1153,7 @@ async function renderQuoteForm(id) {
     } else {
       const quotationNo = await DB.nextDocNumber('quotation');
       const newRec = Object.assign({}, header, {
-        quotationNo, revision: 0, isLatest: true, status: 'Draft',
+        quotationNo, revision: 0, isLatest: true, status: 'Draft', rfqNoteId: q.rfqNoteId || null,
         statusHistory: [{ status: 'Draft', date: now }],
         createdAt: now, updatedAt: now, createdBy: settings2.userName, modifiedBy: settings2.userName
       });
@@ -1157,6 +1162,7 @@ async function renderQuoteForm(id) {
       newRec.familyId = newId; // which meant the dbPut below created a SECOND record instead of updating this one
       await DB.dbPut('quotations', newRec);
       await DB.logActivity(`Created quotation ${quotationNo} for ${customer.companyName}`);
+      if (q.rfqNoteId && window.RfqTracker) await window.RfqTracker.linkRfqToQuotation(q.rfqNoteId, newId, quotationNo);
       toast('Quotation created.');
       clearDirty();
       Router.navigate(`/quotations/${newId}`);
@@ -1329,7 +1335,7 @@ async function renderQuoteDetail(id) {
         <div class="detail-item"><div class="detail-label">Customer</div><div class="detail-value">${customer ? `<a href="#/customers/${customer.id}">${escapeHtml(customer.companyName)}</a>` : escapeHtml(q.customerSnapshot?.companyName || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">${formatDate(q.date)}</div></div>
         <div class="detail-item"><div class="detail-label">Valid Until</div><div class="detail-value">${formatDate(q.validUntil) || 'No validity date set'}${expiryInfo.badgeText ? ' ' + statusBadge(expiryInfo.badgeText) : ''}${expiryInfo.state !== 'none' && expiryInfo.state !== 'closed' ? `<br><span class="muted-text">${escapeHtml(expiryInfo.text)}</span>` : ''}</div></div>
-        <div class="detail-item"><div class="detail-label">RFQ Reference</div><div class="detail-value">${escapeHtml(q.rfqRef || '—')}</div></div>
+        <div class="detail-item"><div class="detail-label">RFQ Reference</div><div class="detail-value">${escapeHtml(q.rfqRef || '—')}${q.rfqNoteId ? ` <a href="#/rfq-tracker/${q.rfqNoteId}">(open in RFQ Tracker)</a>` : ''}</div></div>
         <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">${escapeHtml(q.projectName || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">End-User</div><div class="detail-value">${escapeHtml(q.endUser || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Salesperson</div><div class="detail-value">${escapeHtml(q.salesperson || '—')}</div></div>

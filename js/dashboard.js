@@ -96,7 +96,7 @@ Router.route('/dashboard', async () => {
     { n: outstandingSPOs.length, text: 'Supplier POs to pay', hash: '/supplier-pos' },
     { n: expiringWithin7.length, text: 'Quotations expiring in 7 days', hash: '/quotations' },
     { n: expiredNeedingReview.length, text: 'Expired quotations', hash: '/quotations?status=Expired' },
-    { n: notesNeedingAction, text: 'Notes needing action', hash: '/notes' }
+    { n: notesNeedingAction, text: 'RFQs / notes needing follow-up', hash: '/rfq-tracker' }
   ];
   const allClear = attention.every(a => a.n === 0);
 
@@ -111,7 +111,7 @@ Router.route('/dashboard', async () => {
       <button class="qa-btn" data-hash="/quotations/new">+ New Quotation</button>
       <button class="qa-btn" data-hash="/customer-pos/new">Record Customer PO</button>
       <button class="qa-btn" data-hash="/technical-offers/new">+ New Technical Offer</button>
-      <button class="qa-btn" data-hash="/notes/new">+ New Note</button>
+      <button class="qa-btn" data-hash="/rfq-tracker/new">+ New RFQ</button>
       <button class="qa-btn" data-hash="/distributions/new">+ New Distribution</button>
       <button class="qa-btn" data-hash="/reports">Search Records</button>
       <button class="qa-btn" data-hash="/settings/backup">Backup Data</button>
@@ -181,7 +181,7 @@ Router.route('/dashboard', async () => {
       ${statCard(totalTechnicalOffers, 'Technical Offers', '/technical-offers')}
       ${statCard(offersAwaitingResponse, 'Technical Offers Awaiting Response', '/technical-offers')}
       ${statCard(offersNeedingRevision, 'Technical Offers Needing Revision', '/technical-offers')}
-      ${statCard(notesNeedingAction, 'Notes Needing Action', '/notes')}
+      ${statCard(notesNeedingAction, 'RFQs Needing Follow-up', '/rfq-tracker')}
       ${statCard(formatMoney(totalReserve, 'PHP'), 'Business Reserve', '/distributions')}
     </div>
 
