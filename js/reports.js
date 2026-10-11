@@ -4,10 +4,10 @@
 
 const V_OPEN = '▸ Open — not decided yet', V_WONLOST = '▸ Won & Lost', V_EXPIRING = '▸ Expiring soon', V_EXPIRED = '▸ Expired — needs review', V_AWAIT = '▸ Awaiting delivery';
 const V_MONTH = 'By month', V_PAYABLES = 'Payables — we owe suppliers', V_CATEGORY = 'By category (summary)';
-// "page: true" entries are full pages (the Owner Report and Bookkeeper Pack) shown inside this same menu.
+// "page: true" entries are full pages (the Business Performance Report and Bookkeeper Pack) shown inside this same menu.
 const REPORT_GROUPS = [
   { group: 'Report Packs', reports: [
-    { key: 'ownerReport', label: 'Business Owner Report', page: true, module: 'OwnerReport' },
+    { key: 'ownerReport', label: 'Business Performance Report', page: true, module: 'OwnerReport' },
     { key: 'bookkeeperPack', label: 'Bookkeeper Pack', page: true, module: 'BookkeeperPack' }
   ]},
   { group: 'Quotations & Orders', reports: [

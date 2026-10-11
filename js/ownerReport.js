@@ -1,12 +1,12 @@
 /* ============================================================
-   ownerReport.js — the Business Owner Report: one complete picture of the business for the owners.
+   ownerReport.js — the Business Performance Report: one complete picture of the business for the owners.
 
    The Bookkeeper Pack answers "what do the books need?". This answers "how is the business doing and what needs
    our attention?": sales vs. the previous period, the quotation pipeline, active orders, best customers,
    a 12-month trend, profit on won jobs, who owes us / whom we owe, expenses, cash and the Business Reserve.
 
    Money figures come from BookkeeperPack.buildPack (the same rules: sales on invoice date, cancelled/draft excluded,
-   each document at its own saved exchange rate) so the Owner Report and the Bookkeeper Pack never disagree.
+   each document at its own saved exchange rate) so the Business Performance Report and the Bookkeeper Pack never disagree.
    buildOwnerReport() is pure data (testable); the Excel file is written with the Bookkeeper Pack's own writer.
    ============================================================ */
 
@@ -22,19 +22,35 @@
   const monthEnd = (ym) => { const y = +ym.slice(0, 4), m = +ym.slice(5, 7); return `${ym}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`; };
   const shiftMonth = (ym, n) => { let y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return `${y}-${String(m + 1).padStart(2, '0')}`; };
 
+  /* The period we compare with: a full month → the month before; a full quarter → the quarter before; a full year → the year before;
+     "this month so far" → the same days of last month; anything else → the same number of days directly before. */
+  function previousPeriod(from, to) {
+    const y = +from.slice(0, 4), m = +from.slice(5, 7), pad = (n) => String(n).padStart(2, '0');
+    const lastDay = (yy, mm) => new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+    const fullMonth = from.slice(8) === '01' && to === `${from.slice(0, 7)}-${pad(lastDay(y, m))}`;
+    const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
+    if (fullMonth) return { from: `${py}-${pad(pm)}-01`, to: `${py}-${pad(pm)}-${pad(lastDay(py, pm))}`, kind: 'the month before' };
+    if (from.slice(8) === '01' && [1, 4, 7, 10].includes(m)) { const qEnd = shiftMonth(from.slice(0, 7), 2); if (to === monthEnd(qEnd)) { const ps = shiftMonth(from.slice(0, 7), -3); return { from: ps + '-01', to: monthEnd(shiftMonth(ps, 2)), kind: 'the quarter before' }; } }
+    if (from === `${y}-01-01` && to === `${y}-12-31`) return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31`, kind: 'the year before' };
+    if (from.slice(8) === '01' && from.slice(0, 7) === to.slice(0, 7)) { const d = Math.min(+to.slice(8), lastDay(py, pm)); return { from: `${py}-${pad(pm)}-01`, to: `${py}-${pad(pm)}-${pad(d)}`, kind: 'the same days last month' }; }
+    const len = daysBetween(from, to) + 1; return { from: addDays(from, -len), to: addDays(from, -1), kind: 'the same number of days before' };
+  }
+  const nice = (d) => (typeof formatDate === 'function' ? formatDate(d) : d);
+  const rangeText = (a, b) => a === b ? nice(a) : `${nice(a)} – ${nice(b)}`;
+
   function buildOwnerReport(opts) {
     const { from, to, data } = opts; const BP = window.BookkeeperPack;
     const pack = BP.buildPack({ from, to, data, rates: opts.rates });
     const t = pack.totals;
     // previous period of the same length, directly before this one
-    const len = daysBetween(from, to) + 1; const pTo = addDays(from, -1), pFrom = addDays(from, -len);
+    const pp = previousPeriod(from, to); const pFrom = pp.from, pTo = pp.to;
     const prev = BP.buildPack({ from: pFrom, to: pTo, data, rates: opts.rates }).totals;
     const custMap = {}; (data.customers || []).forEach(c => custMap[c.id] = c);
     const cname = (id) => (custMap[id] || {}).companyName || '';
     const quotes = (data.quotations || []).filter(q => q.isLatest !== false);
     const phpOnly = (q) => (q.currency || 'PHP') === 'PHP';
     const inR = (d) => { const x = d10(d); return !!x && x >= from && x <= to; };
-    const out = { from, to, prevFrom: pFrom, prevTo: pTo, pack, totals: t, prev };
+    const out = { from, to, prevFrom: pFrom, prevTo: pTo, prevKind: pp.kind, periodText: rangeText(from, to), prevText: rangeText(pFrom, pTo), pack, totals: t, prev };
 
     /* ---- headline figures with change vs previous period ---- */
     const netCash = r2(t.collections - t.disbursements), prevNetCash = r2(prev.collections - prev.disbursements);
@@ -43,9 +59,19 @@
       { label: 'Cash collected', value: t.collections, prev: prev.collections, good: 'up' },
       { label: 'Purchases (supplier POs)', value: t.purchases, prev: prev.purchases, good: 'neutral' },
       { label: 'Operating expenses', value: t.expenses, prev: prev.expenses, good: 'down' },
-      { label: 'Gross margin (sales less purchases)', value: t.marginPurchasesBasis, prev: prev.marginPurchasesBasis, good: 'up' },
-      { label: 'Net cash movement (collected less paid out)', value: netCash, prev: prevNetCash, good: 'up' }
+      { label: 'Gross margin', value: t.marginPurchasesBasis, prev: prev.marginPurchasesBasis, good: 'up' },
+      { label: 'Net cash movement', value: netCash, prev: prevNetCash, good: 'up' }
     ].map(k => Object.assign(k, { change: pct(k.value, k.prev) }));
+    // When a figure is zero, say exactly why and where the nearest activity is, so a zero never looks like a bug.
+    const livePI = (data.proformaInvoices || []).filter(pi => { const so = (data.salesOrders || []).find(o => o.id === pi.salesOrderId); return !(so && so.status === 'Cancelled'); });
+    const latestInv = livePI.map(pi => ({ no: pi.officialInvoiceNo || pi.piNo, date: d10(pi.date) })).filter(x => x.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+    const latestPay = [].concat(...livePI.map(pi => (pi.payments || []).map(p => ({ no: pi.officialInvoiceNo || pi.piNo, date: d10(p.date) })))).filter(x => x.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+    const where = (x) => x ? ` The latest is ${x.no} on ${nice(x.date)}${x.date > to ? ' (after this period)' : x.date < from ? ' (before this period)' : ''}.` : '';
+    out.kpis[0].basis = 'by invoice date'; out.kpis[1].basis = 'by payment date'; out.kpis[2].basis = 'by supplier PO date'; out.kpis[3].basis = 'by expense date'; out.kpis[4].basis = 'sales less purchases'; out.kpis[5].basis = 'cash collected less everything paid out';
+    if (!t.salesTotal) out.kpis[0].hint = 'No invoice is dated within this period.' + where(latestInv);
+    if (!t.collections) out.kpis[1].hint = 'No customer payment is dated within this period.' + where(latestPay);
+    if (!t.purchases) out.kpis[2].hint = 'No supplier PO is dated within this period.';
+    if (!t.expenses) out.kpis[3].hint = 'No expense is dated within this period.';
 
     /* ---- sales pipeline (quotations) ---- */
     const periodQ = quotes.filter(q => inR(q.date));
@@ -100,6 +126,7 @@
 
     /* ---- things that need attention ---- */
     const att = out.attention = [];
+    if (!t.salesTotal && !t.collections) att.push({ level: 'info', text: `Nothing was invoiced or collected between ${rangeText(from, to)}.${where(latestInv)} Choose another period above if you expected to see activity.` });
     const od = pack.arRows.filter(r => r.days > 30); if (od.length) att.push({ level: 'warn', text: `${od.length} unpaid invoice(s) are older than 30 days — ${pack.arRows.filter(r => r.days > 30).reduce((s, r) => s + r.phpBalance, 0).toFixed(2)} still to collect.` });
     if (pack.apRows.length) att.push({ level: 'info', text: `${pack.apRows.length} supplier PO(s) not fully paid — ${t.apClosing.toFixed(2)} owed to suppliers.` });
     if (out.pipeline.expiredCount) att.push({ level: 'warn', text: `${out.pipeline.expiredCount} open quotation(s) have expired and need a decision (extend, mark Lost or follow up).` });
@@ -112,7 +139,7 @@
 
   /* ---------- workbook ---------- */
   function buildSheets(rep, co) {
-    const { H, titleBlock, money } = window.BookkeeperPack.xl; const t = rep.totals; const period = `Period: ${rep.from} to ${rep.to}  ·  compared with ${rep.prevFrom} to ${rep.prevTo}`; const sheets = [];
+    const { H, titleBlock, money } = window.BookkeeperPack.xl; const t = rep.totals; const period = `Period: ${rep.periodText}  ·  compared with ${rep.prevText} (${rep.prevKind})`; const sheets = [];
     const colName = (i) => { let n = i + 1, s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
     const table = (name, title, headers, widths, body, sums, note) => {
       const rows = titleBlock(co, title, period); const hdr = rows.length + 1; rows.push(H(headers)); const first = rows.length + 1; body.forEach(r => rows.push(r)); const last = rows.length;
@@ -124,9 +151,9 @@
 
     /* Overview */
     const S = []; const sec = (x) => S.push([{ v: x, s: 'section' }, { v: '', s: 'section' }, { v: '', s: 'section' }, { v: '', s: 'section' }, { v: '', s: 'section' }]);
-    S.push([{ v: 'BUSINESS OWNER REPORT', s: 'title' }]); S.push([{ v: co.name, s: 'bold' }]); S.push([{ v: period + `   ·   Prepared ${todayStr()}`, s: 'sub' }]); S.push([]);
-    sec('1. How we did (PHP)'); S.push([{ v: 'Measure', s: 'hdr' }, { v: 'This period', s: 'hdrR' }, { v: 'Previous period', s: 'hdrR' }, { v: 'Change', s: 'hdrR' }, { v: '% change', s: 'hdrR' }]);
-    rep.kpis.forEach(k => S.push([{ v: k.label, s: 'txt' }, money(k.value), money(k.prev), money(k.value - k.prev), k.change == null ? { v: 'n/a', s: 'txt' } : { v: k.change / 100, s: 'pct' }]));
+    S.push([{ v: 'BUSINESS PERFORMANCE REPORT', s: 'title' }]); S.push([{ v: co.name, s: 'bold' }]); S.push([{ v: period + `   ·   Prepared ${todayStr()}`, s: 'sub' }]); S.push([]);
+    sec('1. How we did (PHP)'); S.push([{ v: 'Measure', s: 'hdr' }, { v: 'This period: ' + rep.periodText, s: 'hdrR' }, { v: 'Compared with: ' + rep.prevText, s: 'hdrR' }, { v: 'Change', s: 'hdrR' }, { v: '% change', s: 'hdrR' }]);
+    rep.kpis.forEach(k => S.push([{ v: `${k.label} (${k.basis})`, s: 'txt' }, money(k.value), money(k.prev), money(k.value - k.prev), k.change == null ? { v: 'n/a', s: 'txt' } : { v: k.change / 100, s: 'pct' }]));
     S.push([]); sec('2. Position at period end (PHP)');
     [['Receivables — customers owe us', t.arClosing], ['Payables — we owe suppliers', t.apClosing], ['Inventory on hand (standard cost)', t.inventory], ['Business Reserve', t.reserveEnd]].forEach(([l, v]) => S.push([{ v: l, s: 'txt' }, money(v)]));
     S.push([]); sec('3. Pipeline & orders');
@@ -135,7 +162,7 @@
     S.push([]); sec('4. Needs your attention');
     if (!rep.attention.length) S.push([{ v: 'Nothing urgent.', s: 'ok' }]); rep.attention.forEach(a => S.push([{ v: (a.level === 'warn' ? '⚠ ' : 'ℹ ') + a.text, s: a.level === 'warn' ? 'warn' : 'info' }]));
     const mg = S.map((r, i) => (r.length === 1 && r[0] && ['warn', 'info', 'ok'].includes(r[0].s)) ? i : -1).filter(i => i >= 0);
-    sheets.push({ name: 'Overview', widths: [50, 36, 22, 20, 14], rows: S, landscape: false, merges: mg.map(i => `A${i + 1}:E${i + 1}`), heights: Object.fromEntries(mg.map(i => [i, 15 * Math.max(1, Math.ceil(String(S[i][0].v).length / 110))])) });
+    sheets.push({ name: 'Overview', widths: [58, 32, 32, 18, 12], rows: S, landscape: false, merges: mg.map(i => `A${i + 1}:E${i + 1}`), heights: Object.fromEntries(mg.map(i => [i, 15 * Math.max(1, Math.ceil(String(S[i][0].v).length / 110))])) });
 
     table('Sales Pipeline', 'SALES PIPELINE — quotations issued in the period', ['Quotation', 'Date', 'Customer', 'End-user', 'Status', 'Valid until', 'Expiry', 'Cur', 'Total'], [16, 11, 32, 24, 14, 12, 24, 6, 16],
       rep.pipeline.rows.map(r => [{ v: r.no, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.customer, s: 'txt' }, { v: r.endUser, s: 'txt' }, { v: r.status, s: 'txt' }, r.validUntil ? { d: r.validUntil, s: 'date' } : { v: '', s: 'txt' }, { v: r.expiry, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.total)]),
@@ -193,12 +220,12 @@
     const f = (n) => formatMoney(n, 'PHP'); const t = rep.totals; const P = rep.pipeline, O = rep.orders;
     const row = (l, v, b) => `<tr${b ? ' style="font-weight:800;"' : ''}><td>${escapeHtml(l)}</td><td class="p-num">${v}</td></tr>`;
     const block = (title, rows) => `<div class="bp-sec">${escapeHtml(title)}</div><table class="p-items">${rows.join('')}</table>`;
-    const chg = (k) => k.change == null ? '' : ` <span style="font-weight:400;color:#777;">(${k.change > 0 ? '+' : ''}${k.change}% vs previous)</span>`;
+    const chg = (k) => ` <span style="font-weight:400;color:#777;">(${k.change == null ? 'before: ' + f(k.prev) : (k.change > 0 ? '+' : '') + k.change + '% vs ' + f(k.prev)})</span>`;
     const top = rep.customers.slice(0, 5);
     return `<style>.bp-sec{margin:16px 0 4px; font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#a85f04;} table.p-items td:first-child{width:62%;}</style>
       <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml(co.tin ? 'TIN: ' + co.tin : '')}</div></div>
-      <div><div class="p-doc-title">Business Owner Report</div><div class="p-doc-no">${rep.from} → ${rep.to}</div><div class="p-dates">Compared with ${rep.prevFrom} → ${rep.prevTo}<br>Prepared ${todayStr()}</div></div></div>
-      ${block('How we did', rep.kpis.map(k => row(k.label, f(k.value) + chg(k))))}
+      <div><div class="p-doc-title">Business Performance Report</div><div class="p-doc-no">${escapeHtml(rep.periodText)}</div><div class="p-dates">Compared with ${escapeHtml(rep.prevText)} (${escapeHtml(rep.prevKind)})<br>Prepared ${todayStr()}</div></div></div>
+      ${block('How we did', rep.kpis.map(k => row(`${k.label} — ${k.basis}`, f(k.value) + chg(k))))}
       ${block('Position at period end', [row('Receivables — customers owe us', f(t.arClosing)), row('Payables — we owe suppliers', f(t.apClosing)), row('Inventory on hand', f(t.inventory)), row('Business Reserve', f(t.reserveEnd))])}
       ${block('Pipeline & orders', [row('Quotations issued', `${P.quotedCount} · ${f(P.quotedValue)}`), row('Won / Lost', `${(P.byStatus.Won || { count: 0 }).count} / ${(P.byStatus.Lost || { count: 0 }).count}${P.winRateCount != null ? ' · win rate ' + P.winRateCount + '%' : ''}`), row('Open quotations now', `${P.openCount} · ${f(P.openValue)}`), row('Active sales orders now', `${O.activeCount} · ${f(O.activeValue)}`), row('Gross profit on won quotations', `${f(rep.profit.profitTotal)} (${rep.profit.margin}%)`)])}
       ${top.length ? block('Top customers this period', top.map(c => row(c.name || '(no name)', f(c.invoiced) + ` <span style="font-weight:400;color:#777;">(${Math.round(c.share * 100)}%)</span>`))) : ''}
@@ -216,16 +243,17 @@
     const content = host || document.getElementById('content');
     const data = await loadData(); const co = window.BookkeeperPack.company(data.settings);
     if (!content.isConnected) return; // the page was re-rendered while the data was loading
-    const cur = window.BookkeeperPack.periodPreset('lastMonth');
+    const cur = window.BookkeeperPack.periodPreset('monthToDate');
     content.innerHTML = `
       <div class="card">
-        <h2 class="section-title" style="margin-top:0;">Business Owner Report</h2>
+        <h2 class="section-title" style="margin-top:0;">Business Performance Report</h2>
         <p class="muted-text" style="margin-top:0;">The complete picture for the owners: how we did against the previous period, the quotation pipeline, active orders, best customers, a 12-month trend, profit on won jobs, who owes us / whom we owe, expenses, cash and the Business Reserve — as an <b>Excel workbook</b> plus a <b>one-page PDF</b>. (The <a href="#/reports/bookkeeperPack">Bookkeeper Pack</a> carries the books for your bookkeeper.)</p>
         <div class="bp-controls">
-          <label>Period <select id="orPreset"><option value="lastMonth">Last month</option><option value="thisMonth">This month</option><option value="lastQuarter">Last quarter</option><option value="thisQuarter">This quarter</option><option value="lastYear">Last year</option><option value="thisYear">This year</option><option value="custom">Custom…</option></select></label>
+          <label>Period <select id="orPreset"><option value="monthToDate">This month so far</option><option value="lastMonth">Last month (full)</option><option value="thisMonth">This month (full)</option><option value="lastQuarter">Last quarter</option><option value="thisQuarter">This quarter</option><option value="lastYear">Last year</option><option value="thisYear">This year</option><option value="custom">Custom…</option></select></label>
           <label>From <input type="date" id="orFrom" value="${cur.from}"></label>
           <label>To <input type="date" id="orTo" value="${cur.to}"></label>
         </div>
+        <div id="orPeriodNote" class="muted-text" style="margin-top:10px; line-height:1.6;"></div>
       </div>
       <div id="orPreview"></div>`;
     const q = (id) => document.getElementById(id); let rep = null;
@@ -233,8 +261,9 @@
       const from = q('orFrom').value, to = q('orTo').value;
       if (!from || !to || from > to) { q('orPreview').innerHTML = '<div class="card"><div class="empty-inline">Choose a valid period (From must not be after To).</div></div>'; rep = null; return; }
       rep = buildOwnerReport({ from, to, data }); const f = (n) => formatMoney(n, 'PHP');
-      const arrow = (k) => k.change == null ? '' : `<span class="${(k.good === 'up' ? k.change >= 0 : k.good === 'down' ? k.change <= 0 : true) ? 'text-ok' : 'cell-needs-input'}" style="font-size:11px;"> ${k.change > 0 ? '▲' : k.change < 0 ? '▼' : '•'} ${Math.abs(k.change)}% vs previous</span>`;
-      const tile = (k) => `<div class="stat-card"><div class="stat-card-num">${f(k.value)}</div><div class="stat-card-lbl">${escapeHtml(k.label)}${arrow(k)}</div></div>`;
+      q('orPeriodNote').innerHTML = `Showing <b>${escapeHtml(rep.periodText)}</b>, compared with <b>${escapeHtml(rep.prevText)}</b> (${escapeHtml(rep.prevKind)}). Sales are counted on the <b>invoice date</b> and collections on the <b>payment date</b> — so an invoice dated in one period and paid in another appears in each separately.`;
+      const arrow = (k) => k.change == null ? '' : `<span class="${(k.good === 'up' ? k.change >= 0 : k.good === 'down' ? k.change <= 0 : true) ? 'text-ok' : 'cell-needs-input'}" style="font-size:11px;"> ${k.change > 0 ? '▲' : k.change < 0 ? '▼' : '•'} ${Math.abs(k.change)}%</span>`;
+      const tile = (k) => `<div class="stat-card"><div class="stat-card-num">${f(k.value)}</div><div class="stat-card-lbl"><b>${escapeHtml(k.label)}</b> <span class="muted-text">(${escapeHtml(k.basis)})</span>${arrow(k)}<br><span class="muted-text" style="font-size:11px;">Before: ${f(k.prev)}</span>${k.hint ? `<br><span style="font-size:11px; color:var(--amber-dk, #a85f04);">${escapeHtml(k.hint)}</span>` : ''}</div></div>`;
       const P = rep.pipeline, O = rep.orders;
       q('orPreview').innerHTML = `
         <div class="stat-grid">${rep.kpis.map(tile).join('')}</div>
@@ -250,9 +279,9 @@
       q('orXlsx').onclick = () => {
         const bytes = window.BookkeeperPack.xl.workbookBytes(buildSheets(rep, co));
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-        a.download = `Owner-Report_${(co.name || 'Hadrontech').replace(/[^A-Za-z0-9]+/g, '-')}_${rep.from}_to_${rep.to}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); toast('Owner Report downloaded.');
+        a.download = `Performance-Report_${(co.name || 'Hadrontech').replace(/[^A-Za-z0-9]+/g, '-')}_${rep.from}_to_${rep.to}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); toast('Business Performance Report downloaded.');
       };
-      q('orPdf').onclick = () => printShell(`Owner Report ${rep.from} to ${rep.to}`, summaryHTML(rep, co));
+      q('orPdf').onclick = () => printShell(`Business Performance Report ${rep.from} to ${rep.to}`, summaryHTML(rep, co));
     };
     q('orPreset').onchange = () => { const v = q('orPreset').value; if (v !== 'custom') { const p = window.BookkeeperPack.periodPreset(v); q('orFrom').value = p.from; q('orTo').value = p.to; } refresh(); };
     ['orFrom', 'orTo'].forEach(id => q(id).onchange = () => { q('orPreset').value = 'custom'; refresh(); });

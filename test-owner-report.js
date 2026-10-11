@@ -1,4 +1,4 @@
-/* Business Owner Report: figures, comparison with previous period, pipeline, orders, customers, trend, real xlsx, page, merged menu. */
+/* Business Performance Report: figures, comparison with previous period, pipeline, orders, customers, trend, real xlsx, page, merged menu. */
 const fs = require('fs'); const path = require('path'); const os = require('os');
 const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
 const APP = __dirname;
@@ -47,7 +47,7 @@ const APP = __dirname;
   data.quotations = quotations;
   const rep = OR.buildOwnerReport({ from: '2026-09-01', to: '2026-09-30', data });
   ok('1 headline: invoiced 30,000, collected 25,000 (same as the Bookkeeper Pack)', near(rep.kpis[0].value, 30000) && near(rep.kpis[1].value, 25000), JSON.stringify(rep.kpis.slice(0, 2)));
-  ok('2 previous period = 2026-08-02..2026-08-31 (same length, directly before)', rep.prevFrom === '2026-08-02' && rep.prevTo === '2026-08-31', rep.prevFrom + ' ' + rep.prevTo);
+  ok('2 a full month is compared with the full month before (Aug 1–31)', rep.prevFrom === '2026-08-01' && rep.prevTo === '2026-08-31', rep.prevFrom + ' ' + rep.prevTo);
   ok('3 previous-period invoiced = PI-4 8,000; change +275%', near(rep.kpis[0].prev, 8000) && rep.kpis[0].change === 275, JSON.stringify(rep.kpis[0]));
   ok('4 pipeline: 3 quotes in Sept; won 1 / lost 1 -> win rate 50% by count, 62.5% by value', rep.pipeline.quotedCount === 3 && rep.pipeline.winRateCount === 50 && rep.pipeline.winRateValue === 62.5, JSON.stringify(rep.pipeline.winRateCount + ' ' + rep.pipeline.winRateValue));
   ok('5 open quotations now: Q-3 (expired, needs action)', rep.pipeline.openCount === 1 && rep.pipeline.expiredCount === 1 && rep.pipeline.needsAction.length === 1);
@@ -57,6 +57,15 @@ const APP = __dirname;
   ok('9 customer outstanding adds up to receivables at period end (10,000)', near(rep.customers.reduce((s, c) => s + c.outstanding, 0), rep.totals.arClosing));
   ok('10 trend has 12 months ending Sept; Sept invoiced 30,000, Aug 8,000', rep.trend.length === 12 && rep.trend[11].month === '2026-09' && near(rep.trend[11].invoiced, 30000) && near(rep.trend[10].invoiced, 8000), JSON.stringify(rep.trend.slice(9)));
   ok('11 attention list mentions expired quotation and old unpaid invoices', rep.attention.some(a => /expired/.test(a.text)) && rep.attention.some(a => /older than 30 days|supplier PO/.test(a.text)), JSON.stringify(rep.attention));
+  // ---- clear periods, clear comparisons, zeros explained ----
+  { const pv = (f, t2) => { const r = OR.buildOwnerReport({ from: f, to: t2, data }); return r.prevFrom + '..' + r.prevTo + ' ' + r.prevKind; };
+    ok('21 "this month so far" is compared with the SAME DAYS of last month', pv('2026-09-01', '2026-09-15') === '2026-08-01..2026-08-15 the same days last month', pv('2026-09-01', '2026-09-15'));
+    ok('22 full quarter -> quarter before; full year -> year before; custom -> same number of days directly before', pv('2026-07-01', '2026-09-30') === '2026-04-01..2026-06-30 the quarter before' && pv('2026-01-01', '2026-12-31') === '2025-01-01..2025-12-31 the year before' && pv('2026-09-10', '2026-09-20') === '2026-08-30..2026-09-09 the same number of days before', pv('2026-07-01', '2026-09-30') + ' | ' + pv('2026-09-10', '2026-09-20'));
+    const z = OR.buildOwnerReport({ from: '2026-10-01', to: '2026-10-11', data });
+    ok('23 a zero says why and points to the nearest invoice (PI-2, before this period)', z.kpis[0].value === 0 && /No invoice is dated within this period/.test(z.kpis[0].hint) && /PI-2/.test(z.kpis[0].hint) && /before this period/.test(z.kpis[0].hint), z.kpis[0].hint);
+    const z2 = OR.buildOwnerReport({ from: '2026-11-01', to: '2026-11-10', data });
+    ok('24 the attention list also explains an empty period', z2.attention.some(a => /Nothing was invoiced or collected/.test(a.text)));
+    ok('25 every headline figure states what it is counted by', rep.kpis.every(k => k.basis) && rep.periodText && rep.prevText, JSON.stringify(rep.kpis.map(k => k.basis))); }
   const co = BP.company(st); const bytes = BP.xl.workbookBytes(OR.buildSheets(rep, co)); const file = path.join(os.tmpdir(), 'owner-report-test.xlsx'); fs.writeFileSync(file, Buffer.from(bytes));
   const py = require('child_process').spawnSync('python3', ['-c', `
 import openpyxl, sys
@@ -69,12 +78,12 @@ print('CUST|' + '|'.join(str(c.value) for c in wb['Customers'][6]))
   const pick = (k) => ((py.stdout || '').split('\n').find(l => l.startsWith(k + '|')) || '');
   ok('12 workbook opens with all 10 tabs', pick('SHEETS') === 'SHEETS|Overview|Sales Pipeline|Orders|Customers|Monthly Trend|Profitability|Receivables|Payables|Expenses & Cash|Notes', py.stdout + py.stderr);
   ok('13 Overview comparison table and Customers ranking are present', /Sales invoiced/.test(pick('ROW')) && /No TIN Corp/.test(pick('CUST')), pick('ROW') + pick('CUST'));
-  const sum = OR.summaryHTML(rep, co); ok('14 PDF summary has period, comparison and attention, no NaN', /Business Owner Report/.test(sum) && /2026-08-02/.test(sum) && /Needs attention/.test(sum) && !/NaN|undefined/.test(sum));
+  const sum = OR.summaryHTML(rep, co); ok('14 PDF summary has period, comparison and attention, no NaN', /Business Performance Report/.test(sum) && /Aug 1, 2026/.test(sum) && /Needs attention/.test(sum) && !/NaN|undefined/.test(sum));
 
   // ---- menu + page ----
   await win.DB.openDB(); await win.DB.ensureCounters();
   win.location.hash = '#/reports/ownerReport'; await win.Router.resolveRoute(); await wait(500);
-  ok('15 Owner Report opens inside the Reports menu with the same left navigation', !!doc.getElementById('orXlsx') && !!doc.querySelector('.report-nav') && /Business Owner Report/.test(doc.querySelector('.report-link.active').textContent), doc.getElementById('content').textContent.slice(0, 200));
+  ok('15 Business Performance Report opens inside the Reports menu with the same left navigation', !!doc.getElementById('orXlsx') && !!doc.querySelector('.report-nav') && /Business Performance Report/.test(doc.querySelector('.report-link.active').textContent), doc.getElementById('content').textContent.slice(0, 200));
   win.location.hash = '#/reports/bookkeeperPack'; await win.Router.resolveRoute(); await wait(500);
   ok('16 Bookkeeper Pack opens inside the same menu (no banner above the page)', !!doc.getElementById('bpXlsx') && !!doc.querySelector('.report-nav') && !doc.querySelector('.bp-banner'));
   const labels = [...doc.querySelectorAll('.report-link')].map(a => a.textContent.trim());
@@ -88,6 +97,8 @@ print('CUST|' + '|'.join(str(c.value) for c in wb['Customers'][6]))
   let legOk = true; const legBad = [];
   for (const [k, [target, view]] of Object.entries(legacy)) { win.location.hash = '#/reports/' + k; await win.Router.resolveRoute(); await wait(300); const act = doc.querySelector('.report-link.active'); const sel = doc.getElementById('rStatusFilter'); if (!act || act.getAttribute('href') !== '#/reports/' + target || (view && !new RegExp(view, 'i').test(sel ? sel.value : ''))) { legOk = false; legBad.push(k + '→' + (act && act.getAttribute('href')) + ' / ' + (sel && sel.value)); } }
   ok('19 old report addresses redirect to the merged report with the right view selected', legOk, legBad.join(' | '));
+  win.location.hash = '#/reports/ownerReport'; await win.Router.resolveRoute(); await wait(500);
+  ok('26 the report opens on "This month so far" with a plain-language note of the dates shown and the comparison', doc.getElementById('orPreset').value === 'monthToDate' && /Showing/.test(doc.getElementById('orPeriodNote').textContent) && /invoice date/.test(doc.getElementById('orPeriodNote').textContent) && /Before:/.test(doc.getElementById('orPreview').textContent), doc.getElementById('orPeriodNote').textContent);
   ok('20 no JS errors', errors.length === 0, errors.join('|'));
   console.log('XLSX_FILE', file);
 })().catch(e => { console.log('TEST FAILED', e); process.exit(1); });

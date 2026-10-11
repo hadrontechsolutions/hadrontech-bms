@@ -35,6 +35,7 @@
     const t = ref || todayStr(); const y = +t.slice(0, 4), m = +t.slice(5, 7);
     const pad = (n) => String(n).padStart(2, '0');
     const last = (yy, mm) => new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+    if (kind === 'monthToDate') return { from: `${y}-${pad(m)}-01`, to: t };
     if (kind === 'thisMonth') return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${last(y, m)}` };
     if (kind === 'lastMonth') { const yy = m === 1 ? y - 1 : y, mm = m === 1 ? 12 : m - 1; return { from: `${yy}-${pad(mm)}-01`, to: `${yy}-${pad(mm)}-${last(yy, mm)}` }; }
     const q = Math.floor((m - 1) / 3);
