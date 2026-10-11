@@ -57,7 +57,7 @@ async function main() {
   win.location.hash = '#/reports/salesRegisterBookkeeper';
   await win.Router.resolveRoute();
   await wait(10);
-  console.log('STEP 1: "Sales Register" appears in the report nav, under the "Bookkeeper Reports" group (no longer redundantly repeating "(for Bookkeeper)" in its own label):', doc.getElementById('content').textContent.includes('Sales Register') && doc.getElementById('content').textContent.includes('Bookkeeper Reports'));
+  console.log('STEP 1: "Sales Register" appears in the report nav, under the "Bookkeeper Reports" group (no longer redundantly repeating "(for Bookkeeper)" in its own label):', doc.getElementById('content').textContent.includes('Sales Register') && doc.getElementById('content').textContent.includes('Bookkeeper Registers'));
   console.log('STEP 2: "Purchase Register" appears in the report nav too:', doc.getElementById('content').textContent.includes('Purchase Register'));
 
   const salesRegText = doc.getElementById('content').textContent;

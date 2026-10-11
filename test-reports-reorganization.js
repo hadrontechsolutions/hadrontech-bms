@@ -21,26 +21,25 @@ async function main() {
   await wait(50);
 
   /* ============ All reports still present, none lost in the reorganization ============ */
-  const allExpectedKeys = ['quotationRegister', 'openQuotations', 'wonLost', 'technicalOffersLog', 'salesOrderRegister',
-    'supplierPORegister', 'salesByCustomer', 'salesByMonth', 'grossProfit', 'paymentsAging', 'supplierPaymentsAging',
-    'awaitingDelivery', 'expiringSoon', 'expiredQuotations', 'salesRegisterBookkeeper', 'purchaseRegisterBookkeeper'];
+  const allExpectedKeys = ['ownerReport', 'bookkeeperPack', 'quotationRegister', 'salesOrderRegister', 'supplierPORegister',
+    'salesSummary', 'grossProfit', 'agingReport', 'salesRegisterBookkeeper', 'purchaseRegisterBookkeeper', 'expenseRegister'];
   const presentKeys = [...doc.querySelectorAll('.report-link')].map(a => a.getAttribute('href').replace('#/reports/', ''));
-  console.log('STEP 1: All 16 reports are still present after reorganizing — none lost:', allExpectedKeys.every(k => presentKeys.includes(k)) && presentKeys.length === 16);
+  console.log('STEP 1: The merged menu has exactly the 11 expected entries (related reports are now views of one report):', allExpectedKeys.every(k => presentKeys.includes(k)) && presentKeys.length === 11);
 
   /* ============ Reports are now grouped under clear headers ============ */
   const groupLabels = [...doc.querySelectorAll('.report-group-label')].map(el => el.textContent);
   console.log('STEP 2: Reports are organized into named groups, not one flat list:', groupLabels.length === 5);
-  console.log('STEP 3: Group names are sensible and specific:', groupLabels.includes('Quotations & Technical Offers') && groupLabels.includes('Payments & Collections') && groupLabels.includes('Bookkeeper Reports'));
+  console.log('STEP 3: Group names are sensible and specific:', groupLabels.includes('Report Packs') && groupLabels.includes('Quotations & Orders') && groupLabels.includes('Receivables & Payables') && groupLabels.includes('Bookkeeper Registers'));
 
-  const paymentsGroup = [...doc.querySelectorAll('.report-group')].find(g => g.querySelector('.report-group-label').textContent === 'Payments & Collections');
-  console.log('STEP 4: The Payments & Collections group correctly contains exactly the 2 payments reports:', paymentsGroup.querySelectorAll('.report-link').length === 2);
+  const paymentsGroup = [...doc.querySelectorAll('.report-group')].find(g => g.querySelector('.report-group-label').textContent === 'Quotations & Orders');
+  console.log('STEP 4: The Quotations & Orders group correctly contains exactly the 3 registers:', paymentsGroup.querySelectorAll('.report-link').length === 3);
 
   /* ============ Navigation still works correctly within the new grouped structure ============ */
-  const supplierAgingLink = [...doc.querySelectorAll('.report-link')].find(a => a.textContent === 'Supplier Payments Aging Report');
+  const supplierAgingLink = [...doc.querySelectorAll('.report-link')].find(a => a.textContent === 'Sales Order Register');
   supplierAgingLink.click();
   await wait(80);
   console.log('STEP 5: Clicking a report link within a group still correctly navigates and loads its content:', !!doc.getElementById('reportTableWrap'));
-  console.log('STEP 6: The clicked link correctly gets marked active:', [...doc.querySelectorAll('.report-link')].find(a => a.textContent === 'Supplier Payments Aging Report').classList.contains('active'));
+  console.log('STEP 6: The clicked link correctly gets marked active:', [...doc.querySelectorAll('.report-link')].find(a => a.textContent === 'Sales Order Register').classList.contains('active'));
 
   /* ============ Filter box ============ */
   win.location.hash = '#/reports';
@@ -49,12 +48,12 @@ async function main() {
   const filterBox = doc.getElementById('reportFilter');
   console.log('STEP 7: A filter box exists for quickly finding a report among the full list:', !!filterBox);
 
-  filterBox.value = 'payment';
+  filterBox.value = 'register';
   filterBox.dispatchEvent(new win.Event('input'));
   await wait(20);
   const visibleLinks = () => [...doc.querySelectorAll('.report-link')].filter(a => a.style.display !== 'none');
-  console.log('STEP 8: Typing "payment" correctly narrows the list to just the matching reports:', visibleLinks().length === 2 && visibleLinks().every(a => a.textContent.toLowerCase().includes('payment')));
-  console.log('STEP 9: Groups with no matching reports are correctly hidden entirely, not left as an empty heading:', [...doc.querySelectorAll('.report-group')].filter(g => g.style.display !== 'none').length === 1);
+  console.log('STEP 8: Typing "register" correctly narrows the list to just the matching reports:', visibleLinks().length === 6 && visibleLinks().every(a => a.textContent.toLowerCase().includes('register')));
+  console.log('STEP 9: Groups with no matching reports are correctly hidden entirely, not left as an empty heading:', [...doc.querySelectorAll('.report-group')].filter(g => g.style.display !== 'none').length === 2);
 
   filterBox.value = 'zzz-nonexistent';
   filterBox.dispatchEvent(new win.Event('input'));
@@ -64,7 +63,7 @@ async function main() {
   filterBox.value = '';
   filterBox.dispatchEvent(new win.Event('input'));
   await wait(20);
-  console.log('STEP 11: Clearing the filter restores every report:', visibleLinks().length === 16);
+  console.log('STEP 11: Clearing the filter restores every report:', visibleLinks().length === 11);
 
   /* ============ Regression: report content/data itself is unaffected by the nav restructuring ============ */
   const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'Test Co', status: 'Active', createdAt: new Date().toISOString() });

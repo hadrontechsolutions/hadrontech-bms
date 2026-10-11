@@ -492,16 +492,16 @@
   }
   const company = (settings) => ({ name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '', address: (settings.address || '').replace(/\s*\n\s*/g, ', ') });
 
-  async function render() {
-    Router.setBreadcrumb([{ label: 'Reports', hash: '/reports' }, { label: 'Bookkeeper Pack' }]);
-    const content = document.getElementById('content');
+  async function render(host) {
+    const content = host || document.getElementById('content');
     const data = await loadData(); const co = company(data.settings);
+    if (!content.isConnected) return; // the page was re-rendered while the data was loading
     const cur = periodPreset('lastMonth');
     const knownCur = new Set(); (data.supplierPOs || []).forEach(p => p.currency && p.currency !== 'PHP' && knownCur.add(p.currency)); (data.products || []).forEach(p => p.currency && p.currency !== 'PHP' && p.type !== 'Project Package' && knownCur.add(p.currency)); (data.proformaInvoices || []).forEach(p => p.currency && p.currency !== 'PHP' && knownCur.add(p.currency));
     const baseRates = Object.assign({}, data.settings.referenceRates || {});
     content.innerHTML = `
-      <div class="page-head"><h1>Bookkeeper Pack</h1><div class="page-actions"><a class="btn-line" href="#/reports">← All reports</a></div></div>
       <div class="card">
+        <h2 class="section-title" style="margin-top:0;">Bookkeeper Pack</h2>
         <p class="muted-text" style="margin-top:0;">One complete package for your bookkeeper (who has no access to the BMS): an <b>Excel workbook</b> with every book and schedule on its own tab, plus a <b>PDF summary</b>. Choose the period, review the preview, then download.</p>
         <div class="bp-controls">
           <label>Period <select id="bpPreset"><option value="lastMonth">Last month</option><option value="thisMonth">This month</option><option value="lastQuarter">Last quarter</option><option value="thisQuarter">This quarter</option><option value="lastYear">Last year</option><option value="thisYear">This year</option><option value="custom">Custom…</option></select></label>
@@ -545,5 +545,5 @@
     toast('Bookkeeper Pack downloaded.');
   }
 
-  window.BookkeeperPack = { render, buildPack, buildSheets, workbookBytes, pack2bytes, summaryHTML, periodPreset, company, loadData };
+  window.BookkeeperPack = { xl: { workbookBytes, H, titleBlock, money, r2, d10 }, render, buildPack, buildSheets, workbookBytes, pack2bytes, summaryHTML, periodPreset, company, loadData };
 })();

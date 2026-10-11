@@ -36,23 +36,20 @@ async function main() {
   win.location.hash = '#/reports';
   await win.Router.resolveRoute();
   await wait(50);
-  console.log('STEP 1: "Technical Offers Log" appears in the report nav:', doc.getElementById('content').textContent.includes('Technical Offers Log'));
-  console.log('STEP 2: "Payments Aging Report" appears in the report nav:', doc.getElementById('content').textContent.includes('Payments Aging Report'));
+  console.log('STEP 1: "Technical Offers Log" was removed from the report nav (not needed by the business):', !doc.getElementById('content').textContent.includes('Technical Offers Log'));
+  console.log('STEP 2: "Aging — Customers & Suppliers" appears in the report nav:', doc.getElementById('content').textContent.includes('Aging — Customers & Suppliers'));
 
   /* ============ Technical Offers Log ============ */
-  win.location.hash = '#/reports/technicalOffersLog';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
   let body = doc.getElementById('reportTableWrap').textContent;
-  console.log('STEP 3: Technical Offers Log shows both offers with their key details:', body.includes('HT-TO-2026-0001') && body.includes('Onsemi') && body.includes('566-25663') && body.includes('HT-TO-2026-0002') && body.includes('Acme Corp'));
-  console.log('STEP 4: Status column correctly shows the color-independent text value too (Sent / Approved):', body.includes('Sent') && body.includes('Approved'));
 
   // Date filter: restrict to only today's offers, excluding the 2020 one
   doc.getElementById('rFrom').value = win.todayISO();
   doc.getElementById('rApply').click();
   await wait(80);
   body = doc.getElementById('reportTableWrap').textContent;
-  console.log('STEP 5: Date filter correctly excludes the 2020 offer, keeping only the one from today:', body.includes('HT-TO-2026-0001') && !body.includes('HT-TO-2026-0002'));
 
   /* ============ Payments Aging Report ============ */
   win.location.hash = '#/reports/paymentsAging';
@@ -76,13 +73,12 @@ async function main() {
   await wait(30);
   console.log('STEP 14: CSV export for Payments Aging runs without error and includes the outstanding invoices:', downloaded && downloaded.content.includes('HT-PI-2026-0001'));
 
-  win.location.hash = '#/reports/technicalOffersLog';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
   downloaded = null;
   doc.getElementById('rExport').click();
   await wait(30);
-  console.log('STEP 15: CSV export for Technical Offers Log runs without error and includes the offers:', downloaded && downloaded.content.includes('HT-TO-2026-0001'));
 
   /* ============ Regression: existing reports still work ============ */
   win.location.hash = '#/reports/quotationRegister';

@@ -53,10 +53,15 @@ function main() {
   /* ---------- 3. REPORT_GROUPS keys vs buildReport() switch cases ---------- */
   const reportGroupKeys = [...reportsJs.matchAll(/key:\s*'([a-zA-Z]+)'/g)].map(m => m[1]);
   const buildReportCases = [...reportsJs.matchAll(/\n\s*case '([a-zA-Z]+)':/g)].map(m => m[1]);
+  // Merged menu entries (one report with several views) build their views through MERGED_VIEWS; full pages (Owner Report, Bookkeeper Pack) have their own module.
+  const mergedBlock = (reportsJs.match(/const MERGED_VIEWS = \{([\s\S]*?)\n\};/) || [, ''])[1];
+  const mergedKeys = [...mergedBlock.matchAll(/\n\s*([a-zA-Z]+):\s*\{/g)].map(m => m[1]);
+  const mergedTargets = [...mergedBlock.matchAll(/:\s*'([a-zA-Z]+)'/g)].map(m => m[1]);
+  const pageKeys = [...reportsJs.matchAll(/key:\s*'([a-zA-Z]+)'[^}]*page:\s*true/g)].map(m => m[1]);
   check('STEP 4: Every report listed in the nav has a matching case in buildReport() (no dead link that shows "no data" forever)',
-    reportGroupKeys.every(k => buildReportCases.includes(k)) || `NO BUILD CASE FOR: ${reportGroupKeys.filter(k => !buildReportCases.includes(k)).join(', ')}`);
+    reportGroupKeys.every(k => buildReportCases.includes(k) || mergedKeys.includes(k) || pageKeys.includes(k)) || `NO BUILD CASE FOR: ${reportGroupKeys.filter(k => !buildReportCases.includes(k) && !mergedKeys.includes(k) && !pageKeys.includes(k)).join(', ')}`);
   check('STEP 5: No orphaned buildReport case exists that nothing in the nav actually links to (dead code)',
-    buildReportCases.every(c => reportGroupKeys.includes(c)) || `ORPHANED CASE(S): ${buildReportCases.filter(c => !reportGroupKeys.includes(c)).join(', ')}`);
+    buildReportCases.every(c => reportGroupKeys.includes(c) || mergedTargets.includes(c)) || `ORPHANED CASE(S): ${buildReportCases.filter(c => !reportGroupKeys.includes(c) && !mergedTargets.includes(c)).join(', ')}`);
   check('STEP 6: No report key is accidentally listed twice in the nav',
     new Set(reportGroupKeys).size === reportGroupKeys.length || 'DUPLICATE KEY(S) FOUND');
 

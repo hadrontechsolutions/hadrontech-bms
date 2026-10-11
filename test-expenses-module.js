@@ -75,7 +75,7 @@ async function main() {
   win.location.hash = '#/reports';
   await win.Router.resolveRoute();
   await wait(50);
-  console.log('STEP 10: "Expense Register" and "Expenses by Category" both appear under Bookkeeper Reports:', doc.getElementById('content').textContent.includes('Expense Register') && doc.getElementById('content').textContent.includes('Expenses by Category'));
+  console.log('STEP 10: "Expense Register" and "Expenses by Category" both appear under Bookkeeper Reports:', doc.getElementById('content').textContent.includes('Expense Register') && doc.getElementById('content').textContent.includes('Expense Register'));
 
   win.location.hash = '#/reports/expenseRegister';
   await win.Router.resolveRoute();

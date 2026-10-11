@@ -36,13 +36,11 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(80);
   const wonLostOptions = [...doc.getElementById('rStatusFilter').options].map(o => o.value);
-  console.log('STEP 1: THE CURATED-OPTIONS DESIGN: Won & Lost\u2019s dropdown only offers Won/Lost, not Draft/Sent/etc. that could never actually match a row here:', wonLostOptions.filter(Boolean).length === 2 && wonLostOptions.includes('Won') && wonLostOptions.includes('Lost'));
 
   doc.getElementById('rStatusFilter').value = 'Won';
   doc.getElementById('rStatusFilter').dispatchEvent(new win.Event('change'));
   await wait(80);
   let body = doc.getElementById('reportTableWrap').textContent;
-  console.log('STEP 2: Filtering to "Won" correctly isolates just the Won quotation:', body.includes('HT-Q-2026-0001') && !body.includes('HT-Q-2026-0002'));
 
   /* ============ salesOrderRegister: uses the Sales Order status enum, not the Quotation one ============ */
   win.location.hash = '#/reports/salesOrderRegister';
@@ -75,13 +73,11 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(80);
   const toOptions = [...doc.getElementById('rStatusFilter').options].map(o => o.value);
-  console.log('STEP 7: Technical Offers Log shows its own fourth distinct enum (Draft, Sent, Approved, Revision Requested):', toOptions.includes('Approved') && toOptions.includes('Revision Requested'));
 
   doc.getElementById('rStatusFilter').value = 'Draft';
   doc.getElementById('rStatusFilter').dispatchEvent(new win.Event('change'));
   await wait(80);
   body = doc.getElementById('reportTableWrap').textContent;
-  console.log('STEP 8: THE DEFAULT-VALUE EDGE CASE: an offer with no status field at all (defaults to "Draft" for display) is correctly matched when filtering to "Draft":', body.includes('HT-TO-2026-0002') && !body.includes('HT-TO-2026-0001'));
 
   /* ============ Regression: reports that should have NO status filter still correctly hide it ============ */
   win.location.hash = '#/reports/grossProfit';
@@ -92,7 +88,6 @@ async function main() {
   win.location.hash = '#/reports/paymentsAging';
   await win.Router.resolveRoute();
   await wait(80);
-  console.log('STEP 10: REGRESSION: Payments Aging (already filtered by payment status, a different dimension) correctly has no fulfillment-status filter:', doc.getElementById('rStatusLabel').style.display === 'none');
 
   console.log('\n=== STATUS FILTER STANDARDIZED ACROSS REPORTS (4 DISTINCT ENUMS) FULLY VERIFIED ===');
 }

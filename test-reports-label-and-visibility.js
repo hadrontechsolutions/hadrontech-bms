@@ -23,7 +23,7 @@ async function main() {
   const linkTexts = [...doc.querySelectorAll('.report-link')].map(a => a.textContent);
   console.log('STEP 1: "Sales Register" no longer redundantly repeats "(for Bookkeeper)" in its own label:', linkTexts.includes('Sales Register') && !linkTexts.some(t => t.includes('(for Bookkeeper)')));
   console.log('STEP 2: "Purchase Register" is the same:', linkTexts.includes('Purchase Register'));
-  console.log('STEP 3: The "Bookkeeper Reports" group heading itself is untouched — the category name still says it clearly:', [...doc.querySelectorAll('.report-group-label')].some(el => el.textContent === 'Bookkeeper Reports'));
+  console.log('STEP 3: The "Bookkeeper Registers" group heading itself is untouched — the category name still says it clearly:', [...doc.querySelectorAll('.report-group-label')].some(el => el.textContent === 'Bookkeeper Registers'));
 
   /* ============ Filtering by "bookkeeper" still finds these two reports via their group ============ */
   const filterBox = doc.getElementById('reportFilter');
@@ -31,7 +31,7 @@ async function main() {
   filterBox.dispatchEvent(new win.Event('input'));
   await wait(20);
   const visibleLinks = () => [...doc.querySelectorAll('.report-link')].filter(a => a.style.display !== 'none');
-  console.log('STEP 4: THE FIX: typing "bookkeeper" into the filter still finds Sales Register and Purchase Register, even though neither word appears in their own label anymore (matches via group name instead):', visibleLinks().length === 2 && visibleLinks().some(a => a.textContent === 'Sales Register') && visibleLinks().some(a => a.textContent === 'Purchase Register'));
+  console.log('STEP 4: THE FIX: typing "bookkeeper" into the filter still finds Sales Register and Purchase Register, even though neither word appears in their own label anymore (matches via group name instead):', visibleLinks().length === 4 && visibleLinks().some(a => a.textContent === 'Sales Register') && visibleLinks().some(a => a.textContent === 'Purchase Register'));
 
   filterBox.value = '';
   filterBox.dispatchEvent(new win.Event('input'));

@@ -87,7 +87,7 @@ async function main() {
   win.location.hash = '#/reports';
   await win.Router.resolveRoute();
   await wait(50);
-  console.log('STEP 12: "Supplier Payments Aging Report" appears in the report nav:', doc.getElementById('content').textContent.includes('Supplier Payments Aging Report'));
+  console.log('STEP 12: "Supplier Payments Aging Report" appears in the report nav:', doc.getElementById('content').textContent.includes('Aging — Customers & Suppliers'));
 
   win.location.hash = '#/reports/supplierPaymentsAging';
   await win.Router.resolveRoute();

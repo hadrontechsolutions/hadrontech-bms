@@ -33,7 +33,7 @@ async function main() {
     netSubtotal: 20000, grossProfit: 5000, grossMarginPercent: 25, subtotal: 20000, vatTotal: 0, grandTotal: 20000, createdAt: now, updatedAt: now
   });
 
-  win.location.hash = '#/reports/projectedGrossProfit';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
 
@@ -50,7 +50,7 @@ async function main() {
   console.log('STEP 3: THE CORE ASK: typing lowercase "onsemi" correctly catches the ALL-CAPS "ONSEMI" record:', body.includes('HT-Q-2026-0001'));
   console.log('STEP 4: It ALSO catches "onsemi cebu" (a different capitalization AND a partial match), proving this is not an exact-match dropdown:', body.includes('HT-Q-2026-0002'));
   console.log('STEP 5: The unrelated "Shindengen" record is correctly excluded:', !body.includes('HT-Q-2026-0003'));
-  console.log('STEP 6: Totals recalculate to match only the filtered rows (15,000 + 10,000 = 25,000):', body.includes('25,000.00'));
+  console.log('STEP 6: Totals recalculate to match only the filtered rows (60,000 + 40,000 = 100,000):', body.includes('100,000.00'));
 
   /* ============ Partial-fragment matching (not just prefix) ============ */
   endUserInput.value = 'CEBU'; // uppercase fragment, mid-word -- should still match "onsemi cebu"
@@ -82,13 +82,13 @@ async function main() {
   console.log('STEP 10: Customer + End-User filters combine correctly (KEYEC AND "cebu" -> only HT-Q-2026-0002):', body.includes('HT-Q-2026-0002') && !body.includes('HT-Q-2026-0001') && !body.includes('HT-Q-2026-0003'));
 
   /* ============ Regression: a report without these filters hides both boxes entirely ============ */
-  win.location.hash = '#/reports/quotationRegister';
+  win.location.hash = '#/reports/salesSummary';
   await win.Router.resolveRoute();
   await wait(80);
-  console.log('STEP 11: REGRESSION: an unrelated report (Quotation Register) correctly hides both filter boxes:', doc.getElementById('rEndUserLabel').style.display === 'none' && doc.getElementById('rCustomerLabel').style.display === 'none');
+  console.log('STEP 11: REGRESSION: an unrelated report (Sales Summary) correctly hides both filter boxes:', doc.getElementById('rEndUserLabel').style.display === 'none' && doc.getElementById('rCustomerLabel').style.display === 'none');
 
   /* ============ CSV export reflects the active filters ============ */
-  win.location.hash = '#/reports/projectedGrossProfit';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
   doc.getElementById('rEndUserFilter').value = 'onsemi';

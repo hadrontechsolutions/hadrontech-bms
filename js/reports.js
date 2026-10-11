@@ -2,45 +2,56 @@
    reports.js — business reports, all filterable by date and exportable to CSV
    ============================================================ */
 
+const V_OPEN = '▸ Open — not decided yet', V_WONLOST = '▸ Won & Lost', V_EXPIRING = '▸ Expiring soon', V_EXPIRED = '▸ Expired — needs review', V_AWAIT = '▸ Awaiting delivery';
+const V_MONTH = 'By month', V_PAYABLES = 'Payables — we owe suppliers', V_CATEGORY = 'By category (summary)';
+// "page: true" entries are full pages (the Owner Report and Bookkeeper Pack) shown inside this same menu.
 const REPORT_GROUPS = [
-  { group: 'Quotations & Technical Offers', reports: [
-    { key: 'quotationRegister', label: 'Quotation Register', filters: ['customer', 'endUser', 'status'], statusOptions: () => window.QUOTE_STATUSES || [] },
-    { key: 'openQuotations', label: 'Open Quotation Report', filters: ['customer', 'endUser', 'status'], statusOptions: () => ['Draft', 'Sent', 'Under Review'] },
-    { key: 'wonLost', label: 'Won & Lost Quotation Report', filters: ['customer', 'endUser', 'status'], statusOptions: () => ['Won', 'Lost'] },
-    { key: 'expiringSoon', label: 'Quotations Expiring Soon', filters: ['customer', 'endUser'] },
-    { key: 'expiredQuotations', label: 'Expired Quotations — Needs Review', filters: ['customer', 'endUser', 'status'], statusOptions: () => window.QUOTE_STATUSES || [] },
-    { key: 'technicalOffersLog', label: 'Technical Offers Log', filters: ['customer', 'endUser', 'status'], statusOptions: () => window.TO_STATUSES || [] }
+  { group: 'Report Packs', reports: [
+    { key: 'ownerReport', label: 'Business Owner Report', page: true, module: 'OwnerReport' },
+    { key: 'bookkeeperPack', label: 'Bookkeeper Pack', page: true, module: 'BookkeeperPack' }
   ]},
-  { group: 'Orders & Fulfillment', reports: [
-    { key: 'salesOrderRegister', label: 'Sales Order Register', filters: ['customer', 'status'], statusOptions: () => window.SO_STATUSES || [] },
-    { key: 'supplierPORegister', label: 'Supplier PO Register', filters: ['supplier', 'status'], statusOptions: () => window.SPO_STATUSES || [] },
-    { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery', filters: ['customer', 'status'], statusOptions: () => ['Ready for Delivery', 'Partially Delivered'] }
+  { group: 'Quotations & Orders', reports: [
+    { key: 'quotationRegister', label: 'Quotation Register', filters: ['customer', 'endUser', 'status'], statusOptions: () => [...(window.QUOTE_STATUSES || []), V_OPEN, V_WONLOST, V_EXPIRING, V_EXPIRED], filterLabel: 'Show', allLabel: 'All quotations' },
+    { key: 'salesOrderRegister', label: 'Sales Order Register', filters: ['customer', 'status'], statusOptions: () => [...(window.SO_STATUSES || []), V_AWAIT], filterLabel: 'Show', allLabel: 'All orders' },
+    { key: 'supplierPORegister', label: 'Supplier PO Register', filters: ['supplier', 'status'], statusOptions: () => window.SPO_STATUSES || [] }
   ]},
-  { group: 'Financial Performance', reports: [
-    { key: 'salesByCustomer', label: 'Sales by Customer' },
-    { key: 'salesByMonth', label: 'Sales by Month' },
-    { key: 'grossProfit', label: 'Gross Profit Report (Won Only)', filters: ['customer', 'endUser'] },
-    { key: 'projectedGrossProfit', label: 'Projected Gross Profit (All Stages)', filters: ['customer', 'endUser', 'status'], statusOptions: () => window.QUOTE_STATUSES || [] }
+  { group: 'Sales Performance', reports: [
+    { key: 'salesSummary', label: 'Sales Summary', filters: ['status'], statusOptions: () => [V_MONTH], filterLabel: 'View', allLabel: 'By customer' },
+    { key: 'grossProfit', label: 'Gross Profit (Won Quotations)', filters: ['customer', 'endUser'] }
   ]},
-  { group: 'Payments & Collections', reports: [
-    { key: 'paymentsAging', label: 'Payments Aging Report', filters: ['customer'] },
-    { key: 'supplierPaymentsAging', label: 'Supplier Payments Aging Report', filters: ['supplier'] }
+  { group: 'Receivables & Payables', reports: [
+    { key: 'agingReport', label: 'Aging — Customers & Suppliers', filters: ['customer', 'supplier', 'status'], statusOptions: () => [V_PAYABLES], filterLabel: 'View', allLabel: 'Receivables — customers owe us' }
   ]},
-  { group: 'Bookkeeper Reports', reports: [
+  { group: 'Bookkeeper Registers', reports: [
     { key: 'salesRegisterBookkeeper', label: 'Sales Register', filters: ['customer', 'status'], statusOptions: () => window.SO_STATUSES || [] },
     { key: 'purchaseRegisterBookkeeper', label: 'Purchase Register', filters: ['supplier', 'status'], statusOptions: () => window.SPO_STATUSES || [] },
-    { key: 'expenseRegister', label: 'Expense Register' },
-    { key: 'expensesByCategory', label: 'Expenses by Category' }
+    { key: 'expenseRegister', label: 'Expense Register', filters: ['status'], statusOptions: () => [V_CATEGORY], filterLabel: 'View', allLabel: 'All expenses (detail)' }
   ]}
 ];
+// Which underlying report each merged menu entry builds for each dropdown choice ('' = the default view).
+const MERGED_VIEWS = {
+  quotationRegister: { [V_OPEN]: 'openQuotations', [V_WONLOST]: 'wonLost', [V_EXPIRING]: 'expiringSoon', [V_EXPIRED]: 'expiredQuotations' },
+  salesOrderRegister: { [V_AWAIT]: 'awaitingDelivery' },
+  salesSummary: { '': 'salesByCustomer', [V_MONTH]: 'salesByMonth' },
+  agingReport: { '': 'paymentsAging', [V_PAYABLES]: 'supplierPaymentsAging' },
+  expenseRegister: { [V_CATEGORY]: 'expensesByCategory' }
+};
+// Reports that were merged into another one keep working: the old address opens the new report with the right view chosen.
+const LEGACY_REPORTS = {
+  openQuotations: ['quotationRegister', V_OPEN], wonLost: ['quotationRegister', V_WONLOST], expiringSoon: ['quotationRegister', V_EXPIRING],
+  expiredQuotations: ['quotationRegister', V_EXPIRED], awaitingDelivery: ['salesOrderRegister', V_AWAIT], salesByCustomer: ['salesSummary', ''],
+  salesByMonth: ['salesSummary', V_MONTH], paymentsAging: ['agingReport', ''], supplierPaymentsAging: ['agingReport', V_PAYABLES],
+  expensesByCategory: ['expenseRegister', V_CATEGORY], projectedGrossProfit: ['grossProfit', ''], technicalOffersLog: ['quotationRegister', '']
+};
 // Flat lookup kept for anything that just needs a report's label or existence check by key.
 const REPORT_DEFS = REPORT_GROUPS.flatMap(g => g.reports);
 
 Router.route('/reports', () => renderReports('quotationRegister'));
 Router.route('/reports/:key', (p) => renderReports(p.key));
 
-async function renderReports(activeKey) {
-  if (activeKey === 'bookkeeperPack') return window.BookkeeperPack.render();
+async function renderReports(activeKey, initialView) {
+  if (LEGACY_REPORTS[activeKey]) { [activeKey, initialView] = LEGACY_REPORTS[activeKey]; }
+  if (!REPORT_GROUPS.some(g => g.reports.some(r => r.key === activeKey))) activeKey = 'quotationRegister';
   Router.setBreadcrumb([{ label: 'Reports' }]);
   const content = document.getElementById('content');
   // Which text filters (Customer / End-User) this specific report supports, if any -- set once
@@ -50,7 +61,6 @@ async function renderReports(activeKey) {
 
   content.innerHTML = `
     <div class="page-head"><h1>Reports</h1></div>
-    <a class="bp-banner" href="#/reports/bookkeeperPack"><span class="bp-banner-ico">📒</span><span><b>Bookkeeper Pack</b> — one complete Excel workbook + PDF summary for your bookkeeper (sales, collections, purchases, payments, expenses, receivables, payables, inventory…)</span><span class="bp-banner-go">Open →</span></a>
     <div class="report-layout">
       <div class="report-nav-panel">
         <input type="text" id="reportFilter" class="report-filter-box" placeholder="Filter reports...">
@@ -64,19 +74,19 @@ async function renderReports(activeKey) {
         </div>
       </div>
       <div class="report-body">
-        <div class="card">
+        ${activeReportDef?.page ? '<div id="reportPageHost"></div>' : `<div class="card">
           <div class="page-actions" style="margin-bottom:12px;">
             <label style="font-size:12px;">From <input type="date" id="rFrom"></label>
             <label style="font-size:12px;">To <input type="date" id="rTo"></label>
             <label style="font-size:12px; ${supportedFilters.includes('customer') ? '' : 'display:none;'}" id="rCustomerLabel">Customer <input type="text" id="rCustomerFilter" placeholder="Type to filter..." style="width:140px;"></label>
             <label style="font-size:12px; ${supportedFilters.includes('endUser') ? '' : 'display:none;'}" id="rEndUserLabel">End-User <input type="text" id="rEndUserFilter" placeholder="Type to filter..." style="width:140px;"></label>
             <label style="font-size:12px; ${supportedFilters.includes('supplier') ? '' : 'display:none;'}" id="rSupplierLabel">Supplier <input type="text" id="rSupplierFilter" placeholder="Type to filter..." style="width:140px;"></label>
-            <label style="font-size:12px; ${supportedFilters.includes('status') ? '' : 'display:none;'}" id="rStatusLabel">Status <select id="rStatusFilter"><option value="">All Statuses</option>${(activeReportDef?.statusOptions ? activeReportDef.statusOptions() : []).map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select></label>
+            <label style="font-size:12px; ${supportedFilters.includes('status') ? '' : 'display:none;'}" id="rStatusLabel">${escapeHtml(activeReportDef?.filterLabel || 'Status')} <select id="rStatusFilter"><option value="">${escapeHtml(activeReportDef?.allLabel || 'All Statuses')}</option>${(activeReportDef?.statusOptions ? activeReportDef.statusOptions() : []).map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select></label>
             <button class="btn-line btn-sm" id="rApply">Apply</button>
             <button class="btn-amber btn-sm" id="rExport">Export CSV</button>
           </div>
           <div id="reportTableWrap"></div>
-        </div>
+        </div>`}
       </div>
     </div>
   `;
@@ -97,6 +107,8 @@ async function renderReports(activeKey) {
     document.getElementById('reportFilterEmpty').style.display = anyVisible ? 'none' : '';
   });
 
+  if (activeReportDef?.page) { await window[activeReportDef.module].render(document.getElementById('reportPageHost')); return; }
+  if (initialView) { const sel = document.getElementById('rStatusFilter'); if (sel) sel.value = initialView; }
   let currentRows = [], currentCols = [], currentTotals = null;
 
   async function load() {
@@ -168,6 +180,9 @@ function textMatches(value, filterText) {
 }
 
 async function buildReport(key, from, to, endUserFilter, customerFilter, supplierFilter, statusFilter) {
+  // Merged reports: the "view" picked in the dropdown decides which underlying report is built (see MERGED_VIEWS).
+  const target = MERGED_VIEWS[key] && MERGED_VIEWS[key][statusFilter || ''];
+  if (target) return buildReport(target, from, to, endUserFilter, customerFilter, supplierFilter, '');
   const inRange = (d) => (!from || (d && d >= from)) && (!to || (d && d <= to));
   const quotations = (await DB.dbGetAll('quotations')).filter(q => q.isLatest);
   const salesOrders = await DB.dbGetAll('salesOrders');
@@ -300,32 +315,6 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
       const totals = rows.length === 0 ? null : ['', 'TOTAL', formatMoney(netTotal, 'PHP'), formatMoney(gpTotal, 'PHP'), netTotal ? `${r2((gpTotal / netTotal) * 100)}%` : '0%'];
       return { rows, cols, totals, note: netNote || gpNote };
     }
-    case 'projectedGrossProfit': {
-      // Same underlying figures as the Won-only Gross Profit Report above, but across EVERY
-      // quotation stage (Draft, Sent, Under Review, Won, Lost, Expired) -- this is potential/
-      // projected profit across the whole pipeline, not realized profit, and deliberately
-      // labeled that way so the two reports are never confused with each other.
-      const rows = quotations.filter(q => inRange(q.date)
-        && textMatches(q.endUser, endUserFilter)
-        && textMatches(custMap[q.customerId]?.companyName, customerFilter)
-        && (!statusFilter || q.status === statusFilter));
-      const cols = [
-        { label: 'Quotation No', value: 'quotationNo' },
-        { label: 'Date', value: r => formatDate(r.date) },
-        { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'End-User', value: r => r.endUser || '' },
-        { label: 'Status', value: 'status', badge: true },
-        { label: 'Net Sales', value: r => formatMoney(r.netSubtotal, r.currency) },
-        { label: 'Gross Profit', value: r => formatMoney(r.grossProfit, r.currency) },
-        { label: 'Margin %', value: r => (r.grossMarginPercent || 0) + '%' }
-      ];
-      // Totals are computed from the SAME rows actually being displayed (post Customer/End-User
-      // filtering), never the unfiltered set -- otherwise the total at the bottom would silently
-      // disagree with what's shown above it the moment either filter narrows the list.
-      const { total: gpTotal, note } = phpAssumedTotal(rows, 'grossProfit');
-      const totals = rows.length === 0 ? null : ['', '', '', '', '', '', 'TOTAL', formatMoney(gpTotal, 'PHP'), ''];
-      return { rows, cols, totals, note };
-    }
     case 'awaitingDelivery': {
       const rows = salesOrders.filter(o => ['Ready for Delivery', 'Partially Delivered'].includes(o.status)
         && textMatches(custMap[o.customerId]?.companyName, customerFilter)
@@ -348,7 +337,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
       ]};
     }
     case 'expiredQuotations': {
-      const rows = quotations.filter(q => getExpiryInfo(q).state === 'expired'
+      const rows = quotations.filter(q => (getExpiryInfo(q).state === 'expired' || q.status === 'Expired')
         && textMatches(custMap[q.customerId]?.companyName, customerFilter)
         && textMatches(q.endUser, endUserFilter)
         && (!statusFilter || q.status === statusFilter));
@@ -413,21 +402,6 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
         formatMoney(r2(rows.reduce((s, r) => s + (r.totalCost || 0), 0)))
       ];
       return { rows, cols, totals, note: 'Figures are shown in PHP. If any purchase orders were in a foreign currency, their amounts are summed as raw numbers, not converted — please review those individually before handing this to your bookkeeper.' };
-    }
-    case 'technicalOffersLog': {
-      const technicalOffers = await DB.dbGetAll('technicalOffers');
-      const rows = technicalOffers.filter(t => inRange(t.date)
-        && textMatches(custMap[t.customerId]?.companyName, customerFilter)
-        && textMatches(t.endUser, endUserFilter)
-        && (!statusFilter || (t.status || 'Draft') === statusFilter));
-      return { rows, cols: [
-        { label: 'Offer No', value: 'offerNo' },
-        { label: 'Date', value: r => formatDate(r.date) },
-        { label: 'Submitted Via', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'End User', value: r => r.endUser || '' },
-        { label: 'RFQ Reference', value: r => r.rfqReference || '' },
-        { label: 'Status', value: r => r.status || 'Draft', badge: true }
-      ]};
     }
     case 'paymentsAging': {
       // Proforma Invoices link to a Sales Order, not directly to a customer -- resolve through

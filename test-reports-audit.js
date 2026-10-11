@@ -56,14 +56,14 @@ async function main() {
   // (no outstanding invoices set up in this test, so just confirm the report still loads without error)
   console.log('STEP 8: Payments Aging report still loads correctly with the new badge column logic in place:', !!doc.getElementById('reportTableWrap'));
 
-  win.location.hash = '#/reports/technicalOffersLog';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
-  await win.DB.dbAdd('technicalOffers', { offerNo: 'HT-TO-2026-0001', customerId: custId, endUser: 'Onsemi', date: win.todayISO(), status: 'Sent', items: [], specs: [], sections: [], createdAt: now });
+  await win.DB.dbAdd('quotations', { quotationNo: 'HT-Q-2026-0901', customerId: custId, isLatest: true, endUser: 'Onsemi', date: win.todayISO(), status: 'Sent', currency: 'PHP', grandTotal: 100, createdAt: now });
   doc.getElementById('rApply').click();
   await wait(80);
   const sentBadge = [...doc.querySelectorAll('.badge')].find(b => b.textContent === 'Sent');
-  console.log('STEP 9: Technical Offers Log now shows a color-coded "Sent" badge too:', !!sentBadge && sentBadge.className.includes('badge-sent'));
+  console.log('STEP 9: Quotation Register shows a color-coded "Sent" badge too:', !!sentBadge && sentBadge.className.includes('badge-sent'));
 
   /* ============ CRITICAL: CSV export must NEVER contain HTML markup, only plain status text ============ */
   let downloaded = null;
@@ -76,13 +76,13 @@ async function main() {
   console.log('STEP 10: CSV export contains the plain status text "Confirmed":', downloaded.content.includes('Confirmed'));
   console.log('STEP 11: CRITICAL SAFETY CHECK: CSV export contains NO HTML markup at all (no "<span", no "class="):', !downloaded.content.includes('<span') && !downloaded.content.includes('class='));
 
-  win.location.hash = '#/reports/technicalOffersLog';
+  win.location.hash = '#/reports/quotationRegister';
   await win.Router.resolveRoute();
   await wait(80);
   downloaded = null;
   doc.getElementById('rExport').click();
   await wait(30);
-  console.log('STEP 12: Same CSV safety check on Technical Offers Log — plain text status, no HTML:', downloaded.content.includes('Sent') && !downloaded.content.includes('<span'));
+  console.log('STEP 12: Same CSV safety check on Quotation Register — plain text status, no HTML:', downloaded.content.includes('Sent') && !downloaded.content.includes('<span'));
 
   /* ============ Regression: filtering and existing data correctness still work ============ */
   win.location.hash = '#/reports/quotationRegister';

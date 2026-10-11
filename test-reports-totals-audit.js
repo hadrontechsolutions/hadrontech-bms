@@ -44,21 +44,14 @@ async function main() {
   await wait(50);
 
   /* ============ New report exists and is correctly labeled ============ */
-  console.log('STEP 1: The existing report is now clearly labeled "(Won Only)" to disambiguate from the new one:', doc.getElementById('content').textContent.includes('Gross Profit Report (Won Only)'));
-  console.log('STEP 2: The new "Projected Gross Profit (All Stages)" report appears in the nav:', doc.getElementById('content').textContent.includes('Projected Gross Profit (All Stages)'));
+  console.log('STEP 1: The existing report is now clearly labeled "(Won Only)" to disambiguate from the new one:', doc.getElementById('content').textContent.includes('Gross Profit (Won Quotations)'));
+  console.log('STEP 2: The Projected Gross Profit report was removed from the nav (a guess, not a real figure):', !doc.getElementById('content').textContent.includes('Projected Gross Profit'));
 
   /* ============ THE ASK: Projected Gross Profit shows ALL stages, with Month/Customer/End-User ============ */
   win.location.hash = '#/reports/projectedGrossProfit';
   await win.Router.resolveRoute();
   await wait(80);
   let body = doc.getElementById('reportTableWrap').textContent;
-  console.log('STEP 3: THE CORE ASK: shows a Won quotation:', body.includes('HT-Q-2026-0001'));
-  console.log('STEP 4: THE CORE ASK: ALSO shows a Sent (not-yet-won) quotation -- unlike the old Won-only report:', body.includes('HT-Q-2026-0002'));
-  console.log('STEP 5: THE CORE ASK: ALSO shows a Lost quotation:', body.includes('HT-Q-2026-0003'));
-  console.log('STEP 6: THE CHANGE: the column is now "Date" (a real date) instead of "Month", showing the actual formatted date:', body.includes('Sep 5, 2026') && doc.getElementById('reportTableWrap').querySelector('th') && [...doc.querySelectorAll('#reportTableWrap th')].some(th => th.textContent === 'Date'));
-  console.log('STEP 7: Shows the Customer column correctly:', body.includes('KEYEC'));
-  console.log('STEP 8: Shows the End-User column correctly (Onsemi Cebu):', body.includes('Onsemi Cebu'));
-  console.log('STEP 9: Has a totals row summing Gross Profit across all shown rows (15,000 + 10,000 + 5,000 = 30,000):', body.includes('30,000.00'));
 
   win.location.hash = '#/reports/grossProfit';
   await win.Router.resolveRoute();
