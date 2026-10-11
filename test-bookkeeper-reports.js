@@ -85,7 +85,7 @@ async function main() {
   win.location.hash = '#/reports/salesRegisterBookkeeper';
   await win.Router.resolveRoute();
   await wait(10);
-  console.log('STEP 17: Export CSV button exists and is wired:', !!doc.getElementById('rExport'));
+  console.log('STEP 17: Export Excel and CSV buttons exist and is wired:', !!doc.getElementById('rExport') && !!doc.getElementById('rExportCsv'));
 
   win.location.hash = '#/reports/salesOrderRegister';
   await win.Router.resolveRoute();

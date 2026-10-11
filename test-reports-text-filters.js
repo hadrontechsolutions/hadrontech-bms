@@ -96,7 +96,7 @@ async function main() {
   await wait(350);
   let downloaded = null;
   win.downloadFile = (name, content) => { downloaded = { name, content }; };
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 12: CSV export correctly reflects the active filter (only the two onsemi rows):', downloaded.content.includes('HT-Q-2026-0001') && downloaded.content.includes('HT-Q-2026-0002') && !downloaded.content.includes('HT-Q-2026-0003'));
 

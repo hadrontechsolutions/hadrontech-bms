@@ -43,7 +43,7 @@ function reportBasis(key, view) {
   const all = {
     quotationRegister: v === V_OPEN ? { what: 'Open quotations (Draft, Sent, Under Review)', dateBy: 'quotation date' }
       : v === V_WONLOST ? { what: 'Quotations marked Won or Lost', dateBy: 'quotation date' }
-      : v === V_EXPIRING ? { what: 'Open quotations that expire today or within 7 days', dateBy: null }
+      : v === V_EXPIRING ? { what: 'Open quotations that expire today or within ${EXPIRING_SOON_DAYS} days', dateBy: null }
       : v === V_EXPIRED ? { what: 'Open quotations past their valid-until date, plus any marked Expired', dateBy: null }
       : { what: v ? `Quotations with status ${v}` : 'All quotations (latest revision of each)', dateBy: 'quotation date' },
     salesOrderRegister: v === V_AWAIT ? { what: 'Sales orders that are Ready for Delivery or Partially Delivered', dateBy: null } : { what: v ? `Sales orders with status ${v}` : 'All sales orders', dateBy: 'order date' },
@@ -109,7 +109,8 @@ async function renderReports(activeKey, initialView) {
             <label style="font-size:12px; ${supportedFilters.includes('supplier') ? '' : 'display:none;'}" id="rSupplierLabel">Supplier <input type="text" id="rSupplierFilter" placeholder="Type to filter..." style="width:140px;"></label>
             <label style="font-size:12px; ${supportedFilters.includes('status') ? '' : 'display:none;'}" id="rStatusLabel">${escapeHtml(activeReportDef?.filterLabel || 'Status')} <select id="rStatusFilter"><option value="">${escapeHtml(activeReportDef?.allLabel || 'All Statuses')}</option>${(activeReportDef?.statusOptions ? activeReportDef.statusOptions() : []).map(s => `<option>${escapeHtml(s)}</option>`).join('')}</select></label>
             <button class="btn-line btn-sm" id="rApply">Apply</button>
-            <button class="btn-amber btn-sm" id="rExport">Export CSV</button>
+            <button class="btn-amber btn-sm" id="rExport">Export Excel</button>
+            <button class="btn-line btn-sm" id="rExportCsv" title="Plain CSV of the same rows, for other software">CSV</button>
           </div>
           <div id="reportBasis" class="muted-text" style="margin-bottom:10px; line-height:1.6;"></div>
           <div id="reportTableWrap"></div>
@@ -136,7 +137,7 @@ async function renderReports(activeKey, initialView) {
 
   if (activeReportDef?.page) { await window[activeReportDef.module].render(document.getElementById('reportPageHost')); return; }
   if (initialView) { const sel = document.getElementById('rStatusFilter'); if (sel) sel.value = initialView; }
-  let currentRows = [], currentCols = [], currentTotals = null;
+  let currentRows = [], currentCols = [], currentTotals = null, lastNote = '';
 
   async function load() {
     const from = document.getElementById('rFrom').value;
@@ -146,7 +147,7 @@ async function renderReports(activeKey, initialView) {
     const supplierFilter = document.getElementById('rSupplierFilter').value;
     const statusFilter = document.getElementById('rStatusFilter').value;
     const result = await buildReport(activeKey, from, to, endUserFilter, customerFilter, supplierFilter, statusFilter);
-    currentRows = result.rows; currentCols = result.cols; currentTotals = result.totals || null;
+    currentRows = result.rows; currentCols = result.cols; currentTotals = result.totals || null; lastNote = result.note || '';
 
     const wrap = document.getElementById('reportTableWrap');
     const basis = reportBasis(activeKey, statusFilter);
@@ -177,10 +178,27 @@ async function renderReports(activeKey, initialView) {
   document.getElementById('rEndUserFilter').addEventListener('input', debouncedLoad);
   document.getElementById('rSupplierFilter').addEventListener('input', debouncedLoad);
   document.getElementById('rStatusFilter').addEventListener('change', load);
-  document.getElementById('rExport').onclick = () => {
+  document.getElementById('rExportCsv').onclick = () => {
     let csv = arrayToCSV(currentRows, currentCols);
     if (currentTotals) csv += '\r\n' + currentTotals.map(csvEscape).join(',');
-    downloadFile(`${activeKey}.csv`, csv, 'text/csv');
+    downloadFile(`${activeKey}.csv`, '\uFEFF' + csv, 'text/csv;charset=utf-8'); // BOM so Excel shows ₱ correctly
+  };
+  document.getElementById('rExport').onclick = async () => {
+    if (!currentRows.length) { toast('Nothing to export — no rows match the current filters.', 'err'); return; }
+    const settings = await DB.getSettings(); const label = activeReportDef?.label || activeKey;
+    const basisEl = document.getElementById('reportBasis');
+    // Reports that list quotations also carry what was quoted: Brand, Model / Part Number and pieces (one item per line of the cell).
+    const isQuoteRows = currentRows.every(r => r && r.quotationNo && Array.isArray(r.lines));
+    const xlCols = isQuoteRows ? currentCols.concat(window.ReportExcel.quoteItemColumns()) : currentCols;
+    const sheet = window.ReportExcel.buildReportSheet({
+      title: label, sheetName: label, basis: basisEl ? basisEl.textContent.trim() : '', rows: currentRows, cols: xlCols, totals: currentTotals, note: lastNote,
+      company: { name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '' }, exportedOn: formatDate(todayISO())
+    });
+    const bytes = window.BookkeeperPack.xl.workbookBytes([sheet]);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const from = document.getElementById('rFrom').value, to = document.getElementById('rTo').value;
+    a.download = `${label.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}_${from || to ? (from || 'start') + '_to_' + (to || todayISO()) : todayISO()}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove(); toast(`${label} exported to Excel.`);
   };
   await load();
 }

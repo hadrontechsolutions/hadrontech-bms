@@ -101,7 +101,7 @@ async function main() {
 
   let downloaded = null;
   win.downloadFile = (name, content) => { downloaded = { name, content }; };
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 18: CSV export runs without error and includes the outstanding POs:', downloaded && downloaded.content.includes('HT-PO-2026-0001') && downloaded.content.includes('HT-PO-2026-0002'));
 

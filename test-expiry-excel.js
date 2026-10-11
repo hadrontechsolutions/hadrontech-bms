@@ -10,7 +10,7 @@ let fails = 0; const ok = (n, c) => { console.log(n + ':', !!c); if (!c) fails++
   await win.DB.openDB(); await win.DB.ensureCounters(); const today = win.todayISO(), now = new Date().toISOString();
   const c = await win.DB.dbAdd('customers', { companyName: 'KEYEC', status: 'Active', archived: false });
   const mk = (no, st, off, extra) => win.DB.dbAdd('quotations', Object.assign({ quotationNo: no, customerId: c, revision: 0, isLatest: true, status: st, date: win.addDaysISO(today, -40), validUntil: win.addDaysISO(today, off), currency: 'PHP', lines: [], grandTotal: 1000, createdAt: now, updatedAt: now, customerSnapshot: { companyName: 'KEYEC' } }, extra || {}));
-  await mk('Q-EXP-OLD', 'Sent', -30, { rfqRef: 'QRF 566-1', endUser: 'Onsemi' });
+  await mk('Q-EXP-OLD', 'Sent', -30, { rfqRef: 'QRF 566-1', endUser: 'Onsemi', lines: [{ brand: 'Pentair', modelNo: 'PN-1', qty: 4, uom: 'pc' }, { brand: 'Kärcher', modelNo: 'T 11/1', qty: 2, uom: 'pc' }] });
   await mk('Q-EXP-NEW', 'Draft', -2, { rfqRef: 'QRF 566-2' });
   await mk('Q-SOON-10', 'Sent', 10, { rfqRef: 'QRF 566-3' });
   await mk('Q-TODAY', 'Draft', 0);
@@ -26,6 +26,7 @@ let fails = 0; const ok = (n, c) => { console.log(n + ':', !!c); if (!c) fails++
   ok('3 headers include RFQ Reference, End-User, Quotation Date, Valid Until, Days expired', ['RFQ Reference', 'End-User', 'Quotation Date', 'Valid Until', 'Days expired'].every(h => hdr(sheets[0]).includes(h)) && hdr(sheets[1]).includes('Days left'));
   const ex = cells(sheets[0]); const so = cells(sheets[1]);
   ok('4 expired lists the 2 expired only, most overdue first, days 30 then 2', ex.length === 2 && ex[0][0].v === 'Q-EXP-OLD' && ex[0][9].v === 30 && ex[1][9].v === 2);
+  ok('5a Brand, Model / Part Number and pieces quoted are in the sheet (one item per line)', hdr(sheets[0]).slice(-3).join() === 'Brand,Model / Part Number,Pieces quoted' && ex[0][13].v === 'Pentair\nKärcher' && ex[0][14].v === 'PN-1\nT 11/1' && ex[0][15].v === '4\n2');
   ok('5 RFQ reference and end-user are in the row', ex[0][4].v === 'QRF 566-1' && ex[0][5].v === 'Onsemi' && ex[0][3].v === 'KEYEC');
   ok('6 expiring: today (0 left) then 10 left; 11-day and Won excluded', so.length === 2 && so[0][0].v === 'Q-TODAY' && so[0][9].v === 0 && so[1][0].v === 'Q-SOON-10' && so[1][9].v === 10);
   ok('7 dates carried (quotation date, valid until)', ex[0][7].d === win.addDaysISO(today, -40) && ex[0][8].d === win.addDaysISO(today, -30));

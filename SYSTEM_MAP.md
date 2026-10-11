@@ -153,3 +153,8 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## Quotation expiry (js/quotations.js `getExpiryInfo`, `EXPIRING_SOON_DAYS = 10`)
 - "Expiring Soon" = open quotation (Draft/Sent/Under Review) with 0–10 days left; past Valid Until = Expired. The one constant drives the quotation list/detail badges, Dashboard chips/tiles/panels, and the Business Performance Report's attention line.
 - Dashboard button "Download Excel: expired & expiring quotations" (`buildExpirySheets` in dashboard.js): tab Expired (Days expired) + tab Expiring Soon (Days left), with RFQ reference, end-user, quotation date, valid until. Test: test-expiry-excel.js.
+
+## Standard Excel export for table reports (js/reportExcel.js)
+- Reports ▸ **Export Excel** (button `rExport`) builds one .xlsx per report via `ReportExcel.buildReportSheet` + `BookkeeperPack.xl.workbookBytes`: title · company/TIN · "Exported <date> · what is shown · dates · row count" · navy header · typed cells (money → numbers with the currency in the header e.g. "Total (PHP)"; dates → real dates; % → %; mixed-currency columns stay text so no currency is lost) · TOTAL row with live SUM · frozen header + filter · note under the table. The plain **CSV** button (`rExportCsv`, now with a UTF-8 BOM so ₱ displays) remains for other software.
+- New report columns get this automatically; no per-report code. Test: test-report-excel.js.
+- Reports whose rows are quotations (Quotation Register and its Open / Won-Lost / Expiring / Expired views) add **Brand, Model / Part Number, Pieces quoted** to the Excel only (one item per line of the cell, so amounts and TOTAL are never double-counted); the Dashboard expired/expiring workbook has the same three columns.

@@ -207,7 +207,7 @@
   const X = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
   const colName = (i) => { let n = i + 1, s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
   const serial = (iso) => Math.round((Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 86400000);
-  const STYLE = { def: 0, title: 1, sub: 2, hdr: 3, txt: 4, money: 5, date: 6, qty: 7, rate: 8, totLbl: 9, totMoney: 10, section: 11, note: 12, warn: 13, ok: 14, bold: 15, boldMoney: 16, pct: 17, wrap: 18, plainMoney: 19, int: 20, hdrR: 21, info: 22 };
+  const STYLE = { def: 0, title: 1, sub: 2, hdr: 3, txt: 4, money: 5, date: 6, qty: 7, rate: 8, totLbl: 9, totMoney: 10, section: 11, note: 12, warn: 13, ok: 14, bold: 15, boldMoney: 16, pct: 17, wrap: 18, plainMoney: 19, int: 20, hdrR: 21, info: 22, wrapTxt: 23 };
 
   function stylesXML() {
     const f = (b, sz, color, i) => `<font>${b ? '<b/>' : ''}${i ? '<i/>' : ''}<sz val="${sz}"/>${color ? `<color rgb="FF${color}"/>` : ''}<name val="Calibri"/></font>`;
@@ -219,7 +219,7 @@
       xf(0, 0, 0, 0), xf(0, 3, 0, 0), xf(0, 4, 0, 0), xf(0, 2, 2, 0, 'vertical="center" wrapText="1"'), xf(0, 0, 0, 1, 'vertical="top"'), xf(164, 0, 0, 1),
       xf(165, 0, 0, 1, 'horizontal="left"'), xf(168, 0, 0, 1), xf(167, 0, 0, 1), xf(0, 1, 0, 2), xf(164, 1, 0, 2), xf(0, 1, 3, 0), xf(0, 4, 0, 0, 'wrapText="1" vertical="top"'),
       xf(0, 5, 0, 0, 'wrapText="1" vertical="top"'), xf(0, 6, 0, 0, 'wrapText="1" vertical="top"'), xf(0, 1, 0, 0), xf(164, 1, 0, 0), xf(166, 0, 0, 1), xf(0, 0, 0, 0, 'wrapText="1" vertical="top"'),
-      xf(164, 0, 0, 0), xf(1, 0, 0, 1), xf(0, 2, 2, 0, 'horizontal="right" vertical="center" wrapText="1"'), xf(0, 0, 4, 0, 'wrapText="1" vertical="top"')
+      xf(164, 0, 0, 0), xf(1, 0, 0, 1), xf(0, 2, 2, 0, 'horizontal="right" vertical="center" wrapText="1"'), xf(0, 0, 4, 0, 'wrapText="1" vertical="top"'), xf(0, 0, 0, 1, 'wrapText="1" vertical="top"')
     ];
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="5"><numFmt numFmtId="164" formatCode="#,##0.00;[Red]\\-#,##0.00"/><numFmt numFmtId="165" formatCode="yyyy\\-mm\\-dd"/><numFmt numFmtId="166" formatCode="0.0%"/><numFmt numFmtId="167" formatCode="#,##0.0000"/><numFmt numFmtId="168" formatCode="#,##0.##"/></numFmts><fonts count="${fonts.length}">${fonts.join('')}</fonts><fills count="${fills.length}">${fills.join('')}</fills><borders count="${borders.length}">${borders.join('')}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
   }

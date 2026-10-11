@@ -69,7 +69,7 @@ async function main() {
   /* ============ CSV export doesn't crash for either new report ============ */
   let downloaded = null;
   win.downloadFile = (name, content) => { downloaded = { name, content }; };
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 14: CSV export for Payments Aging runs without error and includes the outstanding invoices:', downloaded && downloaded.content.includes('HT-PI-2026-0001'));
 
@@ -77,7 +77,7 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(80);
   downloaded = null;
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
 
   /* ============ Regression: existing reports still work ============ */

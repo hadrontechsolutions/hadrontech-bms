@@ -71,7 +71,7 @@ async function main() {
   win.location.hash = '#/reports/salesOrderRegister';
   await win.Router.resolveRoute();
   await wait(80);
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 10: CSV export contains the plain status text "Confirmed":', downloaded.content.includes('Confirmed'));
   console.log('STEP 11: CRITICAL SAFETY CHECK: CSV export contains NO HTML markup at all (no "<span", no "class="):', !downloaded.content.includes('<span') && !downloaded.content.includes('class='));
@@ -80,7 +80,7 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(80);
   downloaded = null;
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 12: Same CSV safety check on Quotation Register — plain text status, no HTML:', downloaded.content.includes('Sent') && !downloaded.content.includes('<span'));
 

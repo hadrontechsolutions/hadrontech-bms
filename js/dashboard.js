@@ -233,15 +233,16 @@ function buildExpirySheets(expired, expiring, custName, co) {
   const mk = (name, title, note, list, daysLabel, daysOf, sortFn) => {
     const rows = titleBlock(co, title, asOf + '  ·  ' + note);
     const hdr = rows.length + 1;
-    rows.push(H(['Quotation No.', 'Rev', 'Status', 'Customer', 'RFQ Reference', 'End-User', 'Project', 'Quotation Date', 'Valid Until', daysLabel, 'Amount', 'Currency', 'Salesperson']));
+    rows.push(H(['Quotation No.', 'Rev', 'Status', 'Customer', 'RFQ Reference', 'End-User', 'Project', 'Quotation Date', 'Valid Until', daysLabel, 'Amount', 'Currency', 'Salesperson', 'Brand', 'Model / Part Number', 'Pieces quoted']));
     const items = list.slice().sort(sortFn);
     items.forEach(q => rows.push([
       { v: q.quotationNo, s: 'txt' }, { v: q.revision != null ? q.revision : '', s: 'int' }, { v: q.status, s: 'txt' },
       { v: custName[q.customerId] || q.customerSnapshot?.companyName || '', s: 'txt' }, { v: q.rfqRef || '', s: 'txt' }, { v: q.endUser || '', s: 'txt' }, { v: q.projectName || '', s: 'txt' },
       q.date ? { d: d10(q.date), s: 'date' } : { v: '', s: 'txt' }, { d: d10(q.validUntil), s: 'date' },
-      { v: daysOf(q), s: 'int' }, { v: Math.round((Number(q.grandTotal) || 0) * 100) / 100, s: 'money' }, { v: q.currency || 'PHP', s: 'txt' }, { v: q.salesperson || '', s: 'txt' }]));
+      { v: daysOf(q), s: 'int' }, { v: Math.round((Number(q.grandTotal) || 0) * 100) / 100, s: 'money' }, { v: q.currency || 'PHP', s: 'txt' }, { v: q.salesperson || '', s: 'txt' },
+      ...window.ReportExcel.quoteItemColumns().map(c => ({ v: c.value(q), s: 'wrapTxt' }))]));
     if (!items.length) rows.push([{ v: name === 'Expired' ? 'No expired quotations — nothing is overdue.' : `No quotations expire in the next ${EXPIRING_SOON_DAYS} days.`, s: 'note' }]);
-    return { name, widths: [18, 6, 13, 30, 40, 22, 28, 15, 15, 16, 16, 10, 16], rows, freezeRow: hdr, filterRow: items.length ? hdr : 0, filterEnd: hdr + items.length };
+    return { name, widths: [18, 6, 13, 30, 40, 22, 28, 15, 15, 16, 16, 10, 16, 20, 26, 14], rows, freezeRow: hdr, filterRow: items.length ? hdr : 0, filterEnd: hdr + items.length };
   };
   const left = (q) => daysBetweenISO(todayISO(), d10(q.validUntil)); // validUntil minus today
   return [

@@ -75,7 +75,7 @@ async function main() {
 
   let downloaded = null;
   win.downloadFile = (name, content) => { downloaded = { name, content }; };
-  doc.getElementById('rExport').click();
+  doc.getElementById('rExportCsv').click();
   await wait(30);
   console.log('STEP 13: Regression: CSV export still works correctly:', downloaded && downloaded.content.includes('HT-Q-2026-0001'));
 
