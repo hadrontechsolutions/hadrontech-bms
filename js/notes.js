@@ -177,19 +177,19 @@ async function renderRfqList() {
     if (!rows.length) { q('rfqTableWrap').innerHTML = `<div class="empty-inline">${all.length ? 'Nothing matches these filters. Change “Show”, the customer or the search.' : 'No RFQs yet. Click “+ New RFQ” when a customer sends you an RFQ or inquiry.'}</div>`; return; }
     if (custView) {
       rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-      q('rfqTableWrap').innerHTML = `<table class="data-table"><thead><tr><th>RFQ / Inquiry Reference</th><th>Customer</th><th>End-User</th><th>Received</th><th>Status</th><th>Where things stand</th><th>Last update</th></tr></thead><tbody>${rows.map(n => {
-        const qt = quoteOf(n); return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"><td><b>${escapeHtml(n.referenceEmail || '—')}</b></td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(n.endUser || '—')}</td><td>${formatDate(n.date)}</td><td>${escapeHtml(customerStatusText(n, qt))}</td><td>${escapeHtml(customerNextStep(n, qt))}</td><td>${formatDate(lastActivityDate(n))}</td></tr>`; }).join('')}</tbody></table>`;
+      q('rfqTableWrap').innerHTML = `<table class="data-table"><thead><tr><th>RFQ / Inquiry</th><th>Customer</th><th>End-User</th><th>Received</th><th>Status</th><th>Where things stand</th><th>Last update</th></tr></thead><tbody>${rows.map(n => {
+        const qt = quoteOf(n); return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"><td>${escapeHtml(n.referenceEmail || '—')}</td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(n.endUser || '—')}</td><td>${formatDate(n.date)}</td><td>${escapeHtml(customerStatusText(n, qt))}</td><td>${escapeHtml(customerNextStep(n, qt))}</td><td>${formatDate(lastActivityDate(n))}</td></tr>`; }).join('')}</tbody></table>`;
       return;
     }
     rows.sort((a, b) => urgencyRank[getReminderInfo(a).state] - urgencyRank[getReminderInfo(b).state] || (b.date || '').localeCompare(a.date || ''));
-    q('rfqTableWrap').innerHTML = `<table class="data-table"><thead><tr><th>No.</th><th>RFQ / Inquiry Reference</th><th>Customer</th><th>End-User</th><th>Received</th><th>Status</th><th>Ball in court</th><th>Last update</th><th>Reminder</th></tr></thead><tbody>${rows.map(n => {
+    q('rfqTableWrap').innerHTML = `<table class="data-table"><thead><tr><th>No.</th><th>RFQ / Inquiry</th><th>Customer</th><th>End-User</th><th>Received</th><th>Status</th><th>Ball in court</th><th>Last update</th><th>Reminder</th></tr></thead><tbody>${rows.map(n => {
       const info = getReminderInfo(n); const rowStyle = (info.state === 'overdue' || info.state === 'today') ? ' style="background:var(--danger-lt);"' : '';
       if (!isRfq(n)) return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"${rowStyle}><td>${escapeHtml(n.noteNo)}</td><td><span class="kind-chip">General note</span> ${escapeHtml(n.referenceEmail || '')}</td><td>${escapeHtml(n.title || '')}</td><td>—</td><td>${formatDate(n.date)}</td><td>${statusBadge(n.status || 'Open')}</td><td class="muted-text">—</td><td>${descClip(n.body || '')}</td><td>${info.badgeText ? statusBadge(info.badgeText) : `<span class="muted-text">${escapeHtml(info.text)}</span>`}</td></tr>`;
       const qt = quoteOf(n); const st = effectiveRfqStatus(n, qt); const b = ballInfo(n); const closed = isClosedNote(n);
       const lastAct = (n.activity || []).slice().sort((a, b2) => (b2.date || '').localeCompare(a.date || ''))[0];
-      return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"${rowStyle}><td>${escapeHtml(n.noteNo)}</td><td><b>${escapeHtml(n.referenceEmail || '—')}</b></td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(n.endUser || '—')}</td><td>${formatDate(n.date)}</td><td>${statusBadge(st)}</td>
+      return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"${rowStyle}><td>${escapeHtml(n.noteNo)}</td><td>${escapeHtml(n.referenceEmail || '—')}</td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(n.endUser || '—')}</td><td>${formatDate(n.date)}</td><td>${statusBadge(st)}</td>
         <td>${closed ? '<span class="muted-text">—</span>' : `${ballChip(b)}<div class="wait-text ${waitClass(b)}">${waitText(b)}</div>`}</td>
-        <td>${formatDate(lastActivityDate(n))}${lastAct ? descClip(`${lastAct.type}: ${lastAct.text}`) : ''}</td>
+        <td>${formatDate(lastActivityDate(n))}${lastAct ? `<div class="muted-text">${escapeHtml(lastAct.type + ': ' + lastAct.text)}</div>` : ''}</td>
         <td>${info.badgeText ? statusBadge(info.badgeText) : `<span class="muted-text">${escapeHtml(info.text)}</span>`}</td></tr>`;
     }).join('')}</tbody></table>`;
   }
@@ -275,9 +275,8 @@ async function renderRfqDetail(id) {
         <div class="form-grid">
           <div class="field"><label>Date</label><input type="date" id="act_date" value="${todayISO()}"></div>
           <div class="field"><label>What kind of entry</label><select id="act_type">${ACTIVITY_TYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
-          <div class="field"><label>With (who it involves)</label><select id="act_party">${BALL_PARTIES.map(p => `<option>${p}</option>`).join('')}</select></div>
-          <div class="field" id="act_supWrap" style="display:none;"><label>Which supplier</label><select id="act_sup">${note.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select></div>
-          <div class="field field-wide"><label>What happened</label><textarea id="act_text" rows="2" placeholder="e.g. Received email from Pentair — they need the roller size clarified"></textarea></div>
+          <div class="field" id="act_supWrap" style="${note.suppliers.length ? '' : 'display:none;'}"><label>Which supplier (if it is about one)</label><select id="act_sup"><option value="">— None —</option>${note.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select></div>
+          <div class="field field-wide"><label>What happened</label><textarea id="act_text" rows="2" ></textarea></div>
           <div class="field"><label>The ball is now with</label><select id="act_ball">${BALL_PARTIES.map(p => `<option>${p}</option>`).join('')}</select><div class="muted-text" style="font-size:11px; margin-top:3px;" id="act_ballHint"></div></div>
           <div class="field"><label>Remind me to follow up in (days)</label><input type="number" min="0" id="act_remind" value="${note.remindAfterDays === '' || note.remindAfterDays == null ? 3 : note.remindAfterDays}"></div>
         </div>
@@ -296,13 +295,13 @@ async function renderRfqDetail(id) {
   if (q('selStatus')) q('selStatus').onchange = async (e) => { note.status = e.target.value; await save(`Set RFQ ${note.noteNo} status to ${note.status}`); };
   document.querySelectorAll('.selSupStatus').forEach(sel => sel.onchange = async () => { const s = note.suppliers.find(x => x.id === sel.dataset.sid); s.status = sel.value; s.lastUpdate = todayISO(); await save(`Set ${s.name} status on ${note.noteNo} to ${s.status}`); });
   document.querySelectorAll('.btnSupDel').forEach(btn => btn.onclick = async () => { const s = note.suppliers.find(x => x.id === btn.dataset.sid); if (!confirm(`Remove ${s.name} from this RFQ? Log entries about it are kept.`)) return; note.suppliers = note.suppliers.filter(x => x.id !== s.id); if (note.ballSupplierEntryId === s.id) note.ballSupplierEntryId = ''; await save(`Removed supplier ${s.name} from ${note.noteNo}`); });
-  document.querySelectorAll('.btnSupLog').forEach(btn => btn.onclick = () => { q('act_party').value = 'Supplier'; q('act_party').dispatchEvent(new Event('change')); if (q('act_sup')) q('act_sup').value = btn.dataset.sid; q('act_text').focus(); q('actForm').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  document.querySelectorAll('.btnSupLog').forEach(btn => btn.onclick = () => { if (q('act_sup')) { q('act_sup').value = btn.dataset.sid; q('act_sup').dispatchEvent(new Event('change')); } q('act_text').focus(); q('actForm').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
 
   if (q('btnAddSupplier')) q('btnAddSupplier').onclick = () => {
     const used = new Set(note.suppliers.map(s => s.supplierId));
     q('supAddHost').innerHTML = `<div class="card" style="background:var(--bg-soft, #f6f7fa);"><div class="form-grid">
       <div class="field"><label>Supplier</label><select id="sa_supplier"><option value="">— Select supplier —</option>${suppliers.filter(s => !s.archived).sort((a, c) => a.companyName.localeCompare(c.companyName)).map(s => `<option value="${s.id}" ${used.has(s.id) ? 'disabled' : ''}>${escapeHtml(s.companyName)}${used.has(s.id) ? ' (already added)' : ''}</option>`).join('')}</select></div>
-      <div class="field"><label>Our email subject to the supplier</label><input id="sa_ref" placeholder="e.g. RFQ – Box with Roller Cart"></div>
+      <div class="field"><label>Our email subject to the supplier</label><input id="sa_ref" placeholder="Email subject"></div>
       <div class="field"><label>Status</label><select id="sa_status">${SUPPLIER_ENTRY_STATUSES.map(x => `<option ${x === 'RFQ sent' ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
       <div class="field"><label>Date contacted</label><input type="date" id="sa_date" value="${todayISO()}"></div></div>
       <div class="btn-row"><button class="btn-amber btn-sm" id="sa_save">Add supplier</button><button class="btn-line btn-sm" id="sa_cancel">Cancel</button></div></div>`;
@@ -322,19 +321,24 @@ async function renderRfqDetail(id) {
   };
 
   if (q('actForm')) {
-    const defaultBall = () => { const t = q('act_type').value, p = q('act_party').value; if (t === 'Email sent') return p; if (t === 'Email received') return 'Us'; return q('act_ball').value; };
-    const sync = () => { q('act_supWrap').style.display = q('act_party').value === 'Supplier' && note.suppliers.length ? '' : 'none'; const t = q('act_type').value; if (t === 'Email sent' || t === 'Email received') q('act_ball').value = defaultBall(); q('act_ballHint').textContent = t === 'Email sent' ? 'You sent it, so the ball moves to them — change if needed.' : t === 'Email received' ? 'They replied, so the ball is back with us — change if needed.' : 'Choose who needs to act next.'; };
-    ['act_type', 'act_party'].forEach(i => q(i).addEventListener('change', sync)); sync();
+    const sync = (e) => {
+      const t = q('act_type').value; const hasSup = !!(q('act_sup') && q('act_sup').value);
+      if (t === 'Email received') q('act_ball').value = 'Us';
+      else if (t === 'Email sent' && hasSup) q('act_ball').value = 'Supplier';
+      q('act_ballHint').textContent = t === 'Email sent' ? 'You sent it, so the ball usually moves to them — change if needed.' : t === 'Email received' ? 'They replied, so the ball is usually back with us — change if needed.' : 'Choose who needs to act next.';
+    };
+    ['act_type', 'act_sup'].forEach(i => { if (q(i)) q(i).addEventListener('change', sync); }); sync();
     q('actForm').addEventListener('submit', async (e) => {
       e.preventDefault(); const text = q('act_text').value.trim(); if (!text) { toast('Write what happened.', 'err'); return; }
-      const party = q('act_party').value; const supId = party === 'Supplier' && q('act_sup') && q('act_sup').value ? q('act_sup').value : '';
+      const supId = q('act_sup') && q('act_sup').value ? q('act_sup').value : '';
+      const ball0 = q('act_ball').value; const party = supId ? 'Supplier' : (ball0 !== 'Us' ? ball0 : (q('act_type').value === 'Note' ? 'Us' : 'Customer'));
       const date = q('act_date').value || todayISO(); const ball = q('act_ball').value; const settings = await DB.getSettings();
       note.activity.push({ id: 'A' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date, type: q('act_type').value, party, supplierEntryId: supId, supplierName: supId ? supName(supId) : '', text, ballAfter: ball, by: settings.userName });
       if (supId) { const s = note.suppliers.find(x => x.id === supId); if (s) { s.lastUpdate = date; if (q('act_type').value === 'Email sent' && s.status === 'Not contacted yet') { s.status = 'RFQ sent'; s.contactedDate = s.contactedDate || date; } } }
       if (ball !== note.ballWith || (ball === 'Supplier' && supId !== note.ballSupplierEntryId) || !note.ballSince) { note.ballSince = date; }
       note.ballWith = ball; note.ballSupplierEntryId = ball === 'Supplier' ? (supId || note.ballSupplierEntryId || (note.suppliers[0] && note.suppliers[0].id) || '') : '';
       note.remindAfterDays = q('act_remind').value === '' ? '' : Number(q('act_remind').value);
-      if (note.status === 'New' && party === 'Supplier') note.status = 'Sourcing';
+      if (note.status === 'New' && supId) note.status = 'Sourcing';
       await save(`Logged ${q('act_type').value.toLowerCase()} on ${note.noteNo}`);
     });
   }
@@ -351,12 +355,12 @@ async function renderRfqForm(record) {
     <form id="rfqForm" class="form-card"><div class="card">
       <div class="form-grid">
         <div class="field"><label>Customer *</label><select id="f_customerId" required><option value="">— Select customer —</option>${customers.map(c => `<option value="${c.id}" ${record && c.id === record.customerId ? 'selected' : ''}>${escapeHtml(c.companyName)}</option>`).join('')}</select></div>
-        <div class="field"><label>End-User (optional)</label><input id="f_endUser" value="${escapeHtml(record?.endUser || '')}" placeholder="e.g. Onsemi Cebu"></div>
-        <div class="field field-wide"><label>RFQ / Inquiry Reference *</label><input id="f_ref" required value="${escapeHtml(record?.referenceEmail || '')}" placeholder="Paste the email subject exactly as the customer sent it, e.g. onsemi Cebu QRF 566-26138 Push cart with no handle #35066"><div class="muted-text" style="font-size:11px; margin-top:3px;">This is what you and the customer will both recognise, so it is shown on every screen and on the customer update.</div></div>
+        <div class="field"><label>End-User (optional)</label><input id="f_endUser" value="${escapeHtml(record?.endUser || '')}"></div>
+        <div class="field field-wide"><label>RFQ / Inquiry Reference *</label><input id="f_ref" required value="${escapeHtml(record?.referenceEmail || '')}" placeholder="Paste the email subject"></div>
         <div class="field"><label>Date received</label><input type="date" id="f_date" value="${record?.date || todayISO()}"></div>
         <div class="field"><label>Remind me to follow up after (days)</label><input type="number" min="0" id="f_remind" value="${record?.remindAfterDays ?? 3}"><div class="muted-text" style="font-size:11px; margin-top:3px;">Counted from the last entry in the activity log.</div></div>
       </div>
-      <div class="field" style="margin-top:14px;"><label>Background / internal notes (optional)</label><textarea id="f_body" rows="4" placeholder="Anything useful that is not an email — specs, contact names, what the customer really needs…">${escapeHtml(record?.body || '')}</textarea></div>
+      <div class="field" style="margin-top:14px;"><label>Background / internal notes (optional)</label><textarea id="f_body" rows="4">${escapeHtml(record?.body || '')}</textarea></div>
     </div><div class="form-actions"><button type="submit" class="btn-amber" id="btnSave">Save</button><button type="button" class="btn-line" id="btnCancel">Cancel</button></div></form>`;
   content.querySelectorAll('#rfqForm input, #rfqForm textarea, #rfqForm select').forEach(i => i.addEventListener('input', markDirty));
   document.getElementById('btnCancel').onclick = () => { if (!guardNavigation()) return; clearDirty(); Router.navigate(isNew ? '/rfq-tracker' : `/rfq-tracker/${record.id}`); };

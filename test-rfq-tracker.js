@@ -37,8 +37,9 @@ async function main() {
   ok('6 supplier added, status Sourcing, ball moved to Supplier', n.suppliers.length === 1 && n.suppliers[0].emailRef === 'RFQ – Box with Roller Cart' && n.status === 'Sourcing' && n.ballWith === 'Supplier');
   ok('7 supplier subject visible on detail', doc.getElementById('content').textContent.includes('RFQ – Box with Roller Cart'));
 
+  ok('8a no redundant "With (who it involves)" field', !doc.getElementById('act_party') && !doc.getElementById('content').textContent.includes('who it involves'));
+  doc.getElementById('act_sup').value = n.suppliers[0].id;
   doc.getElementById('act_type').value = 'Email received'; doc.getElementById('act_type').dispatchEvent(new win.Event('change'));
-  doc.getElementById('act_party').value = 'Supplier'; doc.getElementById('act_party').dispatchEvent(new win.Event('change'));
   ok('8 email received defaults ball to Us', doc.getElementById('act_ball').value === 'Us');
   doc.getElementById('act_text').value = 'Supplier asks what wheel size is needed.';
   doc.getElementById('actForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
@@ -47,7 +48,7 @@ async function main() {
 
   // Ball to End-User
   doc.getElementById('act_type').value = 'Email sent'; doc.getElementById('act_type').dispatchEvent(new win.Event('change'));
-  doc.getElementById('act_party').value = 'End-User'; doc.getElementById('act_party').dispatchEvent(new win.Event('change'));
+  doc.getElementById('act_sup').value = ''; doc.getElementById('act_ball').value = 'End-User';
   doc.getElementById('act_text').value = 'Asked end-user for wheel size.';
   doc.getElementById('actForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   n = (await win.DB.dbGetAll('notes'))[0];
@@ -56,6 +57,7 @@ async function main() {
   await go('#/rfq-tracker');
   const cards = Object.fromEntries([...doc.querySelectorAll('.ball-card')].map(b => [b.dataset.ball, b.querySelector('.ball-card-num').textContent]));
   ok('11 strip counts: End-User 1, others 0', cards['End-User'] === '1' && cards.Us === '0' && cards.Supplier === '0' && cards.Customer === '0');
+  ok('12a list column is "RFQ / Inquiry", not bold, no "..." icon', doc.getElementById('rfqTableWrap').textContent.includes('RFQ / Inquiry') && !doc.getElementById('rfqTableWrap').textContent.includes('RFQ / Inquiry Reference') && !doc.querySelector('#rfqTableWrap td b') && !doc.querySelector('#rfqTableWrap .desc-clip, #rfqTableWrap [title="..."]'));
   ok('12 list shows the full reference prominently', doc.getElementById('rfqTableWrap').textContent.includes(REF));
   doc.querySelector('.ball-card[data-ball="Supplier"]').click(); await wait(30);
   ok('13 filtering by Supplier hides the RFQ', !doc.getElementById('rfqTableWrap').textContent.includes(REF));
