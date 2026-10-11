@@ -18,7 +18,7 @@ async function main() {
   const scripts = [...dom.window.document.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js');
   for (const src of scripts) dom.window.eval(fs.readFileSync(path.join(APP, src), 'utf8'));
   const win = dom.window;
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const wait = (ms) => new Promise(r => setTimeout(r, ms * 6 + 120));
 
   await win.DB.openDB();
   await win.DB.ensureCounters();

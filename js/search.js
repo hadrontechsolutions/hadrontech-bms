@@ -6,6 +6,7 @@
 Router.route('/search', (p, query) => renderSearch(query.q || ''));
 
 async function renderSearch(initialQuery) {
+  if (window.RfqTracker) await window.RfqTracker.reconcileRfqs();
   Router.setBreadcrumb([{ label: 'Search' }]);
   const content = document.getElementById('content');
   content.innerHTML = `

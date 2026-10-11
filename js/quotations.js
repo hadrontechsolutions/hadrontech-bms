@@ -1385,7 +1385,7 @@ async function renderQuoteDetail(id) {
     const quotationNo = await DB.nextDocNumber('quotation');
     const now = new Date().toISOString();
     const copy = Object.assign({}, q);
-    delete copy.id;
+    delete copy.id; delete copy.rfqNoteId; // a duplicate is a new quotation — it does not belong to the original's RFQ
     Object.assign(copy, {
       quotationNo, revision: 0, isLatest: true, status: 'Draft', statusHistory: [{ status: 'Draft', date: now }],
       date: todayISO(), createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName,
@@ -1422,6 +1422,7 @@ async function renderQuoteDetail(id) {
     });
     const newId = await DB.dbAdd('quotations', newRev);
     await DB.logActivity(`Created Rev ${padRev(newRev.revision)} of ${newRev.quotationNo}`);
+    if (window.RfqTracker) await RfqTracker.reconcileRfqs();
     toast('New revision created.');
     Router.navigate(`/quotations/${newId}/edit`);
   };
@@ -1445,6 +1446,7 @@ async function renderQuoteDetail(id) {
       q.updatedAt = new Date().toISOString();
       await DB.dbPut('quotations', q);
       await DB.logActivity(`Quotation ${q.quotationNo} marked as ${newStatus}`);
+      if (window.RfqTracker) await RfqTracker.reconcileRfqs();
       toast(`Marked as ${newStatus}.`);
       renderQuoteDetail(id);
     };
@@ -1476,6 +1478,7 @@ async function renderQuoteDetail(id) {
       }
     }
     await DB.logActivity(`Deleted quotation ${q.quotationNo} (Rev ${padRev(q.revision)})`);
+    if (window.RfqTracker) await RfqTracker.reconcileRfqs();
     toast('Quotation deleted.');
     Router.navigate('/quotations');
   };

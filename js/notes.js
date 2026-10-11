@@ -65,6 +65,53 @@ function getReminderInfo(note) {
   return { state: 'upcoming', badgeText: null, badgeClass: '', text: `Follow-up in ${diffDays} days (${formatDate(reminderDate)})`, date: reminderDate };
 }
 
+/** The quotation an RFQ points at may have been revised since: always follow the newest revision of that quotation. */
+function latestQuote(q, all) {
+  if (!q || q.isLatest) return q || null;
+  return (all || []).find(x => x.familyId === q.familyId && x.isLatest) || q;
+}
+/** The current quotation of an RFQ: its newest revision; if the exact record was deleted, the surviving revision of the same quotation. */
+function quoteForRfq(n, all) {
+  if (!n.quotationId) return null;
+  const q = (all || []).find(x => x.id === n.quotationId);
+  if (q) return latestQuote(q, all);
+  return n.quotationFamilyId ? ((all || []).find(x => x.familyId === n.quotationFamilyId && x.isLatest) || null) : null;
+}
+
+/** Keeps an RFQ in step with its quotation (idempotent — only acts when the quotation's revision or status changed since last time):
+    · revised → follows the newest revision, ball with us while the new revision is prepared
+    · Sent / Under Review → the ball moves to the customer
+    · Won / Lost → the RFQ is closed (so its reminder stops and it leaves the "waiting" counts)
+    · Expired → the ball comes back to us. Returns true when the RFQ was changed (caller saves it). */
+function applyQuoteState(n, q) {
+  if (!isRfq(n) || !q) return false;
+  const key = `${q.id}|${q.revision}|${q.status}`;
+  if (n.quoteSeen === key) return false;
+  const first = !n.quoteSeen; const today = todayISO();
+  const rev = q.revision ? `${q.quotationNo} Rev ${q.revision}` : q.quotationNo;
+  const log = (text, party, ball) => { (n.activity = n.activity || []).push({ id: 'A' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date: today, type: 'Note', party, supplierEntryId: '', text, ballAfter: ball, by: 'Automatic' }); n.ballWith = ball; n.ballSince = today; n.ballSupplierEntryId = ''; };
+  n.quotationId = q.id; n.quotationNo = q.quotationNo; n.quotationFamilyId = q.familyId || q.id;
+  if (q.status === 'Draft') { if (!first) log(`${rev} is being prepared.`, 'Us', 'Us'); }
+  else if (q.status === 'Sent' || q.status === 'Under Review') log(`${rev} was sent to the customer — waiting for their reply.`, 'Customer', 'Customer');
+  else if (q.status === 'Won') { log(`${rev} was marked Won — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Won'; }
+  else if (q.status === 'Lost') { log(`${rev} was marked Lost — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Lost'; }
+  else if (q.status === 'Expired') log(`${rev} has expired — extend or revise it.`, 'Us', 'Us');
+  n.quoteSeen = key; n.updatedAt = new Date().toISOString();
+  return true;
+}
+
+/** Brings every RFQ that has a quotation up to date (also fixes RFQs linked before this existed). */
+async function reconcileRfqs() {
+  const [notes, quotes] = await Promise.all([DB.dbGetAll('notes'), DB.dbGetAll('quotations')]);
+  const byId = Object.fromEntries(quotes.map(q => [q.id, q])); let changed = 0;
+  for (const n of notes) {
+    if (!isRfq(n) || !n.quotationId) continue;
+    const q = quoteForRfq(n, quotes); if (!q) continue;
+    if (applyQuoteState(n, q)) { await DB.dbPut('notes', n); changed++; }
+  }
+  return changed;
+}
+
 /** Who has the ball right now, and for how long. */
 function ballInfo(n) {
   const party = n.ballWith || 'Us';
@@ -90,6 +137,8 @@ function customerStatusText(n, quote) {
   if (st === 'Preparing Offer') return 'Preparing your quotation';
   if (st === 'Quoted') return `Quotation sent${quote ? ' (' + quote.quotationNo + ')' : ''}`;
   if (st === 'On Hold') return 'On hold';
+  if (n.closedReason === 'Won') return 'Closed — order placed';
+  if (n.closedReason === 'Lost') return 'Closed — quotation not awarded';
   return 'Closed';
 }
 function customerNextStep(n, quote) {
@@ -112,11 +161,11 @@ const waitClass = (b) => b.party === 'Us' ? (b.days >= 3 ? 'wait-red' : b.days >
 
 async function renderRfqList() {
   const content = document.getElementById('content');
+  await reconcileRfqs();
   Router.setBreadcrumb([{ label: 'RFQ Tracker' }]);
   const [all, customers, quotations] = await Promise.all([DB.dbGetAll('notes'), DB.dbGetAll('customers'), DB.dbGetAll('quotations')]);
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
-  const quoteMap = Object.fromEntries(quotations.map(q => [q.id, q]));
-  const quoteOf = (n) => n.quotationId ? quoteMap[n.quotationId] : null;
+  const quoteOf = (n) => quoteForRfq(n, quotations);
   const custName = (n) => isRfq(n) ? ((custMap[n.customerId] || {}).companyName || n.title || '') : (n.title || '');
 
   const open = all.filter(n => isRfq(n) && n.status !== 'Closed');
@@ -221,11 +270,12 @@ async function printCustomerUpdate(items, customerName, custName) {
 
 async function renderRfqDetail(id) {
   const content = document.getElementById('content');
+  await reconcileRfqs();
   const note = await DB.dbGet('notes', Number(id));
   if (!note) { Router.setBreadcrumb([{ label: 'RFQ Tracker', hash: '/rfq-tracker' }, { label: 'Not found' }]); content.innerHTML = `<div class="empty-state"><h3>Not found</h3><p><a href="#/rfq-tracker">Back to the RFQ Tracker</a></p></div>`; return; }
   if (!isRfq(note)) return renderGeneralNoteDetail(note);
 
-  const [customer, suppliers, quote] = await Promise.all([DB.dbGet('customers', note.customerId), DB.dbGetAll('suppliers'), note.quotationId ? DB.dbGet('quotations', note.quotationId) : null]);
+  const [customer, suppliers, quote] = await Promise.all([DB.dbGet('customers', note.customerId), DB.dbGetAll('suppliers'), note.quotationId ? DB.dbGetAll('quotations').then(all => quoteForRfq(note, all)) : null]);
   note.suppliers = note.suppliers || []; note.activity = note.activity || [];
   const info = getReminderInfo(note); const b = ballInfo(note); const st = effectiveRfqStatus(note, quote); const closed = note.status === 'Closed';
   Router.setBreadcrumb([{ label: 'RFQ Tracker', hash: '/rfq-tracker' }, { label: note.noteNo }]);
@@ -434,9 +484,9 @@ async function renderGeneralNoteForm(record) {
 /** Called by the quotation form after it creates a quotation that started from an RFQ. */
 async function linkRfqToQuotation(rfqId, quotationId, quotationNo) {
   const n = await DB.dbGet('notes', Number(rfqId)); if (!n) return;
-  n.quotationId = quotationId; n.quotationNo = quotationNo; n.updatedAt = new Date().toISOString();
+  n.quotationId = quotationId; n.quotationNo = quotationNo; n.quotationFamilyId = quotationId; n.quoteSeen = `${quotationId}|0|Draft`; n.updatedAt = new Date().toISOString();
   (n.activity = n.activity || []).push({ id: 'A' + Date.now().toString(36), date: todayISO(), type: 'Note', party: 'Us', supplierEntryId: '', text: `Quotation ${quotationNo} created from this RFQ.`, ballAfter: 'Us', by: (await DB.getSettings()).userName });
   n.ballWith = 'Us'; n.ballSince = todayISO(); n.ballSupplierEntryId = '';
   await DB.dbPut('notes', n); await DB.logActivity(`Created quotation ${quotationNo} from RFQ ${n.noteNo}`);
 }
-window.RfqTracker = { linkRfqToQuotation, getReminderInfo, ballInfo, effectiveRfqStatus, customerStatusText, customerNextStep };
+window.RfqTracker = { quoteForRfq, reconcileRfqs, applyQuoteState, latestQuote, linkRfqToQuotation, getReminderInfo, ballInfo, effectiveRfqStatus, customerStatusText, customerNextStep };

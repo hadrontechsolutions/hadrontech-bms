@@ -4,6 +4,7 @@
 
 Router.route('/dashboard', async () => {
   Router.setBreadcrumb([{ label: 'Dashboard' }]);
+  if (window.RfqTracker) await window.RfqTracker.reconcileRfqs();
   const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity, proformaInvoicesRaw, technicalOffers, notes, distributions] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('suppliers'), DB.dbGetAll('quotations'),
     DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.recentActivity(12),
