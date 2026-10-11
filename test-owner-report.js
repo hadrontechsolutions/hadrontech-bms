@@ -99,6 +99,21 @@ print('CUST|' + '|'.join(str(c.value) for c in wb['Customers'][6]))
   ok('19 old report addresses redirect to the merged report with the right view selected', legOk, legBad.join(' | '));
   win.location.hash = '#/reports/ownerReport'; await win.Router.resolveRoute(); await wait(500);
   ok('26 the report opens on "This month so far" with a plain-language note of the dates shown and the comparison', doc.getElementById('orPreset').value === 'monthToDate' && /Showing/.test(doc.getElementById('orPeriodNote').textContent) && /invoice date/.test(doc.getElementById('orPeriodNote').textContent) && /Before:/.test(doc.getElementById('orPreview').textContent), doc.getElementById('orPeriodNote').textContent);
+  // ---- every report says exactly what it shows and which date it uses ----
+  { const keys = ['quotationRegister', 'salesOrderRegister', 'supplierPORegister', 'salesSummary', 'grossProfit', 'agingReport', 'salesRegisterBookkeeper', 'purchaseRegisterBookkeeper', 'expenseRegister'];
+    let all = true; const miss = [];
+    for (const k of keys) { win.location.hash = '#/reports/' + k; await win.Router.resolveRoute(); await wait(250); const b = doc.getElementById('reportBasis'); if (!b || !/Showing/.test(b.textContent) || !/dates are matched on|not used/.test(b.textContent) || !/row/.test(b.textContent)) { all = false; miss.push(k); } }
+    ok('27 every report states what it lists, which date the range uses, and the row count', all, miss.join());
+    win.location.hash = '#/reports/salesSummary'; await win.Router.resolveRoute(); await wait(250);
+    ok('28 Sales Summary says it uses the SALES ORDER date, not the invoice date', /sales order date — not the invoice date/.test(doc.getElementById('reportBasis').textContent));
+    win.location.hash = '#/reports/expiredQuotations'; await win.Router.resolveRoute(); await wait(250);
+    ok('29 Expired view says the From/To dates are not used', /not used/.test(doc.getElementById('reportBasis').textContent), doc.getElementById('reportBasis').textContent);
+    win.location.hash = '#/reports/quotationRegister'; await win.Router.resolveRoute(); await wait(250);
+    doc.getElementById('rFrom').value = '2030-01-01'; doc.getElementById('rTo').value = '2030-01-31'; doc.getElementById('rApply').click(); await wait(250);
+    ok('30 an empty report says what it looked for and the dates, not just "no data"', /Nothing matches: all quotations/.test(doc.getElementById('reportTableWrap').textContent) && /2030/.test(doc.getElementById('reportTableWrap').textContent), doc.getElementById('reportTableWrap').textContent);
+    win.location.hash = '#/reports/bookkeeperPack'; await win.Router.resolveRoute(); await wait(500);
+    ok('31 Bookkeeper Pack states how each date is counted and that balances are as of the period end; tiles say what they count', /invoice date/.test(doc.getElementById('bpPeriodNote').textContent) && /as of/.test(doc.getElementById('bpPeriodNote').textContent) && /by date received/.test(doc.getElementById('bpPreview').textContent));
+    ok('32 no currency fallback boxes are shown when nothing needs one', !doc.querySelector('.bp-rate') && /No rate needs to be entered/.test(doc.getElementById('content').textContent)); }
   ok('20 no JS errors', errors.length === 0, errors.join('|'));
   console.log('XLSX_FILE', file);
 })().catch(e => { console.log('TEST FAILED', e); process.exit(1); });

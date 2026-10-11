@@ -89,6 +89,7 @@ print('FX|' + str('foreign-exchange' in txt))
     ok('33 workbook: Purchases Book has supplier invoice columns, Sales Book official no., Summary has FX line', /Supplier Inv\. No\./.test(py2.stdout) && /SI-000123/.test(py2.stdout) && /FX\|True/.test(py2.stdout), py2.stdout + py2.stderr);
     const sum2 = BP.summaryHTML(pk, BP.company(st)); ok('34 PDF summary shows FX line and rate range, no NaN', /Realised FX/.test(sum2) && /56 – 57\.5/.test(sum2) && !/NaN|undefined/.test(sum2)); }
 
+  ok('35 cash receipts carry the invoice date (so the bookkeeper sees which period the sale belongs to)', pack.receipts.find(r => r.invoiceNo === 'PI-4').invoiceDate === '2026-08-05');
   // ---- the real workbook ----
   const co = BP.company(st); const bytes = BP.pack2bytes(pack, co);
   const file = path.join(os.tmpdir(), 'bk-pack-test.xlsx'); fs.writeFileSync(file, Buffer.from(bytes));

@@ -87,7 +87,7 @@
 
     /* ---- Collections ---- */
     const receipts = [];
-    livePIs.forEach(({ pi, so, cust }) => (pi.payments || []).filter(p => inR(p.date)).forEach(p => { const cur = pi.currency || 'PHP'; used.add(cur); receipts.push({ date: d10(p.date), ref: p.reference || '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', invoiceNo: pi.officialInvoiceNo || pi.piNo, orderNo: so ? so.soNo : '', method: p.method || '', currency: cur, amount: r2(p.amount), rate: rate(cur), phpAmount: php(p.amount, cur) }); }));
+    livePIs.forEach(({ pi, so, cust }) => (pi.payments || []).filter(p => inR(p.date)).forEach(p => { const cur = pi.currency || 'PHP'; used.add(cur); receipts.push({ date: d10(p.date), ref: p.reference || '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', invoiceNo: pi.officialInvoiceNo || pi.piNo, invoiceDate: d10(pi.date), orderNo: so ? so.soNo : '', method: p.method || '', currency: cur, amount: r2(p.amount), rate: rate(cur), phpAmount: php(p.amount, cur) }); }));
     receipts.sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo));
 
     /* ---- Purchases ---- */
@@ -302,6 +302,7 @@
     S.push([{ v: co.name, s: 'bold' }]);
     S.push([{ v: [co.address, co.tin ? 'TIN: ' + co.tin : '', 'Sole proprietorship · Non-VAT registered'].filter(Boolean).join('  ·  '), s: 'sub' }]);
     S.push([{ v: period + `   ·   Prepared ${todayStr()} from the Hadrontech BMS (unaudited management records)`, s: 'sub' }]);
+    S.push([{ v: 'How dates are counted: sales by INVOICE date · collections by date RECEIVED · purchases by supplier PO date · payments by date PAID · expenses by expense date · balances (receivables, payables, inventory, reserve) as of the period end.', s: 'sub' }]);
     S.push([]);
     const sec = (title) => { S.push([{ v: title, s: 'section' }, { v: '', s: 'section' }, { v: '', s: 'section' }, { v: '', s: 'section' }]); };
     const line = (label, val, note, bold) => S.push([{ v: label, s: bold ? 'bold' : 'txt' }, { v: r2(val), s: bold ? 'totMoney' : 'money' }, { v: note || '', s: 'sub' }]);
@@ -359,7 +360,7 @@
       const rows = titleBlock(co, title, period, opts2 && opts2.extra); const hdrIdx = rows.length + 1; rows.push(H(headers));
       const body = rowsFn(); const first = rows.length + 1; body.forEach(r => rows.push(r)); const last = rows.length;
       if (body.length) { const tot = headers.map(() => null); tot[0] = { v: 'TOTAL', s: 'totLbl' }; for (let i = 1; i < headers.length; i++) tot[i] = { v: '', s: 'totLbl' }; sumCols.forEach(([ci, val]) => { tot[ci] = { v: r2(val), s: 'totMoney', f: colSum(colName(ci), first, last) }; }); rows.push(tot); }
-      else rows.push([{ v: 'No records in this period.', s: 'note' }]);
+      else rows.push([{ v: (opts2 && opts2.empty) || `No records are dated between ${pack.from} and ${pack.to}.`, s: 'note' }]);
       let merges, heights;
       if (opts2 && opts2.note) { rows.push([]); rows.push([{ v: opts2.note, s: 'note' }]); const ri = rows.length; merges = [`A${ri}:${colName(headers.length - 1)}${ri}`]; const totalW = widths.reduce((a, b) => a + b, 0); heights = { [ri - 1]: 13 * Math.max(1, Math.ceil(opts2.note.length * 1.1 / totalW)) + 4 }; }
       sheets.push({ name, widths, rows, freezeRow: hdrIdx, filterRow: hdrIdx, filterEnd: last, merges, heights });
@@ -369,24 +370,25 @@
       [11, 17, 14, 34, 16, 6, 14, 11, 15, 9, 15, 12, 16, 15, 15, 14],
       () => pack.salesRows.map(r => [{ d: r.date, s: 'date' }, { v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.net), money(r.vat), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpNet), money(r.phpVat), money(r.phpTotal), money(r.paidToDate), money(r.balance), { v: r.bmsRef, s: 'txt' }]),
       [[6, pack.salesRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.net : 0), 0)], [8, pack.salesRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.total : 0), 0)], [10, t.salesNet], [11, t.salesVat], [12, t.salesTotal]],
-      { note: '* Paid to date and Balance are as of the period end. Net / VAT / Total columns total PHP invoices only; use the PHP columns for the converted grand total. "Invoice No. (BIR)" is the official BIR sales-invoice number entered on the Proforma Invoice; where none was entered the BMS reference is shown. "BMS Ref." is always the internal reference.' });
+      { empty: 'No sales invoice is dated within this period. (The Sales Book lists sales by INVOICE date; payments received in this period are in the Cash Receipts tab.)', note: '* Paid to date and Balance are as of the period end. Net / VAT / Total columns total PHP invoices only; use the PHP columns for the converted grand total. "Invoice No. (BIR)" is the official BIR sales-invoice number entered on the Proforma Invoice; where none was entered the BMS reference is shown. "BMS Ref." is always the internal reference.' });
 
-    dataSheet('Cash Receipts', 'CASH RECEIPTS BOOK — collections from customers', ['Date', 'Payment Ref.', 'Customer', 'TIN', 'Invoice No.', 'Sales Order', 'Method', 'Cur', 'Amount', 'Rate', 'PHP Amount'],
-      [11, 22, 34, 16, 15, 14, 14, 6, 15, 9, 16],
-      () => pack.receipts.map(r => [{ d: r.date, s: 'date' }, { v: r.ref, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.method, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.amount), { v: r.rate, s: 'rate' }, money(r.phpAmount)]),
-      [[8, pack.receipts.reduce((s, r) => s + (r.currency === 'PHP' ? r.amount : 0), 0)], [10, t.collections]]);
+    dataSheet('Cash Receipts', 'CASH RECEIPTS BOOK — collections from customers', ['Date paid', 'Payment Ref.', 'Customer', 'TIN', 'Invoice No.', 'Invoice dated', 'Sales Order', 'Method', 'Cur', 'Amount', 'Rate', 'PHP Amount'],
+      [11, 22, 34, 16, 15, 13, 14, 14, 6, 15, 9, 16],
+      () => pack.receipts.map(r => [{ d: r.date, s: 'date' }, { v: r.ref, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.invoiceNo, s: 'txt' }, { d: r.invoiceDate, s: 'date' }, { v: r.orderNo, s: 'txt' }, { v: r.method, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.amount), { v: r.rate, s: 'rate' }, money(r.phpAmount)]),
+      [[9, pack.receipts.reduce((s, r) => s + (r.currency === 'PHP' ? r.amount : 0), 0)], [11, t.collections]],
+      { empty: 'No customer payment is dated within this period. (This book lists payments by the date they were received.)', note: '"Invoice dated" shows the month the sale itself was recorded. A payment for an invoice dated BEFORE this period was already counted as a sale in that earlier period — it only reduces receivables here.' });
 
     dataSheet('Purchases Book', 'PURCHASES BOOK (Purchases Journal) — Supplier POs by PO date', ['Date', 'PO No.', 'Supplier Inv. No.', 'Supplier Inv. Date', 'Supplier', 'TIN', 'Country', 'Sales Order', 'Status', 'Cur', 'Items', 'Freight', 'Taxes', 'Total', 'Rate', 'PHP Total'],
       [11, 15, 18, 13, 34, 16, 14, 14, 20, 6, 14, 12, 11, 15, 10, 16],
       () => pack.purchaseRows.map(r => [{ d: r.date, s: 'date' }, { v: r.poNo, s: 'txt' }, { v: r.supplierInvoiceNo, s: 'txt' }, r.supplierInvoiceDate ? { d: r.supplierInvoiceDate, s: 'date' } : { v: '', s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.country, s: 'txt' }, { v: r.salesOrder, s: 'txt' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.items), money(r.freight), money(r.taxes), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpTotal)]),
       [[10, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.items : 0), 0)], [11, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.freight : 0), 0)], [12, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.taxes : 0), 0)], [13, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.total : 0), 0)], [15, t.purchases]],
-      { note: 'Draft and Cancelled POs are excluded (see Notes & Exclusions). Item/Freight/Taxes/Total columns total PHP POs only; use PHP Total for the converted figure. Rate = the exchange rate saved on that PO when it was made (PHP per 1 unit); it does not change if Settings change later.' });
+      { empty: 'No supplier PO is dated within this period. (Purchases are listed by PO date; payments made are in the Cash Disbursements tab.)', note: 'Draft and Cancelled POs are excluded (see Notes & Exclusions). Item/Freight/Taxes/Total columns total PHP POs only; use PHP Total for the converted figure. Rate = the exchange rate saved on that PO when it was made (PHP per 1 unit); it does not change if Settings change later.' });
 
     dataSheet('Cash Disbursements', 'CASH DISBURSEMENTS BOOK — all payments made', ['Date', 'Type', 'Payee', 'Particulars', 'Reference', 'Method', 'Cur', 'Amount', 'Rate', 'PHP Amount'],
       [11, 22, 30, 44, 22, 14, 6, 15, 9, 16],
       () => pack.disbursements.map(r => [{ d: r.date, s: 'date' }, { v: r.type, s: 'txt' }, { v: r.payee, s: 'txt' }, { v: r.particulars, s: 'txt' }, { v: r.ref, s: 'txt' }, { v: r.method, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.amount), { v: r.rate, s: 'rate' }, money(r.phpAmount)]),
       [[7, pack.disbursements.reduce((s, r) => s + (r.currency === 'PHP' ? r.amount : 0), 0)], [9, t.disbursements]],
-      { note: 'Foreign-currency supplier payments use the rate entered for that payment (the bank-slip rate). Includes supplier payments, operating expenses (as recorded, dated on the expense date), and owner / employee payouts marked as paid in Distributions. Reserve withdrawals are internal and shown on the Business Reserve sheet.' });
+      { empty: 'No payment was made within this period (supplier payments, expenses and owner/employee payouts are listed by the date paid).', note: 'Foreign-currency supplier payments use the rate entered for that payment (the bank-slip rate). Includes supplier payments, operating expenses (as recorded, dated on the expense date), and owner / employee payouts marked as paid in Distributions. Reserve withdrawals are internal and shown on the Business Reserve sheet.' });
 
     // Expenses with category subtotals
     {
@@ -405,17 +407,17 @@
     dataSheet('Receivables', `ACCOUNTS RECEIVABLE AGING — as of ${pack.to}`, ['Invoice No.', 'Sales Order', 'Customer', 'TIN', 'Invoice Date', 'Days', 'Cur', 'Invoice Total', 'Paid', 'Balance', 'Rate', 'PHP Balance', 'Current (0-30)', '31-60', '61-90', 'Over 90'],
       [15, 14, 34, 16, 12, 7, 6, 15, 15, 15, 9, 16, 15, 14, 14, 14],
       () => pack.arRows.map(r => [{ v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.currency, s: 'txt' }, money(r.total), money(r.paid), money(r.balance), { v: r.rate, s: 'rate' }, money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0)]),
-      [[11, t.arClosing], [12, pack.arAging.b0], [13, pack.arAging.b30], [14, pack.arAging.b60], [15, pack.arAging.b90]], { note: 'Aging is counted from the invoice date to the period end. Payments dated after the period end are not applied.' });
+      [[11, t.arClosing], [12, pack.arAging.b0], [13, pack.arAging.b30], [14, pack.arAging.b60], [15, pack.arAging.b90]], { empty: `Nothing is owed by customers as of ${pack.to}: every invoice dated on or before that day is fully paid.`, note: 'Aging is counted from the invoice date to the period end. Payments dated after the period end are not applied.' });
 
     dataSheet('Payables', `ACCOUNTS PAYABLE AGING — as of ${pack.to}`, ['PO No.', 'Supplier', 'TIN', 'PO Date', 'Days', 'Status', 'Cur', 'PO Total', 'Paid', 'Balance', 'Rate', 'PHP Balance', 'Current (0-30)', '31-60', '61-90', 'Over 90', 'Supplier Inv. No.'],
       [15, 34, 16, 12, 7, 20, 6, 15, 15, 15, 10, 16, 15, 14, 14, 14, 18],
       () => pack.apRows.map(r => [{ v: r.poNo, s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.total), money(r.paid), money(r.balance), { v: r.rate, s: 'rate' }, money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0), { v: r.supplierInvoiceNo, s: 'txt' }]),
-      [[11, t.apClosing], [12, pack.apAging.b0], [13, pack.apAging.b30], [14, pack.apAging.b60], [15, pack.apAging.b90]], { note: 'Open balances are valued at each PO\'s own saved exchange rate. Unrealised revaluation to the period-end rate is not computed.' });
+      [[11, t.apClosing], [12, pack.apAging.b0], [13, pack.apAging.b30], [14, pack.apAging.b60], [15, pack.apAging.b90]], { empty: `Nothing is owed to suppliers as of ${pack.to}: every PO dated on or before that day is fully paid.`, note: 'Open balances are valued at each PO\'s own saved exchange rate. Unrealised revaluation to the period-end rate is not computed.' });
 
     dataSheet('Inventory', `INVENTORY ON HAND — as of ${pack.to}`, ['Item No.', 'Description', 'UOM', 'Qty on hand', 'Cur', 'Standard cost', 'Rate', 'PHP unit cost', 'PHP Value'],
       [14, 54, 7, 13, 6, 15, 9, 15, 17],
       () => pack.inventoryRows.map(r => [{ v: r.itemNo, s: 'txt' }, { v: r.description, s: 'txt' }, { v: r.uom, s: 'txt' }, { v: r.qty, s: 'qty' }, { v: r.currency, s: 'txt' }, money(r.unitCost), { v: r.rate, s: 'rate' }, money(r.phpUnit), money(r.phpValue)]),
-      [[8, t.inventory]], { note: 'Catalog items only, valued at their standard cost converted at the rate above (not weighted-average or FIFO). Project Package items are bought for a specific order and are not kept in stock, so they are not listed — they appear in the Purchases Book.' });
+      [[8, t.inventory]], { empty: `No catalog item has stock on hand as of ${pack.to}.`, note: 'Catalog items only, valued at their standard cost converted at the rate above (not weighted-average or FIFO). Project Package items are bought for a specific order and are not kept in stock, so they are not listed — they appear in the Purchases Book.' });
 
     dataSheet('Distributions', 'OWNER DRAWS & EMPLOYEE PAYOUTS — from monthly distributions', ['Distribution', 'Month', 'Name', 'Type', '%', 'Gross amount', 'Net pay', 'Paid on', 'Method', 'Reference'],
       [16, 10, 26, 24, 8, 15, 15, 12, 14, 24],
@@ -498,7 +500,8 @@
     const data = await loadData(); const co = company(data.settings);
     if (!content.isConnected) return; // the page was re-rendered while the data was loading
     const cur = periodPreset('lastMonth');
-    const knownCur = new Set(); (data.supplierPOs || []).forEach(p => p.currency && p.currency !== 'PHP' && knownCur.add(p.currency)); (data.products || []).forEach(p => p.currency && p.currency !== 'PHP' && p.type !== 'Project Package' && knownCur.add(p.currency)); (data.proformaInvoices || []).forEach(p => p.currency && p.currency !== 'PHP' && knownCur.add(p.currency));
+    // A rate box is only needed where the pack has to fall back to a typed rate: older POs with no saved rate, catalog stock costs, foreign customer invoices.
+    const knownCur = new Set(); (data.supplierPOs || []).forEach(p => p.currency && p.currency !== 'PHP' && !(Number(p.exchangeRate) > 0) && knownCur.add(p.currency)); (data.products || []).forEach(p => p.currency && p.currency !== 'PHP' && p.type !== 'Project Package' && knownCur.add(p.currency)); (data.proformaInvoices || []).forEach(p => p.currency && p.currency !== 'PHP' && knownCur.add(p.currency));
     const baseRates = Object.assign({}, data.settings.referenceRates || {});
     content.innerHTML = `
       <div class="card">
@@ -510,7 +513,8 @@
           <label>To <input type="date" id="bpTo" value="${cur.to}"></label>
           ${[...knownCur].sort().map(c => `<label>${c} fallback → PHP <input type="number" step="0.0001" min="0" id="bpRate_${c}" class="bp-rate" data-cur="${c}" value="${baseRates[c] || ''}" style="width:90px;"></label>`).join('')}
         </div>
-        <div class="muted-text" style="margin-top:6px;">Each Supplier PO and payment uses the exchange rate saved on it. The fallback rate above is only used for older documents that have no saved rate (you will be warned).</div>
+        <div class="muted-text" style="margin-top:6px;">${knownCur.size ? `Rate boxes shown: <b>${[...knownCur].sort().join(', ')}</b> — used only for older supplier POs with no saved rate, catalog stock costs and foreign-currency customer invoices. Every other foreign-currency PO and payment uses the rate saved on it.` : 'No rate needs to be entered: every foreign-currency PO and payment carries its own saved exchange rate.'}</div>
+        <div id="bpPeriodNote" class="muted-text" style="margin-top:8px; line-height:1.6;"></div>
       </div>
       <div id="bpPreview"></div>`;
     const q = (id) => document.getElementById(id);
@@ -520,9 +524,11 @@
       const from = q('bpFrom').value, to = q('bpTo').value;
       if (!from || !to || from > to) { q('bpPreview').innerHTML = '<div class="card"><div class="empty-inline">Choose a valid period (From must not be after To).</div></div>'; pack = null; return; }
       pack = buildPack({ from, to, data, rates: getRates() }); const t = pack.totals; const f = (n) => formatMoney(n, 'PHP');
+      const nice = (d) => formatDate(d);
+      q('bpPeriodNote').innerHTML = `Showing <b>${nice(from)} – ${nice(to)}</b>. Sales are counted on the <b>invoice date</b>, collections on the date <b>received</b>, purchases on the <b>PO date</b>, payments on the date <b>paid</b>, expenses on the expense date. Receivables, payables, inventory and the Business Reserve are balances <b>as of ${nice(to)}</b>. An invoice dated in one period and paid in another appears in each period separately.`;
       const tile = (v, l) => `<div class="stat-card"><div class="stat-card-num">${v}</div><div class="stat-card-lbl">${escapeHtml(l)}</div></div>`;
       q('bpPreview').innerHTML = `
-        <div class="stat-grid">${tile(f(t.salesTotal), `Invoiced (${pack.salesRows.length} invoice${pack.salesRows.length === 1 ? '' : 's'})`)}${tile(f(t.collections), `Collected (${pack.receipts.length})`)}${tile(f(t.purchases), `Purchases (${pack.purchaseRows.length} PO${pack.purchaseRows.length === 1 ? '' : 's'})`)}${tile(f(t.expenses), `Expenses (${pack.expenseRows.length})`)}${tile(f(t.arClosing), 'Receivables at period end')}${tile(f(t.apClosing), 'Payables at period end')}${tile(f(t.inventory), 'Inventory on hand')}${tile(f(t.reserveEnd), 'Business Reserve')}</div>
+        <div class="stat-grid">${tile(f(t.salesTotal), `Invoiced in the period — ${pack.salesRows.length} invoice${pack.salesRows.length === 1 ? '' : 's'}, by invoice date`)}${tile(f(t.collections), `Received in the period — ${pack.receipts.length} payment${pack.receipts.length === 1 ? '' : 's'}, by date received`)}${tile(f(t.purchases), `Purchased in the period — ${pack.purchaseRows.length} PO${pack.purchaseRows.length === 1 ? '' : 's'}, by PO date`)}${tile(f(t.expenses), `Expenses in the period — ${pack.expenseRows.length}, by expense date`)}${tile(f(t.arClosing), `Customers still owe us as of ${nice(to)}`)}${tile(f(t.apClosing), `We still owe suppliers as of ${nice(to)}`)}${tile(f(t.inventory), `Inventory on hand as of ${nice(to)}`)}${tile(f(t.reserveEnd), `Business Reserve as of ${nice(to)}`)}</div>
         <div class="card"><h3 class="section-title">Before you send it</h3>${pack.warnings.length ? `<ul class="bp-warn">${pack.warnings.map(w => `<li class="${w.level}">${w.level === 'warn' ? '⚠' : 'ℹ'} ${escapeHtml(w.text)}</li>`).join('')}</ul>` : '<div class="text-ok">✓ No warnings — everything in this period looks complete.</div>'}
           ${pack.excluded.length ? `<div class="muted-text" style="margin-top:8px;">${pack.excluded.length} cancelled / draft document(s) were left out and are listed on the “Notes &amp; Exclusions” tab.</div>` : ''}</div>
         <div class="card"><div class="btn-row"><button class="btn-amber" id="bpXlsx">Download Excel workbook (.xlsx)</button><button class="btn-line" id="bpPdf">Open PDF summary (Print → Save as PDF)</button></div>

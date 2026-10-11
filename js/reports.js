@@ -36,6 +36,32 @@ const MERGED_VIEWS = {
   agingReport: { '': 'paymentsAging', [V_PAYABLES]: 'supplierPaymentsAging' },
   expenseRegister: { [V_CATEGORY]: 'expensesByCategory' }
 };
+/* Plain-language description shown above every report: WHAT is listed and which DATE the date range is applied to,
+   so a report never leaves the reader guessing why a row is (or isn't) there. dateBy = null means the range is not used. */
+function reportBasis(key, view) {
+  const v = view || '';
+  const all = {
+    quotationRegister: v === V_OPEN ? { what: 'Open quotations (Draft, Sent, Under Review)', dateBy: 'quotation date' }
+      : v === V_WONLOST ? { what: 'Quotations marked Won or Lost', dateBy: 'quotation date' }
+      : v === V_EXPIRING ? { what: 'Open quotations that expire today or within 7 days', dateBy: null }
+      : v === V_EXPIRED ? { what: 'Open quotations past their valid-until date, plus any marked Expired', dateBy: null }
+      : { what: v ? `Quotations with status ${v}` : 'All quotations (latest revision of each)', dateBy: 'quotation date' },
+    salesOrderRegister: v === V_AWAIT ? { what: 'Sales orders that are Ready for Delivery or Partially Delivered', dateBy: null } : { what: v ? `Sales orders with status ${v}` : 'All sales orders', dateBy: 'order date' },
+    supplierPORegister: { what: v ? `Supplier POs with status ${v}` : 'All supplier POs', dateBy: 'PO date' },
+    salesSummary: { what: v === V_MONTH ? 'Sales order totals per month (PHP orders only)' : 'Sales order totals per customer (PHP orders only)', dateBy: 'sales order date — not the invoice date' },
+    grossProfit: { what: 'Won quotations: selling price less cost', dateBy: 'quotation date' },
+    agingReport: v === V_PAYABLES ? { what: 'Supplier POs not yet fully paid', dateBy: 'PO date' } : { what: 'Customer invoices not yet fully paid', dateBy: 'invoice date' },
+    salesRegisterBookkeeper: { what: v ? `Sales orders with status ${v}` : 'Sales orders (Cancelled and Draft are left out)', dateBy: 'order date' },
+    purchaseRegisterBookkeeper: { what: v ? `Supplier POs with status ${v}` : 'Supplier POs (Cancelled and Draft are left out)', dateBy: 'PO date' },
+    expenseRegister: v === V_CATEGORY ? { what: 'Operating expenses, totalled per category', dateBy: 'expense date' } : { what: 'Operating expenses, one line each', dateBy: 'expense date' }
+  };
+  return all[key] || null;
+}
+function rangeWords(from, to) {
+  const f = (d) => (typeof formatDate === 'function' ? formatDate(d) : d);
+  if (from && to) return `${f(from)} – ${f(to)}`; if (from) return `${f(from)} onward`; if (to) return `up to ${f(to)}`; return 'all dates';
+}
+
 // Reports that were merged into another one keep working: the old address opens the new report with the right view chosen.
 const LEGACY_REPORTS = {
   openQuotations: ['quotationRegister', V_OPEN], wonLost: ['quotationRegister', V_WONLOST], expiringSoon: ['quotationRegister', V_EXPIRING],
@@ -85,6 +111,7 @@ async function renderReports(activeKey, initialView) {
             <button class="btn-line btn-sm" id="rApply">Apply</button>
             <button class="btn-amber btn-sm" id="rExport">Export CSV</button>
           </div>
+          <div id="reportBasis" class="muted-text" style="margin-bottom:10px; line-height:1.6;"></div>
           <div id="reportTableWrap"></div>
         </div>`}
       </div>
@@ -122,7 +149,12 @@ async function renderReports(activeKey, initialView) {
     currentRows = result.rows; currentCols = result.cols; currentTotals = result.totals || null;
 
     const wrap = document.getElementById('reportTableWrap');
-    if (currentRows.length === 0) { wrap.innerHTML = `<div class="empty-inline">No data for this report yet.</div>`; return; }
+    const basis = reportBasis(activeKey, statusFilter);
+    const typed = [['customer', customerFilter, 'Customer'], ['end-user', endUserFilter, 'End-user'], ['supplier', supplierFilter, 'Supplier']].filter(x => x[1] && x[1].trim() && (activeReportDef?.filters || []).includes(x[0] === 'end-user' ? 'endUser' : x[0])).map(x => `${x[2]} contains “${x[1].trim()}”`);
+    const dateText = basis ? (basis.dateBy ? `dates are matched on the <b>${escapeHtml(basis.dateBy)}</b>: ${escapeHtml(rangeWords(from, to))}` : 'the From / To dates are <b>not used</b> here — this shows what is true today') : '';
+    const basisEl = document.getElementById('reportBasis');
+    if (basisEl && basis) basisEl.innerHTML = `Showing <b>${escapeHtml(basis.what)}</b> · ${dateText}${typed.length ? ' · ' + escapeHtml(typed.join(', ')) : ''} · <b>${currentRows.length}</b> row${currentRows.length === 1 ? '' : 's'}.`;
+    if (currentRows.length === 0) { wrap.innerHTML = `<div class="empty-inline">No data for this report yet. Nothing matches: ${basis ? escapeHtml(basis.what.toLowerCase()) : 'these filters'}${basis && basis.dateBy ? `, dated ${escapeHtml(rangeWords(from, to))}` : ''}${typed.length ? ', ' + escapeHtml(typed.join(', ')) : ''}. Try a wider date range or clear the filters.</div>`; return; }
     wrap.innerHTML = (result.note ? `<p class="muted-text" style="margin-bottom:10px;">${escapeHtml(result.note)}</p>` : '')
       + `<table class="data-table compact"><thead><tr>${currentCols.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${currentRows.map(row => `<tr>${currentCols.map(c => {
