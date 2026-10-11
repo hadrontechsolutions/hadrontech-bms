@@ -275,7 +275,7 @@ async function renderRfqDetail(id) {
         <div class="form-grid">
           <div class="field"><label>Date</label><input type="date" id="act_date" value="${todayISO()}"></div>
           <div class="field"><label>What kind of entry</label><select id="act_type">${ACTIVITY_TYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
-          <div class="field" id="act_supWrap" style="${note.suppliers.length ? '' : 'display:none;'}"><label>Which supplier (if it is about one)</label><select id="act_sup"><option value="">— None —</option>${note.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select></div>
+          <div class="field" id="act_supWrap" style="${note.suppliers.length ? '' : 'display:none;'}"><label>Which supplier</label><select id="act_sup"><option value="">— None —</option>${note.suppliers.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('')}</select></div>
           <div class="field field-wide"><label>What happened</label><textarea id="act_text" rows="2" ></textarea></div>
           <div class="field"><label>The ball is now with</label><select id="act_ball">${BALL_PARTIES.map(p => `<option>${p}</option>`).join('')}</select><div class="muted-text" style="font-size:11px; margin-top:3px;" id="act_ballHint"></div></div>
           <div class="field"><label>Remind me to follow up in (days)</label><input type="number" min="0" id="act_remind" value="${note.remindAfterDays === '' || note.remindAfterDays == null ? 3 : note.remindAfterDays}"></div>
