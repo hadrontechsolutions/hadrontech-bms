@@ -81,6 +81,7 @@ async function renderPIDetail(id) {
         <div class="detail-item"><div class="detail-label">Sales Order</div><div class="detail-value">${so ? `<a href="#/sales-orders/${so.id}">${escapeHtml(so.soNo)}</a>` : '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Customer</div><div class="detail-value">${customer ? `<a href="#/customers/${customer.id}">${escapeHtml(customer.companyName)}</a>` : '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">${formatDate(pi.date)}</div></div>
+        <div class="detail-item"><div class="detail-label">Official Invoice No.</div><div class="detail-value">${escapeHtml(pi.officialInvoiceNo || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Invoice Amount</div><div class="detail-value">${formatMoney(pi.grandTotal, pi.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Amount Paid</div><div class="detail-value text-ok">${formatMoney(amountPaid, pi.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Balance Due</div><div class="detail-value" style="font-weight:700;">${formatMoney(balanceDue, pi.currency)}</div></div>
@@ -103,6 +104,16 @@ async function renderPIDetail(id) {
     </div>
 
     <div class="card">
+      <h3 class="section-title">Official (BIR) Invoice Reference</h3>
+      <p class="muted-text">If you issue a separate BIR-registered sales invoice for this order, enter its number and date here. It becomes the invoice number in the Bookkeeper Pack's Sales Book.</p>
+      <div class="form-grid">
+        <div class="field"><label>Official Invoice No.</label><input id="piOfficialNo" value="${escapeHtml(pi.officialInvoiceNo || '')}" placeholder="e.g. SI-000123"></div>
+        <div class="field"><label>Official Invoice Date</label><input type="date" id="piOfficialDate" value="${pi.officialInvoiceDate || ''}"></div>
+      </div>
+      <div class="btn-row" style="margin-top:10px;"><button class="btn-line btn-sm" id="btnSaveOfficial">Save Invoice Reference</button></div>
+    </div>
+
+    <div class="card">
       <h3 class="section-title">Note (shown on the printed proforma invoice)</h3>
       <p class="muted-text">Use this for anything that applies to the invoice as a whole — e.g. sample disclaimers, delivery notes — instead of writing it into a line item's description.</p>
       <textarea id="piNotes" rows="3" style="width:100%;">${escapeHtml(pi.notes || '')}</textarea>
@@ -114,6 +125,13 @@ async function renderPIDetail(id) {
 
   document.getElementById('btnPrintPI').onclick = () => Print.printProformaInvoice(pi, so, customer);
   document.getElementById('piNotes').addEventListener('input', markDirty);
+  document.getElementById('btnSaveOfficial').onclick = async () => {
+    pi.officialInvoiceNo = document.getElementById('piOfficialNo').value.trim();
+    pi.officialInvoiceDate = document.getElementById('piOfficialDate').value;
+    await DB.dbPut('proformaInvoices', pi);
+    await DB.logActivity(`Set official invoice reference ${pi.officialInvoiceNo || '(cleared)'} on proforma invoice ${pi.piNo}`);
+    toast('Invoice reference saved.');
+  };
   document.getElementById('btnSaveNotes').onclick = async () => {
     pi.notes = document.getElementById('piNotes').value;
     await DB.dbPut('proformaInvoices', pi);

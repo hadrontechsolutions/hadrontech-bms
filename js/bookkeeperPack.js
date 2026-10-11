@@ -56,6 +56,12 @@
     const missingRates = new Set();
     const rate = (cur) => { const c = cur || 'PHP'; if (c === 'PHP') return 1; if (!rates[c]) { missingRates.add(c); return 1; } return Number(rates[c]); };
     const php = (amt, cur) => r2((Number(amt) || 0) * rate(cur));
+    // Per-document rates: a Supplier PO keeps the rate recognised when it was made (never follows Settings);
+    // a payment keeps the rate of the day it was paid. Only older documents with no saved rate use the fallback.
+    const legacyDocs = [];
+    const poRate = (p) => { const c = p.currency || 'PHP'; if (c === 'PHP') return 1; if (Number(p.exchangeRate) > 0) return Number(p.exchangeRate); legacyDocs.push(p.poNo); return rate(c); };
+    const payRate = (x, p) => { const c = p.currency || 'PHP'; if (c === 'PHP') return 1; return Number(x.exchangeRate) > 0 ? Number(x.exchangeRate) : poRate(p); };
+    const rateSeen = {}; const noteRate = (c, r) => { if (c === 'PHP') return; const o = rateSeen[c] || (rateSeen[c] = { min: r, max: r, count: 0 }); o.min = Math.min(o.min, r); o.max = Math.max(o.max, r); o.count++; };
     const inR = (d) => { const x = d10(d); return !!x && x >= from && x <= to; };
     const before = (d) => { const x = d10(d); return !!x && x < from; };
     const upTo = (d) => { const x = d10(d); return !!x && x <= to; };
@@ -69,18 +75,18 @@
     /* ---- Sales (invoiced) ---- */
     const allPIs = (data.proformaInvoices || []).map(pi => { const so = soMap[pi.salesOrderId]; return { pi, so, cust: custMap[so && so.customerId] }; });
     const livePIs = allPIs.filter(x => !(x.so && x.so.status === 'Cancelled'));
-    allPIs.filter(x => x.so && x.so.status === 'Cancelled' && inR(x.pi.date)).forEach(x => out.excluded.push({ type: 'Invoice', no: x.pi.piNo, date: d10(x.pi.date), party: x.cust ? x.cust.companyName : '', amount: x.pi.grandTotal, currency: x.pi.currency || 'PHP', reason: 'Sales order ' + x.so.soNo + ' is Cancelled' }));
+    allPIs.filter(x => x.so && x.so.status === 'Cancelled' && inR(x.pi.date)).forEach(x => out.excluded.push({ type: 'Invoice', no: x.pi.officialInvoiceNo || x.pi.piNo, date: d10(x.pi.date), party: x.cust ? x.cust.companyName : '', amount: x.pi.grandTotal, currency: x.pi.currency || 'PHP', reason: 'Sales order ' + x.so.soNo + ' is Cancelled' }));
     const paidOnPI = (pi, cutoff) => r2((pi.payments || []).filter(p => !cutoff || upTo(p.date)).reduce((s, p) => s + (Number(p.amount) || 0), 0));
     const paidBeforeFrom = (pi) => r2((pi.payments || []).filter(p => before(p.date)).reduce((s, p) => s + (Number(p.amount) || 0), 0));
     const salesRows = livePIs.filter(x => inR(x.pi.date)).sort((a, b) => d10(a.pi.date).localeCompare(d10(b.pi.date)) || String(a.pi.piNo).localeCompare(String(b.pi.piNo))).map(({ pi, so, cust }) => {
-      const cur = pi.currency || 'PHP'; used.add(cur);
+      const cur = pi.currency || 'PHP'; used.add(cur); noteRate(cur, rate(cur));
       const net = r2((pi.grandTotal || 0) - (pi.vatTotal || 0));
-      return { date: d10(pi.date), invoiceNo: pi.piNo, orderNo: so ? so.soNo : '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', vatMode: (so && so.vatMode) || pi.vatMode || '', currency: cur, net, vat: r2(pi.vatTotal || 0), total: r2(pi.grandTotal || 0), rate: rate(cur), phpTotal: php(pi.grandTotal, cur), phpNet: php(net, cur), phpVat: php(pi.vatTotal, cur), paidToDate: paidOnPI(pi, true), balance: r2((pi.grandTotal || 0) - paidOnPI(pi, true)), customerId: cust && cust.id };
+      return { date: d10(pi.date), invoiceNo: pi.officialInvoiceNo || pi.piNo, bmsRef: pi.piNo, officialDate: d10(pi.officialInvoiceDate), hasOfficial: !!pi.officialInvoiceNo, orderNo: so ? so.soNo : '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', vatMode: (so && so.vatMode) || pi.vatMode || '', currency: cur, net, vat: r2(pi.vatTotal || 0), total: r2(pi.grandTotal || 0), rate: rate(cur), phpTotal: php(pi.grandTotal, cur), phpNet: php(net, cur), phpVat: php(pi.vatTotal, cur), paidToDate: paidOnPI(pi, true), balance: r2((pi.grandTotal || 0) - paidOnPI(pi, true)), customerId: cust && cust.id };
     });
 
     /* ---- Collections ---- */
     const receipts = [];
-    livePIs.forEach(({ pi, so, cust }) => (pi.payments || []).filter(p => inR(p.date)).forEach(p => { const cur = pi.currency || 'PHP'; used.add(cur); receipts.push({ date: d10(p.date), ref: p.reference || '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', invoiceNo: pi.piNo, orderNo: so ? so.soNo : '', method: p.method || '', currency: cur, amount: r2(p.amount), rate: rate(cur), phpAmount: php(p.amount, cur) }); }));
+    livePIs.forEach(({ pi, so, cust }) => (pi.payments || []).filter(p => inR(p.date)).forEach(p => { const cur = pi.currency || 'PHP'; used.add(cur); receipts.push({ date: d10(p.date), ref: p.reference || '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', invoiceNo: pi.officialInvoiceNo || pi.piNo, orderNo: so ? so.soNo : '', method: p.method || '', currency: cur, amount: r2(p.amount), rate: rate(cur), phpAmount: php(p.amount, cur) }); }));
     receipts.sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNo.localeCompare(b.invoiceNo));
 
     /* ---- Purchases ---- */
@@ -90,12 +96,13 @@
     const itemsTotal = (p) => r2((p.lines || []).reduce((s, l) => s + (Number(l.amount) || 0), 0));
     const purchaseRows = livePOs.filter(p => inR(p.poDate)).sort((a, b) => d10(a.poDate).localeCompare(d10(b.poDate)) || String(a.poNo).localeCompare(String(b.poNo))).map(p => {
       const sup = supMap[p.supplierId] || {}; const cur = p.currency || 'PHP'; used.add(cur);
-      return { date: d10(p.poDate), poNo: p.poNo, supplier: sup.companyName || '', tin: sup.tin || '', country: sup.country || '', salesOrder: (soMap[p.salesOrderId] || {}).soNo || '', status: p.status, currency: cur, items: itemsTotal(p), freight: r2(p.freight || 0), taxes: r2(p.taxes || 0), total: r2(p.totalCost || 0), rate: rate(cur), phpTotal: php(p.totalCost, cur), supplierId: p.supplierId };
+      const pr = poRate(p); noteRate(cur, pr);
+      return { date: d10(p.poDate), poNo: p.poNo, supplierInvoiceNo: p.supplierInvoiceNo || '', supplierInvoiceDate: d10(p.supplierInvoiceDate), supplier: sup.companyName || '', tin: sup.tin || '', country: sup.country || '', salesOrder: (soMap[p.salesOrderId] || {}).soNo || '', status: p.status, currency: cur, items: itemsTotal(p), freight: r2(p.freight || 0), taxes: r2(p.taxes || 0), total: r2(p.totalCost || 0), rate: pr, phpTotal: r2((Number(p.totalCost) || 0) * pr), supplierId: p.supplierId };
     });
 
     /* ---- Supplier payments ---- */
     const supplierPayments = [];
-    livePOs.forEach(p => (p.payments || []).filter(x => inR(x.date)).forEach(x => { const sup = supMap[p.supplierId] || {}; const cur = p.currency || 'PHP'; used.add(cur); supplierPayments.push({ date: d10(x.date), payee: sup.companyName || '', ref: x.reference || '', particulars: 'Payment of ' + p.poNo, method: x.method || '', currency: cur, amount: r2(x.amount), rate: rate(cur), phpAmount: php(x.amount, cur) }); }));
+    livePOs.forEach(p => (p.payments || []).filter(x => inR(x.date)).forEach(x => { const sup = supMap[p.supplierId] || {}; const cur = p.currency || 'PHP'; used.add(cur); const xr = payRate(x, p), pr = poRate(p); noteRate(cur, xr); const phpAmount = r2((Number(x.amount) || 0) * xr), cleared = r2((Number(x.amount) || 0) * pr); supplierPayments.push({ date: d10(x.date), payee: sup.companyName || '', ref: x.reference || x.supplierInvoiceNo || '', particulars: 'Payment of ' + p.poNo + (p.supplierInvoiceNo ? ' (supplier inv. ' + p.supplierInvoiceNo + ')' : ''), method: x.method || '', currency: cur, amount: r2(x.amount), rate: xr, phpAmount, poRate: pr, apCleared: cleared, fx: r2(phpAmount - cleared) }); }));
 
     /* ---- Expenses ---- */
     const expenseRows = (data.expenses || []).filter(x => inR(x.date)).sort((a, b) => String(a.category).localeCompare(String(b.category)) || d10(a.date).localeCompare(d10(b.date))).map(x => ({ date: d10(x.date), expenseNo: x.expenseNo || '', category: x.category || '', account: SUGGESTED_ACCOUNT[x.category] || 'Miscellaneous Expense', description: x.description || '', payee: x.payee || '', method: x.paymentMethod || '', ref: x.referenceNo || '', amount: r2(x.amount) }));
@@ -123,14 +130,14 @@
     const bucketOf = (days) => days <= 30 ? 'b0' : days <= 60 ? 'b30' : days <= 90 ? 'b60' : 'b90';
     const daysBetween = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
     const arRows = [];
-    livePIs.filter(x => upTo(x.pi.date)).forEach(({ pi, so, cust }) => { const cur = pi.currency || 'PHP'; const bal = r2((pi.grandTotal || 0) - paidOnPI(pi, true)); if (bal > 0.004) { const dd = daysBetween(d10(pi.date), to); const b = bucketOf(dd); used.add(cur); arRows.push({ invoiceNo: pi.piNo, orderNo: so ? so.soNo : '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', date: d10(pi.date), days: dd, currency: cur, total: r2(pi.grandTotal), paid: paidOnPI(pi, true), balance: bal, rate: rate(cur), phpBalance: php(bal, cur), bucket: b }); } });
+    livePIs.filter(x => upTo(x.pi.date)).forEach(({ pi, so, cust }) => { const cur = pi.currency || 'PHP'; const bal = r2((pi.grandTotal || 0) - paidOnPI(pi, true)); if (bal > 0.004) { const dd = daysBetween(d10(pi.date), to); const b = bucketOf(dd); used.add(cur); arRows.push({ invoiceNo: pi.officialInvoiceNo || pi.piNo, orderNo: so ? so.soNo : '', customer: cust ? cust.companyName : '', tin: cust ? (cust.tin || '') : '', date: d10(pi.date), days: dd, currency: cur, total: r2(pi.grandTotal), paid: paidOnPI(pi, true), balance: bal, rate: rate(cur), phpBalance: php(bal, cur), bucket: b }); } });
     arRows.sort((a, b) => b.days - a.days);
     const arOpening = r2(livePIs.filter(x => before(x.pi.date)).reduce((s, x) => s + php(x.pi.grandTotal, x.pi.currency) - php(paidBeforeFrom(x.pi), x.pi.currency), 0));
     const apRows = [];
     const paidOnPO = (p, cutoff) => r2((p.payments || []).filter(x => !cutoff || upTo(x.date)).reduce((s, x) => s + (Number(x.amount) || 0), 0));
-    livePOs.filter(p => upTo(p.poDate)).forEach(p => { const cur = p.currency || 'PHP'; const bal = r2((p.totalCost || 0) - paidOnPO(p, true)); if (bal > 0.004 && (p.totalCost || 0) > 0) { const dd = daysBetween(d10(p.poDate), to); used.add(cur); apRows.push({ poNo: p.poNo, supplier: (supMap[p.supplierId] || {}).companyName || '', tin: (supMap[p.supplierId] || {}).tin || '', date: d10(p.poDate), days: dd, status: p.status, currency: cur, total: r2(p.totalCost), paid: paidOnPO(p, true), balance: bal, rate: rate(cur), phpBalance: php(bal, cur), bucket: bucketOf(dd) }); } });
+    livePOs.filter(p => upTo(p.poDate)).forEach(p => { const cur = p.currency || 'PHP'; const bal = r2((p.totalCost || 0) - paidOnPO(p, true)); if (bal > 0.004 && (p.totalCost || 0) > 0) { const dd = daysBetween(d10(p.poDate), to); used.add(cur); const pr = poRate(p); apRows.push({ poNo: p.poNo, supplierInvoiceNo: p.supplierInvoiceNo || '', supplier: (supMap[p.supplierId] || {}).companyName || '', tin: (supMap[p.supplierId] || {}).tin || '', date: d10(p.poDate), days: dd, status: p.status, currency: cur, total: r2(p.totalCost), paid: paidOnPO(p, true), balance: bal, rate: pr, phpBalance: r2(bal * pr), bucket: bucketOf(dd) }); } });
     apRows.sort((a, b) => b.days - a.days);
-    const apOpening = r2(livePOs.filter(p => before(p.poDate)).reduce((s, p) => s + php(p.totalCost, p.currency) - php((p.payments || []).filter(x => before(x.date)).reduce((t, x) => t + (Number(x.amount) || 0), 0), p.currency), 0));
+    const apOpening = r2(livePOs.filter(p => before(p.poDate)).reduce((s, p) => s + (Number(p.totalCost) || 0) * poRate(p) - (p.payments || []).filter(x => before(x.date)).reduce((t, x) => t + (Number(x.amount) || 0), 0) * poRate(p), 0));
 
     /* ---- Inventory (stock-tracked catalog items, at standard cost) ---- */
     const qtyBy = {};
@@ -141,7 +148,7 @@
     const sum = (arr, k) => r2(arr.reduce((s, x) => s + (Number(x[k]) || 0), 0));
     const t = {
       salesNet: sum(salesRows, 'phpNet'), salesVat: sum(salesRows, 'phpVat'), salesTotal: sum(salesRows, 'phpTotal'),
-      collections: sum(receipts, 'phpAmount'), purchases: sum(purchaseRows, 'phpTotal'), supplierPaid: sum(supplierPayments, 'phpAmount'),
+      collections: sum(receipts, 'phpAmount'), purchases: sum(purchaseRows, 'phpTotal'), supplierPaid: sum(supplierPayments, 'phpAmount'), supplierCleared: sum(supplierPayments, 'apCleared'), fxLoss: sum(supplierPayments, 'fx'),
       expenses: sum(expenseRows, 'amount'),
       ownerDrawsPaid: r2(disbursements.filter(x => x.type === 'Owner draw').reduce((s, x) => s + x.phpAmount, 0)),
       employeePaid: r2(disbursements.filter(x => x.type === 'Employee compensation').reduce((s, x) => s + x.phpAmount, 0)),
@@ -152,7 +159,8 @@
     t.marginPurchasesBasis = r2(t.salesNet - t.purchases);
     t.resultBeforeDraws = r2(t.marginPurchasesBasis - t.expenses);
     t.arDiff = r2(t.arClosing - (t.arOpening + t.salesTotal - t.collections));
-    t.apDiff = r2(t.apClosing - (t.apOpening + t.purchases - t.supplierPaid));
+    t.apDiff = r2(t.apClosing - (t.apOpening + t.purchases - t.supplierCleared));
+    t.resultAfterFx = r2(t.resultBeforeDraws - t.fxLoss);
     const aging = (rows, k) => ({ b0: sum(rows.filter(x => x.bucket === 'b0'), k), b30: sum(rows.filter(x => x.bucket === 'b30'), k), b60: sum(rows.filter(x => x.bucket === 'b60'), k), b90: sum(rows.filter(x => x.bucket === 'b90'), k) });
     const arAging = aging(arRows, 'phpBalance'), apAging = aging(apRows, 'phpBalance');
 
@@ -167,8 +175,16 @@
     const noTinSup = [...new Set(purchaseRows.filter(r => !r.tin).map(r => r.supplier))].filter(Boolean);
     if (noTinSup.length) w.push({ level: 'info', text: `${noTinSup.length} supplier(s) have no TIN recorded (add it on the Supplier page): ${noTinSup.slice(0, 6).join(', ')}${noTinSup.length > 6 ? '…' : ''}.` });
     const foreign = [...used].filter(c => c !== 'PHP');
-    if (foreign.length) w.push({ level: 'info', text: `Foreign-currency documents are converted to PHP at the rates shown on the Summary (${foreign.map(c => c + ' @ ' + rate(c)).join(', ')}). The BMS does not store a rate per document, so please confirm these with the actual rates used.` });
-    if (missingRates.size) w.push({ level: 'warn', text: `No exchange rate set for ${[...missingRates].join(', ')} — treated as 1:1. Set it before sending.` });
+    const legacy = [...new Set(legacyDocs)];
+    if (legacy.length) w.push({ level: 'warn', text: `${legacy.length} older supplier PO(s) have no exchange rate saved (${legacy.slice(0, 6).join(', ')}${legacy.length > 6 ? '…' : ''}); the fallback rate on this page was used. Open each PO → Edit and enter its rate to make the figures exact.` });
+    const foreignSales = salesRows.filter(r => r.currency !== 'PHP').length;
+    if (foreignSales) w.push({ level: 'warn', text: `${foreignSales} sales invoice(s) are in a foreign currency; the BMS does not save a rate on customer invoices, so the fallback rate on this page was used for them.` });
+    const noOfficial = salesRows.filter(r => !r.hasOfficial).length;
+    if (salesRows.length && noOfficial) w.push({ level: 'info', text: `${noOfficial} of ${salesRows.length} invoice(s) show the BMS reference because no official (BIR) invoice number was entered on the Proforma Invoice.` });
+    const noSupInv = purchaseRows.filter(r => !r.supplierInvoiceNo).length;
+    if (purchaseRows.length && noSupInv) w.push({ level: 'info', text: `${noSupInv} of ${purchaseRows.length} purchase(s) have no supplier invoice / receipt number (enter it on the Supplier PO).` });
+    if (Math.abs(t.fxLoss) > 0.004) w.push({ level: 'info', text: `Foreign-exchange ${t.fxLoss > 0 ? 'LOSS' : 'GAIN'} of ${Math.abs(t.fxLoss).toFixed(2)} on supplier payments (cash paid at the payment-day rate vs. the PO's rate). Unrealised revaluation of open foreign payables at period end is not computed.` });
+    if (missingRates.size && (legacy.length || foreignSales)) w.push({ level: 'warn', text: `No exchange rate set for ${[...missingRates].join(', ')} — treated as 1:1. Set it before sending.` });
     const noRefExp = expenseRows.filter(x => !x.ref).length;
     if (noRefExp) w.push({ level: 'warn', text: `${noRefExp} expense(s) have no receipt / reference number.` });
     const noRefRec = receipts.filter(x => !x.ref).length;
@@ -179,7 +195,7 @@
     if (Math.abs(t.apDiff) > 0.01) w.push({ level: 'warn', text: `Payables roll-forward is off by ${t.apDiff.toFixed(2)} (usually a payment dated before its PO). Please review.` });
     if (ytdSales > 3000000) w.push({ level: 'warn', text: `Year-to-date invoiced sales are ${ytdSales.toFixed(2)} — above the ₱3,000,000 threshold. Please check VAT-registration and audited-statement requirements with your accountant.` });
 
-    out.rates = Object.fromEntries([...used].filter(c => c !== 'PHP').map(c => [c, rate(c)]));
+    out.rates = Object.fromEntries(Object.keys(rateSeen).map(c => [c, rateSeen[c]]));
     Object.assign(out, { salesRows, receipts, purchaseRows, supplierPayments, expenseRows, expenseByCategory, distRows, withdrawals, disbursements, arRows, apRows, arAging, apAging, inventoryRows, totals: t, quarters, ytdSales, year: yr });
     return out;
   }
@@ -295,7 +311,9 @@
     line('Purchases of goods (Supplier POs ordered in the period)', t.purchases, 'Purchases Book — Draft and Cancelled POs excluded');
     line('Gross margin on a purchases basis', t.marginPurchasesBasis, 'Sales (net) less purchases. Inventory movement is NOT adjusted — see Inventory sheet', true);
     line('Operating expenses', t.expenses, 'Expenses sheet');
-    line('Result before owner draws and employee distributions', t.resultBeforeDraws, 'Indicative only; the bookkeeper should adjust for opening/closing inventory and accruals', true);
+    line('Result before foreign-exchange and owner draws', t.resultBeforeDraws, 'Indicative only; the bookkeeper should adjust for opening/closing inventory and accruals', true);
+    line('Realised foreign-exchange loss / (gain) on supplier payments', t.fxLoss, 'Cash paid at the payment-day rate less the payable cleared at the PO rate. Positive = loss');
+    line('Result after foreign exchange', t.resultAfterFx, 'Before owner draws and employee distributions', true);
     S.push([]);
     sec('2. Cash movements in the period (PHP)');
     line('Cash received from customers', t.collections, 'Cash Receipts Book');
@@ -312,7 +330,7 @@
     line('Accounts receivable — closing', t.arClosing, 'Receivables sheet. Check difference: ' + t.arDiff.toFixed(2), true);
     line('Accounts payable — opening', t.apOpening, 'Unpaid supplier POs at the start of the period');
     line('+ Purchases in the period', t.purchases);
-    line('− Paid to suppliers', -t.supplierPaid);
+    line('− Payables cleared by payments (at PO rate)', -t.supplierCleared, 'Cash actually paid was ' + t.supplierPaid.toFixed(2) + '; the difference is the foreign-exchange line above');
     line('Accounts payable — closing', t.apClosing, 'Payables sheet. Check difference: ' + t.apDiff.toFixed(2), true);
     S.push([]);
     sec('4. Other balances at period end (PHP)');
@@ -326,9 +344,10 @@
     S.push([{ v: 'Year total', s: 'totLbl' }, { v: r2(pack.quarters.reduce((s, q) => s + q.gross, 0)), s: 'totMoney', f: colSum('B', qStart, S.length) }, { v: pack.quarters.reduce((s, q) => s + q.invoices, 0), s: 'totLbl', f: colSum('C', qStart, S.length) }, { v: r2(pack.quarters.reduce((s, q) => s + q.collected, 0)), s: 'totMoney', f: colSum('D', qStart, S.length) }]);
     S.push([{ v: `Year-to-date invoiced sales through ${pack.to}: ${pack.ytdSales.toFixed(2)}`, s: 'note' }]);
     S.push([]);
-    sec('6. Exchange rates used (PHP per 1 unit)');
+    sec('6. Exchange rates (PHP per 1 unit) — each document keeps its own saved rate');
     const rk = Object.keys(pack.rates);
-    if (!rk.length) S.push([{ v: 'All documents in this period are in PHP.', s: 'note' }]); else rk.forEach(c => S.push([{ v: c, s: 'txt' }, { v: pack.rates[c], s: 'rate' }]));
+    if (!rk.length) S.push([{ v: 'All documents in this period are in PHP.', s: 'note' }]);
+    else { S.push([{ v: 'Currency', s: 'hdr' }, { v: 'Lowest rate used', s: 'hdrR' }, { v: 'Highest rate used', s: 'hdrR' }, { v: 'Rates applied', s: 'hdrR' }]); rk.forEach(c => S.push([{ v: c, s: 'txt' }, { v: pack.rates[c].min, s: 'rate' }, { v: pack.rates[c].max, s: 'rate' }, { v: pack.rates[c].count, s: 'int' }])); }
     S.push([]);
     sec('7. Please note');
     if (!pack.warnings.length) S.push([{ v: 'No data-quality warnings.', s: 'ok' }]);
@@ -345,28 +364,28 @@
       sheets.push({ name, widths, rows, freezeRow: hdrIdx, filterRow: hdrIdx, filterEnd: last, merges, heights });
     };
 
-    dataSheet('Sales Book', 'SALES BOOK (Sales Journal) — by invoice date', ['Date', 'Invoice No.', 'Sales Order', 'Customer', 'TIN', 'Cur', 'Net Sales', 'VAT', 'Total Invoiced', 'Rate', 'PHP Net', 'PHP VAT', 'PHP Total', 'Paid to date*', 'Balance*'],
-      [11, 15, 14, 34, 16, 6, 14, 11, 15, 9, 15, 12, 16, 15, 15],
-      () => pack.salesRows.map(r => [{ d: r.date, s: 'date' }, { v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.net), money(r.vat), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpNet), money(r.phpVat), money(r.phpTotal), money(r.paidToDate), money(r.balance)]),
+    dataSheet('Sales Book', 'SALES BOOK (Sales Journal) — by invoice date', ['Date', 'Invoice No. (BIR)', 'Sales Order', 'Customer', 'TIN', 'Cur', 'Net Sales', 'VAT', 'Total Invoiced', 'Rate', 'PHP Net', 'PHP VAT', 'PHP Total', 'Paid to date*', 'Balance*', 'BMS Ref.'],
+      [11, 17, 14, 34, 16, 6, 14, 11, 15, 9, 15, 12, 16, 15, 15, 14],
+      () => pack.salesRows.map(r => [{ d: r.date, s: 'date' }, { v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.net), money(r.vat), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpNet), money(r.phpVat), money(r.phpTotal), money(r.paidToDate), money(r.balance), { v: r.bmsRef, s: 'txt' }]),
       [[6, pack.salesRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.net : 0), 0)], [8, pack.salesRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.total : 0), 0)], [10, t.salesNet], [11, t.salesVat], [12, t.salesTotal]],
-      { note: '* Paid to date and Balance are as of the period end. Net / VAT / Total columns total PHP invoices only; use the PHP columns for the converted grand total. "Invoice No." is the BMS invoice reference — if you issue a separate BIR-registered invoice, match it by customer and amount.' });
+      { note: '* Paid to date and Balance are as of the period end. Net / VAT / Total columns total PHP invoices only; use the PHP columns for the converted grand total. "Invoice No. (BIR)" is the official BIR sales-invoice number entered on the Proforma Invoice; where none was entered the BMS reference is shown. "BMS Ref." is always the internal reference.' });
 
     dataSheet('Cash Receipts', 'CASH RECEIPTS BOOK — collections from customers', ['Date', 'Payment Ref.', 'Customer', 'TIN', 'Invoice No.', 'Sales Order', 'Method', 'Cur', 'Amount', 'Rate', 'PHP Amount'],
       [11, 22, 34, 16, 15, 14, 14, 6, 15, 9, 16],
       () => pack.receipts.map(r => [{ d: r.date, s: 'date' }, { v: r.ref, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.method, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.amount), { v: r.rate, s: 'rate' }, money(r.phpAmount)]),
       [[8, pack.receipts.reduce((s, r) => s + (r.currency === 'PHP' ? r.amount : 0), 0)], [10, t.collections]]);
 
-    dataSheet('Purchases Book', 'PURCHASES BOOK (Purchases Journal) — Supplier POs by PO date', ['Date', 'PO No.', 'Supplier', 'TIN', 'Country', 'Sales Order', 'Status', 'Cur', 'Items', 'Freight', 'Taxes', 'Total', 'Rate', 'PHP Total'],
-      [11, 15, 34, 16, 14, 14, 20, 6, 14, 12, 11, 15, 9, 16],
-      () => pack.purchaseRows.map(r => [{ d: r.date, s: 'date' }, { v: r.poNo, s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.country, s: 'txt' }, { v: r.salesOrder, s: 'txt' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.items), money(r.freight), money(r.taxes), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpTotal)]),
-      [[8, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.items : 0), 0)], [9, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.freight : 0), 0)], [10, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.taxes : 0), 0)], [11, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.total : 0), 0)], [13, t.purchases]],
-      { note: 'Draft and Cancelled POs are excluded (see Notes & Exclusions). Item/Freight/Taxes/Total columns total PHP POs only; use PHP Total for the converted figure. Supplier invoice numbers are not stored per PO in the BMS — see the payment reference on the Cash Disbursements Book.' });
+    dataSheet('Purchases Book', 'PURCHASES BOOK (Purchases Journal) — Supplier POs by PO date', ['Date', 'PO No.', 'Supplier Inv. No.', 'Supplier Inv. Date', 'Supplier', 'TIN', 'Country', 'Sales Order', 'Status', 'Cur', 'Items', 'Freight', 'Taxes', 'Total', 'Rate', 'PHP Total'],
+      [11, 15, 18, 13, 34, 16, 14, 14, 20, 6, 14, 12, 11, 15, 10, 16],
+      () => pack.purchaseRows.map(r => [{ d: r.date, s: 'date' }, { v: r.poNo, s: 'txt' }, { v: r.supplierInvoiceNo, s: 'txt' }, r.supplierInvoiceDate ? { d: r.supplierInvoiceDate, s: 'date' } : { v: '', s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { v: r.country, s: 'txt' }, { v: r.salesOrder, s: 'txt' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.items), money(r.freight), money(r.taxes), money(r.total), { v: r.rate, s: 'rate' }, money(r.phpTotal)]),
+      [[10, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.items : 0), 0)], [11, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.freight : 0), 0)], [12, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.taxes : 0), 0)], [13, pack.purchaseRows.reduce((s, r) => s + (r.currency === 'PHP' ? r.total : 0), 0)], [15, t.purchases]],
+      { note: 'Draft and Cancelled POs are excluded (see Notes & Exclusions). Item/Freight/Taxes/Total columns total PHP POs only; use PHP Total for the converted figure. Rate = the exchange rate saved on that PO when it was made (PHP per 1 unit); it does not change if Settings change later.' });
 
     dataSheet('Cash Disbursements', 'CASH DISBURSEMENTS BOOK — all payments made', ['Date', 'Type', 'Payee', 'Particulars', 'Reference', 'Method', 'Cur', 'Amount', 'Rate', 'PHP Amount'],
       [11, 22, 30, 44, 22, 14, 6, 15, 9, 16],
       () => pack.disbursements.map(r => [{ d: r.date, s: 'date' }, { v: r.type, s: 'txt' }, { v: r.payee, s: 'txt' }, { v: r.particulars, s: 'txt' }, { v: r.ref, s: 'txt' }, { v: r.method, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.amount), { v: r.rate, s: 'rate' }, money(r.phpAmount)]),
       [[7, pack.disbursements.reduce((s, r) => s + (r.currency === 'PHP' ? r.amount : 0), 0)], [9, t.disbursements]],
-      { note: 'Includes supplier payments, operating expenses (as recorded, dated on the expense date), and owner / employee payouts marked as paid in Distributions. Reserve withdrawals are internal and shown on the Business Reserve sheet.' });
+      { note: 'Foreign-currency supplier payments use the rate entered for that payment (the bank-slip rate). Includes supplier payments, operating expenses (as recorded, dated on the expense date), and owner / employee payouts marked as paid in Distributions. Reserve withdrawals are internal and shown on the Business Reserve sheet.' });
 
     // Expenses with category subtotals
     {
@@ -387,10 +406,10 @@
       () => pack.arRows.map(r => [{ v: r.invoiceNo, s: 'txt' }, { v: r.orderNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { v: r.tin, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.currency, s: 'txt' }, money(r.total), money(r.paid), money(r.balance), { v: r.rate, s: 'rate' }, money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0)]),
       [[11, t.arClosing], [12, pack.arAging.b0], [13, pack.arAging.b30], [14, pack.arAging.b60], [15, pack.arAging.b90]], { note: 'Aging is counted from the invoice date to the period end. Payments dated after the period end are not applied.' });
 
-    dataSheet('Payables', `ACCOUNTS PAYABLE AGING — as of ${pack.to}`, ['PO No.', 'Supplier', 'TIN', 'PO Date', 'Days', 'Status', 'Cur', 'PO Total', 'Paid', 'Balance', 'Rate', 'PHP Balance', 'Current (0-30)', '31-60', '61-90', 'Over 90'],
-      [15, 34, 16, 12, 7, 20, 6, 15, 15, 15, 9, 16, 15, 14, 14, 14],
-      () => pack.apRows.map(r => [{ v: r.poNo, s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.total), money(r.paid), money(r.balance), { v: r.rate, s: 'rate' }, money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0)]),
-      [[11, t.apClosing], [12, pack.apAging.b0], [13, pack.apAging.b30], [14, pack.apAging.b60], [15, pack.apAging.b90]]);
+    dataSheet('Payables', `ACCOUNTS PAYABLE AGING — as of ${pack.to}`, ['PO No.', 'Supplier', 'TIN', 'PO Date', 'Days', 'Status', 'Cur', 'PO Total', 'Paid', 'Balance', 'Rate', 'PHP Balance', 'Current (0-30)', '31-60', '61-90', 'Over 90', 'Supplier Inv. No.'],
+      [15, 34, 16, 12, 7, 20, 6, 15, 15, 15, 10, 16, 15, 14, 14, 14, 18],
+      () => pack.apRows.map(r => [{ v: r.poNo, s: 'txt' }, { v: r.supplier, s: 'txt' }, { v: r.tin, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.status, s: 'txt' }, { v: r.currency, s: 'txt' }, money(r.total), money(r.paid), money(r.balance), { v: r.rate, s: 'rate' }, money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0), { v: r.supplierInvoiceNo, s: 'txt' }]),
+      [[11, t.apClosing], [12, pack.apAging.b0], [13, pack.apAging.b30], [14, pack.apAging.b60], [15, pack.apAging.b90]], { note: 'Open balances are valued at each PO\'s own saved exchange rate. Unrealised revaluation to the period-end rate is not computed.' });
 
     dataSheet('Inventory', `INVENTORY ON HAND — as of ${pack.to}`, ['Item No.', 'Description', 'UOM', 'Qty on hand', 'Cur', 'Standard cost', 'Rate', 'PHP unit cost', 'PHP Value'],
       [14, 54, 7, 13, 6, 15, 9, 15, 17],
@@ -424,9 +443,9 @@
         'Source: the owners’ Hadrontech BMS records (quotation → customer PO → sales order → supplier PO → invoice → payments). The bookkeeper has no system access, so this workbook carries everything needed.',
         'Sales are recognised on the INVOICE date (accrual basis, per the Ease of Paying Taxes Act). Collections are in the Cash Receipts Book. Purchases are listed by Supplier PO date; Draft and Cancelled documents are excluded.',
         'These are SOURCE BOOKS (sales, receipts, purchases, disbursements). The BMS is not a double-entry ledger — the bookkeeper posts these into the BIR-registered Journal and Ledger and prepares the final financial statements.',
-        'Foreign-currency documents are converted to PHP at the single rate per currency shown on the Summary. The BMS does not store a rate per document or per payment, so there is no realised/unrealised foreign-exchange gain or loss in this pack.',
+        'Foreign-currency purchases are converted at the exchange rate saved on each Supplier PO (the rate recognised for that month — later changes to the default rate never alter it). Each supplier payment uses the rate entered on payment day; the difference is reported as a realised foreign-exchange loss/(gain). Unrealised revaluation of open foreign payables at period end is NOT computed.',
         'Inventory is at standard cost. The “gross margin” on the Summary is Sales less Purchases (not cost of goods sold) — adjust for opening and closing inventory.',
-        'Not tracked by the BMS (the bookkeeper should add): withholding taxes on payroll, rent and professional fees; SSS / PhilHealth / Pag-IBIG; bank statements and reconciliation; fixed assets and depreciation; supplier invoice / receipt numbers; BIR-registered sales invoice numbers if different from the BMS invoice reference.',
+        'Not tracked by the BMS (the bookkeeper should add): withholding taxes on payroll, rent and professional fees; SSS / PhilHealth / Pag-IBIG; bank statements and reconciliation; fixed assets and depreciation; true cost of goods sold. Sales invoice numbers shown are the official BIR numbers where the owners entered them, otherwise the BMS reference; supplier invoice numbers appear only where entered on the PO.',
         'Reminders (general Philippine practice — confirm with your accountant): books of accounts must be BIR-registered and kept for 10 years; annual gross sales above ₱3,000,000 require audited financial statements by an independent CPA and VAT registration; quarterly percentage-tax / income-tax returns are based on the gross sales per quarter shown on the Summary.'
       ].forEach(n => rows.push([{ v: n, s: 'wrap' }]));
       rows.push([]);
@@ -451,12 +470,12 @@
     return `<style>.bp-sec{margin:18px 0 4px; font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#a85f04;} table.p-items td:first-child{width:70%;}</style>
       <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml([co.address, co.tin ? 'TIN: ' + co.tin : '', 'Sole proprietorship · Non-VAT registered'].filter(Boolean).join('\n'))}</div></div>
       <div><div class="p-doc-title">Bookkeeper Pack — Summary</div><div class="p-doc-no">${pack.from} → ${pack.to}</div><div class="p-dates">Prepared ${todayStr()}<br>Unaudited management records</div></div></div>
-      ${block('Income statement items (PHP, management basis)', [row('Sales invoiced (net of VAT)', f(t.salesNet)), row('Output VAT', f(t.salesVat)), row('Total invoiced (gross sales)', f(t.salesTotal), true), row('Purchases of goods', f(t.purchases)), row('Gross margin (purchases basis)', f(t.marginPurchasesBasis), true), row('Operating expenses', f(t.expenses)), row('Result before owner draws & employee distributions', f(t.resultBeforeDraws), true)])}
+      ${block('Income statement items (PHP, management basis)', [row('Sales invoiced (net of VAT)', f(t.salesNet)), row('Output VAT', f(t.salesVat)), row('Total invoiced (gross sales)', f(t.salesTotal), true), row('Purchases of goods', f(t.purchases)), row('Gross margin (purchases basis)', f(t.marginPurchasesBasis), true), row('Operating expenses', f(t.expenses)), row('Result before foreign exchange', f(t.resultBeforeDraws), true), row('Realised FX loss / (gain) on supplier payments', f(t.fxLoss)), row('Result after foreign exchange', f(t.resultAfterFx), true)])}
       ${block('Cash movements', [row('Received from customers', f(t.collections)), row('Paid to suppliers', f(t.supplierPaid)), row('Operating expenses paid', f(t.expenses)), row('Owner draws paid', f(t.ownerDrawsPaid)), row('Employee compensation paid', f(t.employeePaid)), row('Total disbursements', f(t.disbursements), true)])}
-      ${block('Receivables & payables', [row('Receivables — opening', f(t.arOpening)), row('+ invoiced', f(t.salesTotal)), row('− collected', f(-t.collections)), row('Receivables — closing', f(t.arClosing), true), row('Payables — opening', f(t.apOpening)), row('+ purchases', f(t.purchases)), row('− paid', f(-t.supplierPaid)), row('Payables — closing', f(t.apClosing), true)])}
+      ${block('Receivables & payables', [row('Receivables — opening', f(t.arOpening)), row('+ invoiced', f(t.salesTotal)), row('− collected', f(-t.collections)), row('Receivables — closing', f(t.arClosing), true), row('Payables — opening', f(t.apOpening)), row('+ purchases', f(t.purchases)), row('− cleared by payments (PO rate)', f(-t.supplierCleared)), row('Payables — closing', f(t.apClosing), true)])}
       ${block('Other balances at period end', [row('Inventory on hand (standard cost)', f(t.inventory)), row('Business Reserve', f(t.reserveEnd))])}
       ${block(`Gross sales per quarter, ${pack.year}`, pack.quarters.map(q => row(`Q${q.q} (${q.from} – ${q.to}) · ${q.invoices} invoice(s)`, f(q.gross))))}
-      ${Object.keys(pack.rates).length ? block('Exchange rates used (PHP per unit)', Object.keys(pack.rates).map(c => row(c, String(pack.rates[c])))) : ''}
+      ${Object.keys(pack.rates).length ? block('Exchange rates (PHP per unit) — saved per document', Object.keys(pack.rates).map(c => row(`${c} · ${pack.rates[c].count} rate(s) applied`, pack.rates[c].min === pack.rates[c].max ? String(pack.rates[c].min) : pack.rates[c].min + ' – ' + pack.rates[c].max))) : ''}
       ${warn}
       <div class="p-terms">The full detail — Sales Book, Cash Receipts, Purchases, Cash Disbursements, Expenses, Receivables, Payables, Inventory, Distributions, Business Reserve and exclusions — is in the accompanying Excel workbook. These are source books for posting into the BIR-registered Journal and Ledger; they are not audited financial statements.</div>
       <div class="p-sign"><div class="box">Prepared by (Owner)</div><div class="box">Received by (Bookkeeper) / Date</div></div>`;
@@ -488,9 +507,9 @@
           <label>Period <select id="bpPreset"><option value="lastMonth">Last month</option><option value="thisMonth">This month</option><option value="lastQuarter">Last quarter</option><option value="thisQuarter">This quarter</option><option value="lastYear">Last year</option><option value="thisYear">This year</option><option value="custom">Custom…</option></select></label>
           <label>From <input type="date" id="bpFrom" value="${cur.from}"></label>
           <label>To <input type="date" id="bpTo" value="${cur.to}"></label>
-          ${[...knownCur].sort().map(c => `<label>${c} → PHP <input type="number" step="0.0001" min="0" id="bpRate_${c}" class="bp-rate" data-cur="${c}" value="${baseRates[c] || ''}" style="width:90px;"></label>`).join('')}
+          ${[...knownCur].sort().map(c => `<label>${c} fallback → PHP <input type="number" step="0.0001" min="0" id="bpRate_${c}" class="bp-rate" data-cur="${c}" value="${baseRates[c] || ''}" style="width:90px;"></label>`).join('')}
         </div>
-        <div class="muted-text" style="margin-top:6px;">Exchange rates default to Company Settings → Currencies &amp; Exchange Rates. Change them here if the period needs a different rate; the rates used are printed on the Summary.</div>
+        <div class="muted-text" style="margin-top:6px;">Each Supplier PO and payment uses the exchange rate saved on it. The fallback rate above is only used for older documents that have no saved rate (you will be warned).</div>
       </div>
       <div id="bpPreview"></div>`;
     const q = (id) => document.getElementById(id);

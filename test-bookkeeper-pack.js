@@ -53,10 +53,41 @@ const APP = __dirname;
   ok('12 cash disbursements = supplier 4,860 + expenses 6,750.50 + employee 700 (owner draw paid in October excluded)', near(t.disbursements, 4860 + 6750.5 + 700) && near(t.employeePaid, 700) && t.ownerDrawsPaid === 0, t.disbursements);
   ok('13 reserve: opening 500, +3,000, used 1,000 -> closing 2,500', near(t.reserveStart, 500) && near(t.reserveAdded, 3000) && near(t.reserveEnd, 2500), JSON.stringify([t.reserveStart, t.reserveAdded, t.reserveEnd]));
   ok('14 exclusions list names cancelled SO/invoice/PO and draft PO/SO', ['PI-3', 'SO-3', 'PO-3', 'PO-4', 'SO-6'].every(n => pack.excluded.some(e => e.no === n)), pack.excluded.map(e => e.no).join());
-  ok('15 warnings: customer without TIN, expense without reference, delivered order without invoice (SO-5), USD rate note', pack.warnings.some(w => /no TIN/.test(w.text) && /No TIN Corp/.test(w.text)) && pack.warnings.some(w => /no receipt/.test(w.text)) && pack.warnings.some(w => /SO-5/.test(w.text)) && pack.warnings.some(w => /USD @ 58/.test(w.text)), pack.warnings.map(w => w.text).join(' | '));
+  ok('15 warnings: customer without TIN, expense without reference, delivered order without invoice (SO-5), older USD PO without saved rate uses fallback + warns', pack.warnings.some(w => /no TIN/.test(w.text) && /No TIN Corp/.test(w.text)) && pack.warnings.some(w => /no receipt/.test(w.text)) && pack.warnings.some(w => /SO-5/.test(w.text)) && pack.warnings.some(w => /older supplier PO/.test(w.text) && /PO-2/.test(w.text)), pack.warnings.map(w => w.text).join(' | '));
   ok('16 quarterly gross sales: Q3 includes PI-1+PI-2 (30,000) + PI-4 (8,000)', near(pack.quarters[2].gross, 38000), JSON.stringify(pack.quarters.map(q => q.gross)));
   const pack2 = BP.buildPack({ from: '2026-09-01', to: '2026-09-30', data, rates: { USD: 60 } });
   ok('17 custom exchange rate flows through (USD 60)', near(pack2.totals.purchases, 3200 + 120 * 60));
+
+  // ---- per-document exchange rates, FX gain/loss, supplier & official invoice numbers ----
+  { const d2 = JSON.parse(JSON.stringify(data));
+    d2.supplierPOs = d2.supplierPOs.filter(p => p.id === 5 || p.id === 1);
+    d2.supplierPOs.push({ id: 6, poNo: 'PO-6', supplierId: 2, status: 'Received', poDate: '2026-09-10', currency: 'USD', exchangeRate: 56, supplierInvoiceNo: 'INV-US-77', supplierInvoiceDate: '2026-09-08', lines: [pl(1, 100)], freight: 0, taxes: 0, totalCost: 100, payments: [{ date: '2026-09-20', amount: 100, method: 'Wire', reference: 'W9', exchangeRate: 57.5 }] });
+    d2.proformaInvoices[0].officialInvoiceNo = 'SI-000123'; d2.proformaInvoices[0].officialInvoiceDate = '2026-09-03';
+    d2.settings.referenceRates = { USD: 99 };   // Settings changed later: must NOT touch PO-6
+    const pk = BP.buildPack({ from: '2026-09-01', to: '2026-09-30', data: d2 });
+    const row = pk.purchaseRows.find(r => r.poNo === 'PO-6');
+    ok('25 PO keeps its own saved rate (56) although Settings now say 99', row.rate === 56 && near(row.phpTotal, 5600), JSON.stringify(row));
+    ok('26 supplier invoice no./date carried to the Purchases Book', row.supplierInvoiceNo === 'INV-US-77' && row.supplierInvoiceDate === '2026-09-08');
+    const pay = pk.supplierPayments.find(x => x.ref === 'W9');
+    ok('27 payment uses its own rate 57.5: cash 5,750, cleared 5,600, FX loss 150', pay.rate === 57.5 && near(pay.phpAmount, 5750) && near(pay.apCleared, 5600) && near(pay.fx, 150), JSON.stringify(pay));
+    ok('28 totals: FX loss 150, payables roll-forward still ties, no legacy-rate warning', near(pk.totals.fxLoss, 150) && near(pk.totals.apDiff, 0) && !pk.warnings.some(w => /older supplier PO/.test(w.text)), JSON.stringify([pk.totals.fxLoss, pk.totals.apDiff]));
+    ok('29 PO fully paid in the period leaves no payable', !pk.apRows.some(r => r.poNo === 'PO-6'));
+    ok('30 Sales Book shows the official invoice number, keeps BMS ref; unentered ones fall back', pk.salesRows[0].invoiceNo === 'SI-000123' && pk.salesRows[0].bmsRef === 'PI-1' && pk.salesRows[1].invoiceNo === 'PI-2' && pk.receipts.some(r => r.invoiceNo === 'SI-000123'));
+    ok('31 rate range recorded for the Summary (USD 57.5 payment / 56 PO)', pk.rates.USD && pk.rates.USD.min === 56 && pk.rates.USD.max === 57.5, JSON.stringify(pk.rates));
+    const d3 = JSON.parse(JSON.stringify(d2)); d3.supplierPOs.find(p => p.id === 6).payments[0].exchangeRate = undefined;
+    const pk3 = BP.buildPack({ from: '2026-09-01', to: '2026-09-30', data: d3 });
+    ok('32 payment without its own rate defaults to the PO rate (no FX)', near(pk3.totals.fxLoss, 0));
+    const co = BP.company(st); const b2 = BP.pack2bytes(pk, co); const f2 = path.join(os.tmpdir(), 'bk-pack-fx.xlsx'); fs.writeFileSync(f2, Buffer.from(b2));
+    const py2 = require('child_process').spawnSync('python3', ['-c', `
+import openpyxl, sys
+wb = openpyxl.load_workbook(sys.argv[1])
+print('PB|' + '|'.join(str(c.value) for c in wb['Purchases Book'][5]))
+print('SB|' + '|'.join(str(c.value) for c in wb['Sales Book'][6]))
+txt = ' '.join(str(c.value) for r in wb['Summary'].iter_rows() for c in r if c.value)
+print('FX|' + str('foreign-exchange' in txt))
+`, f2], { encoding: 'utf8' });
+    ok('33 workbook: Purchases Book has supplier invoice columns, Sales Book official no., Summary has FX line', /Supplier Inv\. No\./.test(py2.stdout) && /SI-000123/.test(py2.stdout) && /FX\|True/.test(py2.stdout), py2.stdout + py2.stderr);
+    const sum2 = BP.summaryHTML(pk, BP.company(st)); ok('34 PDF summary shows FX line and rate range, no NaN', /Realised FX/.test(sum2) && /56 – 57\.5/.test(sum2) && !/NaN|undefined/.test(sum2)); }
 
   // ---- the real workbook ----
   const co = BP.company(st); const bytes = BP.pack2bytes(pack, co);

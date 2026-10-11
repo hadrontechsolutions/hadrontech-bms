@@ -46,13 +46,22 @@ async function createFromSalesOrder(so, supplierId, lines) {
     amount: r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0))
   }));
   const poCurrency = supplier?.currency || 'PHP';
+  // The rate is saved ON the PO (PHP per 1 unit of the PO currency) and never follows later changes in Settings.
+  // Default: the rate the quotation used for this cost (so the PO matches that month's quote); otherwise the Settings rate today.
+  let exchangeRate = 1, exchangeRateSource = '';
+  if (poCurrency !== 'PHP') {
+    const quote = so.quotationId ? await DB.dbGet('quotations', so.quotationId) : null;
+    const hit = quote && (quote.lines || []).find(ql => lines.some(l => l.lineId === ql.lineId) && (ql.costCurrency || 'PHP') === poCurrency && Number(ql.costExchangeRate) > 0);
+    if (hit) { exchangeRate = Number(hit.costExchangeRate); exchangeRateSource = 'Quotation ' + quote.quotationNo; }
+    else { exchangeRate = Number((settings.referenceRates || {})[poCurrency]) || 1; exchangeRateSource = 'Settings rate on ' + todayISO(); }
+  }
   const fr = suggestedPOFreight(lines, so.currency, poCurrency);
   const totalCost = r2(poLines.reduce((s, l) => s + l.amount, 0) + fr.amount);
   const poNo = await DB.nextDocNumber('supplierPO');
   const rec = {
     poNo, supplierId, salesOrderId: so.id, quotationId: so.quotationId || null,
     customerPORef: customerPO ? (customerPO.customerPoNumber || customerPO.poNo) : '',
-    poDate: todayISO(), currency: poCurrency, supplierQuoteRef: '',
+    poDate: todayISO(), currency: poCurrency, exchangeRate, exchangeRateSource, supplierInvoiceNo: '', supplierInvoiceDate: '', supplierQuoteRef: '',
     paymentTerms: supplier?.paymentTerms || '', incoterms: supplier?.incoterms || '',
     shippingTerms: '', deliveryAddress: so.shippingAddress || '',
     expectedDeliveryDate: '', lineIds: lines.map(l => l.lineId), lines: poLines,
@@ -179,6 +188,8 @@ async function renderSPODetail(id) {
         <div class="detail-item"><div class="detail-label">PO Date</div><div class="detail-value">${formatDate(po.poDate)}</div></div>
         <div class="detail-item"><div class="detail-label">Expected Delivery</div><div class="detail-value">${formatDate(po.expectedDeliveryDate) || '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Supplier's Quotation Ref</div><div class="detail-value">${escapeHtml(po.supplierQuoteRef || '—')}</div></div>
+        <div class="detail-item"><div class="detail-label">Supplier Invoice / Receipt No.</div><div class="detail-value">${escapeHtml(po.supplierInvoiceNo || '—')}${po.supplierInvoiceDate ? ` <span class="muted-text">· ${formatDate(po.supplierInvoiceDate)}</span>` : ''}</div></div>
+        ${po.currency && po.currency !== 'PHP' ? `<div class="detail-item"><div class="detail-label">Exchange Rate (PHP per ${escapeHtml(po.currency)})</div><div class="detail-value">${po.exchangeRate > 0 ? `${Number(po.exchangeRate).toFixed(4)} <span class="muted-text">· ${escapeHtml(po.exchangeRateSource || 'entered')}</span>` : '<span class="cell-needs-input">Not set</span>'}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">Payment Terms</div><div class="detail-value">${escapeHtml(po.paymentTerms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Incoterms</div><div class="detail-value">${escapeHtml(po.incoterms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Shipping Terms</div><div class="detail-value">${escapeHtml(po.shippingTerms || '—')}</div></div>
@@ -282,6 +293,7 @@ function renderRecordPaymentFormSPO(po, id) {
             <option>Bank Transfer</option><option>Cash</option><option>Check</option><option>Wire Transfer</option><option>Other</option>
           </select>
         </div>
+        ${po.currency && po.currency !== 'PHP' ? `<div class="field"><label>Exchange rate on payment day (PHP per 1 ${escapeHtml(po.currency)})</label><input type="number" min="0" step="0.0001" id="spo_pay_rate" value="${po.exchangeRate > 0 ? po.exchangeRate : ''}"><div class="muted-text" style="font-size:11px; margin-top:4px;">Defaults to this PO's rate. Use the actual rate on your bank slip — any difference is reported to your bookkeeper as a foreign-exchange gain/loss.</div></div>` : ''}
         <div class="field field-wide"><label>Reference / Note</label><input id="spo_pay_reference" placeholder="e.g. Bank reference number, or any note"></div>
       </div>
       <div class="btn-row" style="margin-top:12px;">
@@ -305,6 +317,7 @@ function renderRecordPaymentFormSPO(po, id) {
       date: document.getElementById('spo_pay_date').value || todayISO(),
       amount, method: document.getElementById('spo_pay_method').value,
       reference: document.getElementById('spo_pay_reference').value,
+      exchangeRate: (po.currency && po.currency !== 'PHP') ? (Number((document.getElementById('spo_pay_rate') || {}).value) > 0 ? Number(document.getElementById('spo_pay_rate').value) : (Number(po.exchangeRate) || 0)) : 1,
       createdBy: settings.userName, createdAt: new Date().toISOString()
     }]);
     po.updatedAt = new Date().toISOString();
@@ -325,6 +338,9 @@ async function renderSPOHeaderEdit(po) {
     <form class="card form-card" id="spoForm">
       <div class="form-grid">
         <div class="field"><label>Supplier Quotation Reference</label><input id="f_supplierQuoteRef" value="${escapeHtml(po.supplierQuoteRef || '')}"></div>
+        <div class="field"><label>Supplier Invoice / Receipt No.</label><input id="f_supplierInvoiceNo" value="${escapeHtml(po.supplierInvoiceNo || '')}" placeholder="From the supplier's invoice or receipt"></div>
+        <div class="field"><label>Supplier Invoice Date</label><input type="date" id="f_supplierInvoiceDate" value="${po.supplierInvoiceDate || ''}"></div>
+        ${po.currency && po.currency !== 'PHP' ? `<div class="field"><label>Exchange Rate (PHP per 1 ${escapeHtml(po.currency)})</label><input type="number" step="0.0001" min="0" id="f_exchangeRate" value="${po.exchangeRate > 0 ? po.exchangeRate : ''}" placeholder="Rate recognised for this PO"><div class="muted-text" style="font-size:11px; margin-top:4px;">Saved on this PO only — later changes in Settings do not affect it.${po.exchangeRateSource ? ' Source: ' + escapeHtml(po.exchangeRateSource) + '.' : ''}</div></div>` : ''}
         <div class="field"><label>Payment Terms</label><input id="f_paymentTerms" value="${escapeHtml(po.paymentTerms || '')}"></div>
         <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(po.incoterms || '')}"></div>
         <div class="field"><label>Shipping Terms</label><input id="f_shippingTerms" value="${escapeHtml(po.shippingTerms || '')}"></div>
@@ -398,8 +414,12 @@ async function renderSPOHeaderEdit(po) {
     e.preventDefault();
     if (!editLines.every(l => l.description && Number(l.qty) > 0)) { toast('Every line needs a description and quantity greater than 0.', 'err'); return; }
     const settings = await DB.getSettings();
+    const rateEl = document.getElementById('f_exchangeRate');
+    if (rateEl) { const nr = Number(rateEl.value); if (!(nr > 0)) { toast('Enter the exchange rate for this PO (PHP per 1 ' + po.currency + ').', 'err'); return; } if (nr !== Number(po.exchangeRate)) { po.exchangeRate = nr; po.exchangeRateSource = 'Entered on ' + todayISO(); } }
     Object.assign(po, {
       supplierQuoteRef: document.getElementById('f_supplierQuoteRef').value,
+      supplierInvoiceNo: document.getElementById('f_supplierInvoiceNo').value.trim(),
+      supplierInvoiceDate: document.getElementById('f_supplierInvoiceDate').value,
       paymentTerms: document.getElementById('f_paymentTerms').value,
       incoterms: document.getElementById('f_incoterms').value,
       shippingTerms: document.getElementById('f_shippingTerms').value,
