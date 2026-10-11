@@ -45,7 +45,15 @@ let fails = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ? '' : (x |
   ok(`7 every report with data exports a matching workbook (${exported}/${keys.length} had data)`, bad.length === 0 && exported >= 1, bad.join('; '));
   win.location.hash = '#/reports/quotationRegister'; await win.Router.resolveRoute(); await wait(300); captured = null; doc.getElementById('rExport').click(); await wait(150);
   const qh = captured[0].rows[captured[0].freezeRow - 1].map(x => x.v); const q1 = captured[0].rows.slice(captured[0].freezeRow).find(r => r[0].v === 'HT-Q-1');
-  ok('7a Quotation Register Excel includes Brand / Model / Pieces quoted (screen table unchanged)', qh.slice(-3).join() === 'Brand,Model / Part Number,Pieces quoted' && q1[qh.indexOf('Brand')].v === 'Pentair\nKärcher' && q1[qh.indexOf('Pieces quoted')].v === '4\n2' && doc.querySelectorAll('#reportTableWrap thead th').length === 6);
+  ok('7a Quotation Register Excel includes Brand / Model / Pieces quoted (screen table unchanged)', qh.slice(-3).join() === 'Brand,Model / Part Number,Pieces quoted' && ['End-User', 'RFQ Reference', 'Date', 'Valid Until'].every(h => qh.some(x => x.startsWith(h))) && q1[qh.indexOf('End-User')].v === 'Shindengen' && q1[qh.indexOf('Brand')].v === 'Pentair\nKärcher' && q1[qh.indexOf('Pieces quoted')].v === '4\n2' && doc.querySelectorAll('#reportTableWrap thead th').length === 6);
+  const totRow = captured[0].rows[captured[0].rows.length - 1]; const th = captured[0].rows[captured[0].freezeRow - 1].map(x => x.v);
+  ok('7c total sits under the Total column after columns were inserted', totRow.some(c => c && c.f && /^SUM/.test(c.f)) && /^Total/.test(th[totRow.findIndex(c => c && c.f)]), JSON.stringify(totRow.map(c => c && (c.f || c.v))));
+  for (const k of ['expiredQuotations', 'wonLost', 'openQuotations', 'grossProfit']) {
+    await win.DB.dbAdd('quotations', { quotationNo: 'HT-Q-' + k, customerId: c, revision: 0, isLatest: true, status: k === 'grossProfit' || k === 'wonLost' ? 'Won' : 'Sent', date: '2026-01-05', validUntil: '2026-01-20', currency: 'PHP', lines: [], grandTotal: 10, vatTotal: 0, createdAt: now, updatedAt: now, customerSnapshot: { companyName: 'KEYEC' }, endUser: 'EU-' + k, rfqRef: 'RFQ-' + k });
+    win.location.hash = '#/reports/' + k; await win.Router.resolveRoute(); await wait(300); captured = null; doc.getElementById('rExport').click(); await wait(150);
+    const h = captured ? captured[0].rows[captured[0].freezeRow - 1].map(x => x.v.replace(/ \(.*\)$/, '')) : [];
+    ok('7b ' + k + ' Excel has End-User, RFQ Reference, a date and Valid Until', captured && ['End-User', 'RFQ Reference', 'Valid Until'].every(x => h.includes(x)) && h.some(x => /date/i.test(x)), h.join('|'));
+  }
   ok('8 CSV button still available', !!doc.getElementById('rExportCsv'));
   ok('9 no JS errors', errs.length === 0, errs.join('|'));
   console.log(fails ? fails + ' FAILED' : '=== REPORT EXCEL VERIFIED ==='); process.exit(fails ? 1 : 0);

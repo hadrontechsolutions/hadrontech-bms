@@ -187,11 +187,11 @@ async function renderReports(activeKey, initialView) {
     if (!currentRows.length) { toast('Nothing to export — no rows match the current filters.', 'err'); return; }
     const settings = await DB.getSettings(); const label = activeReportDef?.label || activeKey;
     const basisEl = document.getElementById('reportBasis');
-    // Reports that list quotations also carry what was quoted: Brand, Model / Part Number and pieces (one item per line of the cell).
+    // Reports that list quotations always carry End-User, RFQ Reference, Quotation Date, Valid Until, and what was quoted (Brand, Model / Part Number, pieces).
     const isQuoteRows = currentRows.every(r => r && r.quotationNo && Array.isArray(r.lines));
-    const xlCols = isQuoteRows ? currentCols.concat(window.ReportExcel.quoteItemColumns()) : currentCols;
+    const xlCols = isQuoteRows ? window.ReportExcel.withQuotationColumns(currentCols) : currentCols;
     const sheet = window.ReportExcel.buildReportSheet({
-      title: label, sheetName: label, basis: basisEl ? basisEl.textContent.trim() : '', rows: currentRows, cols: xlCols, totals: currentTotals, note: lastNote,
+      title: label, sheetName: label, basis: basisEl ? basisEl.textContent.trim() : '', rows: currentRows, cols: xlCols, totals: currentTotals && xlCols.map(c => { const i = currentCols.indexOf(c); return i >= 0 && currentTotals[i] != null ? currentTotals[i] : ''; }), note: lastNote,
       company: { name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '' }, exportedOn: formatDate(todayISO())
     });
     const bytes = window.BookkeeperPack.xl.workbookBytes([sheet]);

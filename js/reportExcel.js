@@ -80,5 +80,22 @@
       { label: 'Pieces quoted', wrap: true, value: q => lines(q).map(l => `${Number(l.qty) || 0}${l.uom && l.uom !== 'pc' ? ' ' + l.uom : ''}`).join('\n') }
     ];
   }
-  window.ReportExcel = { quoteItemColumns, buildReportSheet, detectKinds, parseMoney, parseDate };
+  /** Quotation-based reports always carry the same identifying columns in Excel: End-User, RFQ Reference (after Customer),
+      Quotation Date and Valid Until, then Brand / Model / Pieces quoted at the end. Columns a report already has are not repeated. */
+  function withQuotationColumns(cols) {
+    const has = (re) => cols.some(c => re.test(c.label));
+    const out = cols.slice();
+    const at = (re, fallback) => { const i = out.findIndex(c => re.test(c.label)); return i >= 0 ? i + 1 : fallback; };
+    const fmt = (iso) => (typeof formatDate === 'function' ? formatDate(iso) : iso);
+    const add = [];
+    if (!has(/^end-?user/i)) add.push({ label: 'End-User', value: q => q.endUser || '' });
+    if (!has(/rfq/i)) add.push({ label: 'RFQ Reference', value: q => q.rfqRef || '' });
+    if (add.length) out.splice(at(/^customer/i, out.length), 0, ...add);
+    const dates = [];
+    if (!has(/^(quotation )?date$/i)) dates.push({ label: 'Quotation Date', value: q => fmt(q.date) });
+    if (!has(/valid/i)) dates.push({ label: 'Valid Until', value: q => fmt(q.validUntil) });
+    if (dates.length) out.splice(at(/^(quotation )?date$/i, out.length), 0, ...dates);
+    return out.concat(quoteItemColumns());
+  }
+  window.ReportExcel = { withQuotationColumns, quoteItemColumns, buildReportSheet, detectKinds, parseMoney, parseDate };
 })();
