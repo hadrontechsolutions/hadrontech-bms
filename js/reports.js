@@ -189,7 +189,7 @@ async function renderReports(activeKey, initialView) {
     const basisEl = document.getElementById('reportBasis');
     // Reports that list quotations always carry End-User, RFQ Reference, Quotation Date, Valid Until, and what was quoted (Brand, Model / Part Number, pieces).
     const isQuoteRows = currentRows.every(r => r && r.quotationNo && Array.isArray(r.lines));
-    const xlCols = isQuoteRows ? window.ReportExcel.withQuotationColumns(currentCols) : currentCols;
+    const xlCols = isQuoteRows ? window.ReportExcel.withQuotationColumns(currentCols, isQuoteRows ? await window.ReportExcel.categoryLookup() : null) : currentCols;
     const sheet = window.ReportExcel.buildReportSheet({
       title: label, sheetName: label, basis: basisEl ? basisEl.textContent.trim() : '', rows: currentRows, cols: xlCols, totals: currentTotals && xlCols.map(c => { const i = currentCols.indexOf(c); return i >= 0 && currentTotals[i] != null ? currentTotals[i] : ''; }), note: lastNote,
       company: { name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '' }, exportedOn: formatDate(todayISO())

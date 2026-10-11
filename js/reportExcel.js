@@ -71,18 +71,20 @@
     return { name, widths, rows, freezeRow: hdrIdx, filterRow: table.length ? hdrIdx : 0, filterEnd: last, merges, heights, landscape: def.cols.length > 6 };
   }
 
-  /** Brand / Model-Part No. / pieces quoted, one entry per item line (several lines share one cell, one item per line of the cell) */
-  function quoteItemColumns() {
+  /** Category (from the product catalog) / Brand / Model-Part No. / pieces quoted, one entry per item line (several lines share one cell, one item per line of the cell) */
+  function quoteItemColumns(catOf) {
     const lines = (q) => (q.lines || []).filter(l => l && (l.brand || l.modelNo || l.description || Number(l.qty)));
+    const cat = (l) => (typeof catOf === 'function' ? catOf(l) : '') || '—';
     return [
+      { label: 'Category', wrap: true, value: q => lines(q).map(cat).join('\n') },
       { label: 'Brand', wrap: true, value: q => lines(q).map(l => l.brand || '—').join('\n') },
       { label: 'Model / Part Number', wrap: true, value: q => lines(q).map(l => l.modelNo || '—').join('\n') },
       { label: 'Pieces quoted', wrap: true, value: q => lines(q).map(l => `${Number(l.qty) || 0}${l.uom && l.uom !== 'pc' ? ' ' + l.uom : ''}`).join('\n') }
     ];
   }
   /** Quotation-based reports always carry the same identifying columns in Excel: End-User, RFQ Reference (after Customer),
-      Quotation Date and Valid Until, then Brand / Model / Pieces quoted at the end. Columns a report already has are not repeated. */
-  function withQuotationColumns(cols) {
+      Quotation Date and Valid Until, then Category, Brand / Model / Pieces quoted at the end. Columns a report already has are not repeated. */
+  function withQuotationColumns(cols, catOf) {
     const has = (re) => cols.some(c => re.test(c.label));
     const out = cols.slice();
     const at = (re, fallback) => { const i = out.findIndex(c => re.test(c.label)); return i >= 0 ? i + 1 : fallback; };
@@ -95,7 +97,12 @@
     if (!has(/^(quotation )?date$/i)) dates.push({ label: 'Quotation Date', value: q => fmt(q.date) });
     if (!has(/valid/i)) dates.push({ label: 'Valid Until', value: q => fmt(q.validUntil) });
     if (dates.length) out.splice(at(/^(quotation )?date$/i, out.length), 0, ...dates);
-    return out.concat(quoteItemColumns());
+    return out.concat(quoteItemColumns(catOf));
   }
-  window.ReportExcel = { withQuotationColumns, quoteItemColumns, buildReportSheet, detectKinds, parseMoney, parseDate };
+  /** line -> category of its catalog item ('' when the line is not linked to a catalog product or the product has no category) */
+  async function categoryLookup() {
+    const products = await DB.dbGetAll('products'); const m = {}; products.forEach(p => { m[p.id] = p.category || ''; });
+    return (l) => (l && l.itemId != null && l.itemId !== '' ? (m[l.itemId] != null ? m[l.itemId] : m[Number(l.itemId)]) : '') || '';
+  }
+  window.ReportExcel = { categoryLookup, withQuotationColumns, quoteItemColumns, buildReportSheet, detectKinds, parseMoney, parseDate };
 })();
