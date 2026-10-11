@@ -130,7 +130,7 @@
     const od = pack.arRows.filter(r => r.days > 30); if (od.length) att.push({ level: 'warn', text: `${od.length} unpaid invoice(s) are older than 30 days — ${pack.arRows.filter(r => r.days > 30).reduce((s, r) => s + r.phpBalance, 0).toFixed(2)} still to collect.` });
     if (pack.apRows.length) att.push({ level: 'info', text: `${pack.apRows.length} supplier PO(s) not fully paid — ${t.apClosing.toFixed(2)} owed to suppliers.` });
     if (out.pipeline.expiredCount) att.push({ level: 'warn', text: `${out.pipeline.expiredCount} open quotation(s) have expired and need a decision (extend, mark Lost or follow up).` });
-    if (out.pipeline.expiringCount) att.push({ level: 'info', text: `${out.pipeline.expiringCount} quotation(s) expire within 7 days.` });
+    if (out.pipeline.expiringCount) att.push({ level: 'info', text: `${out.pipeline.expiringCount} quotation(s) expire within ${typeof EXPIRING_SOON_DAYS === 'number' ? EXPIRING_SOON_DAYS : 7} days.` });
     if (out.orders.awaitingDelivery) att.push({ level: 'info', text: `${out.orders.awaitingDelivery} order(s) are ready for (or partly) delivery.` });
     pack.warnings.filter(w => w.level === 'warn').forEach(w => att.push({ level: 'warn', text: w.text }));
     out.warnings = pack.warnings;

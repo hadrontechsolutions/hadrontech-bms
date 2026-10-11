@@ -40,7 +40,7 @@ const APP = __dirname;
   ok('2 Orders ready to deliver counts Ready for Delivery + Partially Delivered = 2', num('Orders ready to deliver') === '2', num('Orders ready to deliver'));
   ok('3 Supplier POs to receive = 1 (Sent only; Cancelled, Draft and Received excluded)', num('Supplier POs to receive') === '1', num('Supplier POs to receive'));
   ok('4 Supplier POs to pay = 2 (P1, P4); cancelled and zero-cost excluded', num('Supplier POs to pay') === '2', num('Supplier POs to pay'));
-  ok('5 Expired quotations = 1 and expiring in 7 days = 1', num('Expired quotations') === '1' && num('Quotations expiring in 7 days') === '1');
+  ok('5 Expired quotations = 1 and expiring in 10 days = 1', num('Expired quotations') === '1' && num('Quotations expiring in 10 days') === '1');
   ok('6 chips with zero show a tick and the "off" style', chip('Invoices to collect').classList.contains('off') && /✓/.test(chip('Invoices to collect').textContent));
   const tile = (l) => { const c = [...doc.querySelectorAll('.stat-card')].find(x => x.querySelector('.stat-card-lbl').textContent === l); return c && c.querySelector('.stat-card-num').textContent; };
   ok('7 tiles: Supplier POs Awaiting Receipt 1; Orders Awaiting Delivery 2', tile('Supplier POs Awaiting Receipt') === '1' && tile('Orders Awaiting Delivery') === '2');

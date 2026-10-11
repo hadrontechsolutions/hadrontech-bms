@@ -10,7 +10,7 @@ async function main() {
   win.addEventListener('error', e => errs.push(e.message));
   for (const src of [...doc.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js')) win.eval(fs.readFileSync(path.join(APP, src), 'utf8'));
   const wait = ms => new Promise(r => setTimeout(r, ms));
-  const go = async h => { win.location.hash = h; await win.Router.resolveRoute(); await wait(80); };
+  const go = async h => { win.location.hash = h; await win.Router.resolveRoute(); await wait(200); };
   await win.DB.openDB(); await win.DB.ensureCounters();
   const today = win.todayISO();
   const cust = await win.DB.dbAdd('customers', { companyName: 'ON Semiconductor Cebu', archived: false });

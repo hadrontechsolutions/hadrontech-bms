@@ -32,7 +32,7 @@ Router.route('/dashboard', async () => {
   const completedOrders = salesOrders.filter(o => o.status === 'Delivered').length;
   const outstandingValue = salesOrders.filter(o => !['Delivered', 'Cancelled'].includes(o.status)).reduce((s, o) => s + (o.grandTotal || 0), 0);
   const expiredNeedingReview = latestQuotes.filter(q => getExpiryInfo(q).state === 'expired');
-  const expiringWithin7 = latestQuotes.filter(q => ['today', 'soon'].includes(getExpiryInfo(q).state));
+  const expiringSoon = latestQuotes.filter(q => ['today', 'soon'].includes(getExpiryInfo(q).state));
 
   // Outstanding invoices can span more than one currency (PHP, USD, ...) -- summing them into a
   // single figure would silently add mismatched currencies together, so this groups by currency
@@ -94,7 +94,7 @@ Router.route('/dashboard', async () => {
     { n: spoAwaitingReceipt.length, text: 'Supplier POs to receive', hash: '/supplier-pos' },
     { n: outstandingPIs.length, text: 'Invoices to collect', hash: '/payments' },
     { n: outstandingSPOs.length, text: 'Supplier POs to pay', hash: '/supplier-pos' },
-    { n: expiringWithin7.length, text: 'Quotations expiring in 7 days', hash: '/quotations' },
+    { n: expiringSoon.length, text: `Quotations expiring in ${EXPIRING_SOON_DAYS} days`, hash: '/quotations' },
     { n: expiredNeedingReview.length, text: 'Expired quotations', hash: '/quotations?status=Expired' },
     { n: notesNeedingAction, text: 'RFQs / notes needing follow-up', hash: '/rfq-tracker' }
   ];
@@ -164,7 +164,7 @@ Router.route('/dashboard', async () => {
       ${statCard(activeSuppliers, 'Active Suppliers', '/suppliers')}
       ${statCard(openQuotes, 'Open Quotations', '/quotations')}
       ${statCard(awaitingResponse, 'Awaiting Customer Response', '/quotations')}
-      ${statCard(expiringWithin7.length, 'Quotations Expiring Within 7 Days', '/quotations')}
+      ${statCard(expiringSoon.length, `Quotations Expiring Within ${EXPIRING_SOON_DAYS} Days`, '/quotations')}
       ${statCard(expiredNeedingReview.length, 'Expired Quotations Needing Review', '/quotations?status=Expired')}
       ${statCard(wonQuotes, 'Won Quotations', '/quotations')}
       ${statCard(lostQuotes, 'Lost Quotations', '/quotations')}
@@ -185,6 +185,7 @@ Router.route('/dashboard', async () => {
       ${statCard(formatMoney(totalReserve, 'PHP'), 'Business Reserve', '/distributions')}
     </div>
 
+    <div class="btn-row" style="margin:4px 0 12px;"><button class="btn-amber" id="btnExpiryXlsx">Download Excel: expired &amp; expiring quotations</button><span class="muted-text" style="margin-left:10px;">Two tabs: expired quotations, and quotations expiring within ${EXPIRING_SOON_DAYS} days — with RFQ reference, end-user, dates and days.</span></div>
     <div class="dash-grid dash-grid-even">
       <div class="card">
         <h3 class="section-title">Expired Quotations — Needs Review</h3>
@@ -195,10 +196,10 @@ Router.route('/dashboard', async () => {
       </div>
 
       <div class="card">
-        <h3 class="section-title">Quotations Expiring Soon</h3>
-        ${expiringWithin7.length === 0 ? `<div class="empty-inline">None in the next 7 days.</div>` : `
+        <h3 class="section-title">Quotations Expiring Soon <span class="muted-text" style="font-weight:400; text-transform:none;">(next ${EXPIRING_SOON_DAYS} days)</span></h3>
+        ${expiringSoon.length === 0 ? `<div class="empty-inline">None in the next ${EXPIRING_SOON_DAYS} days.</div>` : `
         <table class="data-table compact"><tbody>
-          ${expiringWithin7.map(q => `<tr class="clickable-row" data-hash="/quotations/${q.id}"><td>${escapeHtml(q.quotationNo)}</td><td>${escapeHtml(q.customerSnapshot?.companyName || '')}</td><td class="${getExpiryInfo(q).state === 'today' ? 'text-amber' : 'text-warn'}">${escapeHtml(getExpiryInfo(q).text)}</td></tr>`).join('')}
+          ${expiringSoon.map(q => `<tr class="clickable-row" data-hash="/quotations/${q.id}"><td>${escapeHtml(q.quotationNo)}</td><td>${escapeHtml(q.customerSnapshot?.companyName || '')}</td><td class="${getExpiryInfo(q).state === 'today' ? 'text-amber' : 'text-warn'}">${escapeHtml(getExpiryInfo(q).text)}</td></tr>`).join('')}
         </tbody></table>`}
       </div>
     </div>
@@ -213,7 +214,41 @@ Router.route('/dashboard', async () => {
   `;
 
   content.querySelectorAll('[data-hash]').forEach(b => b.onclick = () => Router.navigate(b.dataset.hash));
+  const xb = document.getElementById('btnExpiryXlsx');
+  if (xb) xb.onclick = async () => {
+    const settings = await DB.getSettings();
+    const custName = {}; customers.forEach(c => { custName[c.id] = c.companyName; });
+    const bytes = window.BookkeeperPack.xl.workbookBytes(buildExpirySheets(expiredNeedingReview, expiringSoon, custName, { name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '' }));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `Quotation-Expiry-Report_${todayISO()}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); toast('Excel report downloaded.');
+  };
 });
+
+/** Two tabs: Expired / Expiring Soon. Only open quotations (Draft, Sent, Under Review), latest revision only —
+ *  exactly the rows the two dashboard panels list. Day counts are as of today. */
+function buildExpirySheets(expired, expiring, custName, co) {
+  const { H, titleBlock } = window.BookkeeperPack.xl;
+  const d10 = (d) => String(d || '').slice(0, 10);
+  const asOf = `As of ${formatDate(todayISO())}`;
+  const mk = (name, title, note, list, daysLabel, daysOf, sortFn) => {
+    const rows = titleBlock(co, title, asOf + '  ·  ' + note);
+    const hdr = rows.length + 1;
+    rows.push(H(['Quotation No.', 'Rev', 'Status', 'Customer', 'RFQ Reference', 'End-User', 'Project', 'Quotation Date', 'Valid Until', daysLabel, 'Amount', 'Currency', 'Salesperson']));
+    const items = list.slice().sort(sortFn);
+    items.forEach(q => rows.push([
+      { v: q.quotationNo, s: 'txt' }, { v: q.revision != null ? q.revision : '', s: 'int' }, { v: q.status, s: 'txt' },
+      { v: custName[q.customerId] || q.customerSnapshot?.companyName || '', s: 'txt' }, { v: q.rfqRef || '', s: 'txt' }, { v: q.endUser || '', s: 'txt' }, { v: q.projectName || '', s: 'txt' },
+      q.date ? { d: d10(q.date), s: 'date' } : { v: '', s: 'txt' }, { d: d10(q.validUntil), s: 'date' },
+      { v: daysOf(q), s: 'int' }, { v: Math.round((Number(q.grandTotal) || 0) * 100) / 100, s: 'money' }, { v: q.currency || 'PHP', s: 'txt' }, { v: q.salesperson || '', s: 'txt' }]));
+    if (!items.length) rows.push([{ v: name === 'Expired' ? 'No expired quotations — nothing is overdue.' : `No quotations expire in the next ${EXPIRING_SOON_DAYS} days.`, s: 'note' }]);
+    return { name, widths: [18, 6, 13, 30, 40, 22, 28, 15, 15, 16, 16, 10, 16], rows, freezeRow: hdr, filterRow: items.length ? hdr : 0, filterEnd: hdr + items.length };
+  };
+  const left = (q) => daysBetweenISO(todayISO(), d10(q.validUntil)); // validUntil minus today
+  return [
+    mk('Expired', 'EXPIRED QUOTATIONS — NEEDS REVIEW', 'Open quotations (Draft, Sent, Under Review) whose Valid Until date has passed', expired, 'Days expired', q => -left(q), (a, b) => left(a) - left(b)),
+    mk('Expiring Soon', 'QUOTATIONS EXPIRING SOON', `Open quotations (Draft, Sent, Under Review) expiring today or within the next ${EXPIRING_SOON_DAYS} days (0 days left = expires today)`, expiring, 'Days left', left, (a, b) => left(a) - left(b))
+  ];
+}
 
 /* ---------- Small chart helpers (inline SVG / HTML — no libraries, works offline) ---------- */
 function shortMoney(n) {

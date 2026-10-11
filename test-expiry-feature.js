@@ -35,11 +35,11 @@ async function main() {
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   }, overrides);
 
-  const q1 = mkQ({ validUntil: win.addDaysISO(today, 10) });
-  console.log('STEP 1: Valid for >7 days -> state "active":', win.getExpiryInfo(q1).state === 'active' && win.getExpiryInfo(q1).text === 'Valid for 10 more days');
+  const q1 = mkQ({ validUntil: win.addDaysISO(today, 11) });
+  console.log('STEP 1: Valid for >10 days -> state "active":', win.getExpiryInfo(q1).state === 'active' && win.getExpiryInfo(q1).text === 'Valid for 11 more days' && win.getExpiryInfo(mkQ({ validUntil: win.addDaysISO(today, 10) })).state === 'soon');
 
   const q2 = mkQ({ validUntil: win.addDaysISO(today, 5) });
-  console.log('STEP 2: Expiring within 7 days -> state "soon":', win.getExpiryInfo(q2).state === 'soon' && win.getExpiryInfo(q2).text === 'Valid for 5 more days');
+  console.log('STEP 2: Expiring within 10 days -> state "soon":', win.getExpiryInfo(q2).state === 'soon' && win.getExpiryInfo(q2).text === 'Valid for 5 more days');
 
   const q3 = mkQ({ validUntil: today });
   console.log('STEP 3: Expiring today -> state "today":', win.getExpiryInfo(q3).state === 'today' && win.getExpiryInfo(q3).text === 'Expires today');
@@ -96,7 +96,7 @@ async function main() {
   console.log('STEP 13: Dashboard has a separate "Expired — Needs Review" panel:', dashText.includes('Expired Quotations — Needs Review'));
   console.log('STEP 14: Expired quotation appears there (not silently dropped):', dashText.includes('Expired 1 day ago'));
   console.log('STEP 15: "Expiring Soon" panel still shows the within-7-days ones:', dashText.includes('Expires today') || dashText.includes('Valid for 5 more days'));
-  console.log('STEP 16: Stat card for expiring-within-7-days count present:', dashText.includes('Quotations Expiring Within 7 Days'));
+  console.log('STEP 16: Stat card for expiring-within-10-days count present:', dashText.includes('Quotations Expiring Within 10 Days'));
   console.log('STEP 17: Stat card for expired-needing-review count present:', dashText.includes('Expired Quotations Needing Review'));
 
   /* ============ SECTION 4: Reports — no silent-drop ============ */

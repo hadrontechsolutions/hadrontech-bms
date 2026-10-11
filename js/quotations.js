@@ -48,6 +48,8 @@ function padRev(n) { return String(n).padStart(2, '0'); }
    as closed and are never flagged, regardless of their validity date.
    ============================================================ */
 const OPEN_STATUSES_FOR_EXPIRY = ['Draft', 'Sent', 'Under Review'];
+/** A quotation shows "Expiring Soon" when it has this many days or fewer left (dashboard, lists, reports, Excel). */
+var EXPIRING_SOON_DAYS = 10;
 
 function getExpiryInfo(q) {
   if (!q.validUntil) return { state: 'none', badgeText: null, badgeClass: '', text: 'No validity date set' };
@@ -62,7 +64,7 @@ function getExpiryInfo(q) {
   if (diffDays === 0) {
     return { state: 'today', badgeText: 'Expires Today', badgeClass: 'badge-expires-today', text: 'Expires today' };
   }
-  if (diffDays <= 7) {
+  if (diffDays <= EXPIRING_SOON_DAYS) {
     return { state: 'soon', badgeText: 'Expiring Soon', badgeClass: 'badge-expiring-soon', text: `Valid for ${diffDays} more day${diffDays === 1 ? '' : 's'}` };
   }
   return { state: 'active', badgeText: null, badgeClass: '', text: `Valid for ${diffDays} more days` };
