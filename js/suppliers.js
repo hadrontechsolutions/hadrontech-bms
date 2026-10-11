@@ -26,6 +26,7 @@ Entities.defineEntity({
     { name: 'email', label: 'Email', type: 'email' },
     { name: 'telephone', label: 'Telephone', type: 'text' },
     { name: 'website', label: 'Website', type: 'text' },
+    { name: 'tin', label: 'Tax Identification Number (TIN)', type: 'text' },
     { name: 'address', label: 'Address', type: 'textarea' },
     { name: 'country', label: 'Country', type: 'text' },
     { name: 'brandsSupplied', label: 'Brands Supplied', type: 'text' },

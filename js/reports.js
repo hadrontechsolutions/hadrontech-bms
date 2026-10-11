@@ -14,7 +14,7 @@ const REPORT_GROUPS = [
   { group: 'Orders & Fulfillment', reports: [
     { key: 'salesOrderRegister', label: 'Sales Order Register', filters: ['customer', 'status'], statusOptions: () => window.SO_STATUSES || [] },
     { key: 'supplierPORegister', label: 'Supplier PO Register', filters: ['supplier', 'status'], statusOptions: () => window.SPO_STATUSES || [] },
-    { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery', filters: ['customer', 'status'], statusOptions: () => ['Ready for Delivery', 'Partially Received'] }
+    { key: 'awaitingDelivery', label: 'Orders Awaiting Delivery', filters: ['customer', 'status'], statusOptions: () => ['Ready for Delivery', 'Partially Delivered'] }
   ]},
   { group: 'Financial Performance', reports: [
     { key: 'salesByCustomer', label: 'Sales by Customer' },
@@ -40,6 +40,7 @@ Router.route('/reports', () => renderReports('quotationRegister'));
 Router.route('/reports/:key', (p) => renderReports(p.key));
 
 async function renderReports(activeKey) {
+  if (activeKey === 'bookkeeperPack') return window.BookkeeperPack.render();
   Router.setBreadcrumb([{ label: 'Reports' }]);
   const content = document.getElementById('content');
   // Which text filters (Customer / End-User) this specific report supports, if any -- set once
@@ -49,6 +50,7 @@ async function renderReports(activeKey) {
 
   content.innerHTML = `
     <div class="page-head"><h1>Reports</h1></div>
+    <a class="bp-banner" href="#/reports/bookkeeperPack"><span class="bp-banner-ico">📒</span><span><b>Bookkeeper Pack</b> — one complete Excel workbook + PDF summary for your bookkeeper (sales, collections, purchases, payments, expenses, receivables, payables, inventory…)</span><span class="bp-banner-go">Open →</span></a>
     <div class="report-layout">
       <div class="report-nav-panel">
         <input type="text" id="reportFilter" class="report-filter-box" placeholder="Filter reports...">
@@ -325,7 +327,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
       return { rows, cols, totals, note };
     }
     case 'awaitingDelivery': {
-      const rows = salesOrders.filter(o => ['Ready for Delivery', 'Partially Received'].includes(o.status)
+      const rows = salesOrders.filter(o => ['Ready for Delivery', 'Partially Delivered'].includes(o.status)
         && textMatches(custMap[o.customerId]?.companyName, customerFilter)
         && (!statusFilter || o.status === statusFilter));
       const cols = [
@@ -358,14 +360,16 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
     case 'salesRegisterBookkeeper': {
       // Built from Sales Orders (confirmed, actually-realized sales), not Quotations — a
       // quotation is only potential business until a customer PO turns it into a real order.
+      // Cancelled and Draft orders are not real sales, so they stay out unless that exact status is picked.
       const rows = salesOrders.filter(o => inRange(o.orderDate)
         && textMatches(custMap[o.customerId]?.companyName, customerFilter)
-        && (!statusFilter || o.status === statusFilter));
-      const vatLabel = { Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' };
+        && (statusFilter ? o.status === statusFilter : !['Cancelled', 'Draft'].includes(o.status)));
+      const vatLabel = { Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt', NonVat: 'Non-VAT (not VAT-registered)' };
       const netOf = r => r2((r.grandTotal || 0) - (r.vatTotal || 0));
       const vatableOf = r => (r.vatMode || 'Standard12') === 'Standard12' ? netOf(r) : 0;
       const zeroRatedOf = r => r.vatMode === 'ZeroRated' ? netOf(r) : 0;
       const exemptOf = r => r.vatMode === 'Exempt' ? netOf(r) : 0;
+      const nonVatOf = r => r.vatMode === 'NonVat' ? netOf(r) : 0;
       const cols = [
         { label: 'Date', value: r => formatDate(r.orderDate) },
         { label: 'SO No', value: 'soNo' },
@@ -374,6 +378,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
         { label: 'VATable Sales', value: r => formatMoney(vatableOf(r)) },
         { label: 'Zero-Rated Sales', value: r => formatMoney(zeroRatedOf(r)) },
         { label: 'VAT-Exempt Sales', value: r => formatMoney(exemptOf(r)) },
+        { label: 'Non-VAT Sales', value: r => formatMoney(nonVatOf(r)) },
         { label: 'VAT Amount', value: r => formatMoney(r.vatTotal || 0) },
         { label: 'Total Amount', value: r => formatMoney(r.grandTotal || 0) }
       ];
@@ -381,6 +386,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
         formatMoney(r2(rows.reduce((s, r) => s + vatableOf(r), 0))),
         formatMoney(r2(rows.reduce((s, r) => s + zeroRatedOf(r), 0))),
         formatMoney(r2(rows.reduce((s, r) => s + exemptOf(r), 0))),
+        formatMoney(r2(rows.reduce((s, r) => s + nonVatOf(r), 0))),
         formatMoney(r2(rows.reduce((s, r) => s + (r.vatTotal || 0), 0))),
         formatMoney(r2(rows.reduce((s, r) => s + (r.grandTotal || 0), 0)))
       ];
@@ -389,7 +395,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
     case 'purchaseRegisterBookkeeper': {
       const rows = supplierPOs.filter(p => inRange(p.poDate)
         && textMatches(supMap[p.supplierId]?.companyName, supplierFilter)
-        && (!statusFilter || p.status === statusFilter));
+        && (statusFilter ? p.status === statusFilter : !['Cancelled', 'Draft'].includes(p.status)));
       const itemsTotalOf = r => r2((r.lines || []).reduce((s, l) => s + (l.amount || 0), 0));
       const cols = [
         { label: 'Date', value: r => formatDate(r.poDate) },
