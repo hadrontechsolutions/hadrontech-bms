@@ -518,6 +518,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
         { label: 'Date', value: r => formatDate(r.date) },
         { label: 'Category', value: 'category' },
         { label: 'Description', value: 'description' },
+        { label: 'Paid to / Bought from', value: r => r.vendor || '' },
         { label: 'Payee', value: r => r.payee || '' },
         { label: 'Payment Method', value: r => r.paymentMethod || '' },
         { label: 'Reference No', value: r => r.referenceNo || '' },

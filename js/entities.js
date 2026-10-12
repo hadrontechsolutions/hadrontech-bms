@@ -27,7 +27,8 @@ async function renderList(cfg) {
   // Newest-first by default (most recently created at the top) -- without this, IndexedDB
   // returns records in primary-key/insertion order, meaning the oldest record sits at the
   // top and the most recent one is buried at the bottom of an ever-growing list.
-  const all = (await DB.dbGetAll(cfg.key)).filter(r => !r.archived).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  if (cfg.beforeList) await cfg.beforeList();   // optional per-entity tidy-up that must run before the list is read
+  const all = (await DB.dbGetAll(cfg.key)).filter(r => !r.archived).sort(cfg.sortList || ((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')));
   const content = document.getElementById('content');
 
   content.innerHTML = `
