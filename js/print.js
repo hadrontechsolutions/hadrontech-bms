@@ -29,7 +29,7 @@ function printShell(title, bodyHTML) {
     .p-sign .box{border-top:1px solid #1c2430; padding-top:6px; font-size:11px; color:#666;}
     .p-sign-img{height:52px; max-width:190px; object-fit:contain; display:block; margin-bottom:-8px;}
     .p-foot{margin-top:30px; padding-top:10px; border-top:1px solid #e2e6ec; font-size:9px; color:#999; text-align:center;}
-    @media print { .no-print{display:none;} }
+    @media print { .no-print{display:none !important;} }
   </style></head><body>${bodyHTML}
   <div class="no-print" style="margin-top:24px; display:flex; gap:10px;"><button onclick="window.print()" style="background:#a85f04; color:#fff; border:0; border-radius:6px; padding:10px 26px; font:700 14px Arial,Helvetica,sans-serif; cursor:pointer;">🖨 Print</button><button onclick="window.close()" style="background:#fff; color:#1c2430; border:1px solid #c9d0da; border-radius:6px; padding:10px 22px; font:600 14px Arial,Helvetica,sans-serif; cursor:pointer;">Close</button></div>
   </body></html>`);
