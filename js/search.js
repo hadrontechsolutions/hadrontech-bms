@@ -46,7 +46,7 @@ async function doSearch(q) {
     { title: 'Proforma Invoices', hash: '/proforma-invoices', rows: proformaInvoices.filter(p => has(p, ['piNo'])), label: r => r.piNo },
     { title: 'Technical Offers', hash: '/technical-offers', rows: technicalOffers.filter(t => has(t, ['offerNo', 'endUser', 'rfqReference'])), label: r => `${r.offerNo} — ${r.endUser || ''}` },
     { title: 'Expenses', hash: '/expenses', rows: expenses.filter(x => has(x, ['expenseNo', 'description', 'payee', 'category', 'referenceNo'])), label: r => `${r.expenseNo} — ${r.description}` },
-    { title: 'RFQ Tracker', hash: '/rfq-tracker', rows: notes.filter(n => has(n, ['noteNo', 'title', 'referenceEmail', 'endUser', 'body'])), label: r => `${r.noteNo} — ${r.referenceEmail ? r.referenceEmail + ' · ' : ''}${r.title}`, badge: r => { const info = getReminderInfo(r); return info.badgeText ? ' ' + statusBadge(info.badgeText) : ''; } },
+    { title: 'RFQ Tracker', hash: '/rfq-tracker', rows: notes.filter(n => has(n, ['noteNo', 'title', 'referenceEmail', 'endUser', 'body'])), label: r => `${r.noteNo} — ${r.referenceEmail ? r.referenceEmail + ' · ' : ''}${r.title}${r.trashedAt ? ' (in the Trash)' : ''}`, badge: r => { const info = getReminderInfo(r); return info.badgeText ? ' ' + statusBadge(info.badgeText) : ''; } },
     { title: 'Partners', hash: '/partners', rows: partners.filter(p => has(p, ['name', 'role'])), label: r => r.name },
     { title: 'Distributions', hash: '/distributions', rows: distributions.filter(d => has(d, ['distributionNo', 'reference', 'notes'])), label: r => `${r.distributionNo} — ${r.reference || r.month}` }
   ].filter(s => s.rows.length > 0);

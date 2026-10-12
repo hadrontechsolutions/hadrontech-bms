@@ -38,11 +38,26 @@ Router.route('/rfq-tracker/:id/edit', async (p) => {
 // The old Notes addresses keep working (bookmarks, search results, dashboard links).
 Router.route('/notes', () => Router.navigate('/rfq-tracker'));
 Router.route('/notes/new', () => Router.navigate('/rfq-tracker/new-note'));
-Router.route('/notes/:id', (p) => Router.navigate('/rfq-tracker/' + p.id));
-Router.route('/notes/:id/edit', (p) => Router.navigate('/rfq-tracker/' + p.id + '/edit'));
+Router.route('/notes/:id', (p) => Router.navigate(`/rfq-tracker/${p.id}`));
+Router.route('/notes/:id/edit', (p) => Router.navigate(`/rfq-tracker/${p.id}/edit`));
 
 const isRfq = (n) => n && n.kind === 'RFQ';
 const isClosedNote = (n) => n.status === 'Done' || n.status === 'Closed';
+
+/* Closed RFQs are kept for RFQ_KEEP_CLOSED_DAYS (still visible, can be reopened), then moved to the Trash,
+   where they can be restored for RFQ_TRASH_DAYS before being deleted for good. Dates are saved on the record. */
+var RFQ_KEEP_CLOSED_DAYS = 5, RFQ_TRASH_DAYS = 30;
+const isTrashed = (n) => !!(n && n.trashedAt);
+const closedOn = (n) => n.closedAt || null;
+const trashDate = (n) => addDaysISO(n.closedAt, RFQ_KEEP_CLOSED_DAYS);          // date it moves to the Trash
+const purgeDate = (n) => addDaysISO(n.trashedAt, RFQ_TRASH_DAYS);               // date it is deleted for good
+const daysUntil = (iso) => daysBetweenISO(todayISO(), iso);
+const plural = (n, w) => `${n} ${w}${Math.abs(n) === 1 ? '' : 's'}`;
+function closedNotice(n) {
+  if (isTrashed(n)) { const d = daysUntil(purgeDate(n)); return `In the Trash since ${formatDate(n.trashedAt)}. Deleted for good on ${formatDate(purgeDate(n))} (${plural(Math.max(d, 0), 'day')} left).`; }
+  if (!n.closedAt) return '';
+  const d = daysUntil(trashDate(n)); return `Closed on ${formatDate(n.closedAt)}. Moves to the Trash on ${formatDate(trashDate(n))} (${plural(Math.max(d, 0), 'day')} left).`;
+}
 
 /** Last thing that happened on a record (for "last update" and the reminder). */
 function lastActivityDate(n) {
@@ -93,19 +108,37 @@ function applyQuoteState(n, q) {
   n.quotationId = q.id; n.quotationNo = q.quotationNo; n.quotationFamilyId = q.familyId || q.id;
   if (q.status === 'Draft') { if (!first) log(`${rev} is being prepared.`, 'Us', 'Us'); }
   else if (q.status === 'Sent' || q.status === 'Under Review') log(`${rev} was sent to the customer — waiting for their reply.`, 'Customer', 'Customer');
-  else if (q.status === 'Won') { log(`${rev} was marked Won — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Won'; }
-  else if (q.status === 'Lost') { log(`${rev} was marked Lost — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Lost'; }
+  else if (q.status === 'Won') { log(`${rev} was marked Won — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Won'; n.closedAt = n.closedAt || today; }
+  else if (q.status === 'Lost') { log(`${rev} was marked Lost — RFQ closed.`, 'Customer', 'Us'); n.status = 'Closed'; n.closedReason = 'Lost'; n.closedAt = n.closedAt || today; }
   else if (q.status === 'Expired') log(`${rev} has expired — extend or revise it.`, 'Us', 'Us');
   n.quoteSeen = key; n.updatedAt = new Date().toISOString();
   return true;
 }
 
+/** Moves RFQs closed for 5+ days to the Trash and deletes RFQs that have been in the Trash for 30+ days.
+ *  Runs whenever RFQs are opened (the BMS only runs in the browser, so there is no background job). */
+async function purgeClosedRfqs() {
+  const today = todayISO(); const notes = await DB.dbGetAll('notes'); let moved = 0, deleted = 0;
+  for (const n of notes) {
+    if (!isRfq(n)) continue;
+    if (n.status !== 'Closed') { if (n.closedAt || n.trashedAt) { delete n.closedAt; delete n.trashedAt; await DB.dbPut('notes', n); } continue; }
+    if (n.trashedAt) {
+      if (daysBetweenISO(n.trashedAt, today) >= RFQ_TRASH_DAYS) { await DB.dbDelete('notes', n.id); await DB.logActivity(`Deleted RFQ ${n.noteNo} (${n.referenceEmail || 'no reference'}) for good — it was in the Trash for ${RFQ_TRASH_DAYS} days`); deleted++; }
+      continue;
+    }
+    if (!n.closedAt) { n.closedAt = today; await DB.dbPut('notes', n); continue; }   // closed before this rule existed: the 5 days start today
+    if (daysBetweenISO(n.closedAt, today) >= RFQ_KEEP_CLOSED_DAYS) { n.trashedAt = today; await DB.dbPut('notes', n); await DB.logActivity(`Moved RFQ ${n.noteNo} (${n.referenceEmail || 'no reference'}) to the Trash — closed ${RFQ_KEEP_CLOSED_DAYS}+ days ago`); moved++; }
+  }
+  return { moved, deleted };
+}
+
 /** Brings every RFQ that has a quotation up to date (also fixes RFQs linked before this existed). */
 async function reconcileRfqs() {
+  await purgeClosedRfqs();
   const [notes, quotes] = await Promise.all([DB.dbGetAll('notes'), DB.dbGetAll('quotations')]);
   const byId = Object.fromEntries(quotes.map(q => [q.id, q])); let changed = 0;
   for (const n of notes) {
-    if (!isRfq(n) || !n.quotationId) continue;
+    if (!isRfq(n) || !n.quotationId || isTrashed(n)) continue;
     const q = quoteForRfq(n, quotes); if (!q) continue;
     if (applyQuoteState(n, q)) { await DB.dbPut('notes', n); changed++; }
   }
@@ -163,7 +196,8 @@ async function renderRfqList() {
   const content = document.getElementById('content');
   await reconcileRfqs();
   Router.setBreadcrumb([{ label: 'RFQ Tracker' }]);
-  const [all, customers, quotations] = await Promise.all([DB.dbGetAll('notes'), DB.dbGetAll('customers'), DB.dbGetAll('quotations')]);
+  const [allRaw, customers, quotations] = await Promise.all([DB.dbGetAll('notes'), DB.dbGetAll('customers'), DB.dbGetAll('quotations')]);
+  const all = allRaw.filter(n => !isTrashed(n)), trash = allRaw.filter(isTrashed);
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const quoteOf = (n) => quoteForRfq(n, quotations);
   const custName = (n) => isRfq(n) ? ((custMap[n.customerId] || {}).companyName || n.title || '') : (n.title || '');
@@ -185,7 +219,7 @@ async function renderRfqList() {
     <div class="card" style="padding:12px 16px;">
       <div class="page-actions" style="margin:0; flex-wrap:wrap; gap:10px;">
         <input type="search" id="rfqSearch" class="search-box" placeholder="Search RFQ reference, customer, end-user, supplier, notes…" style="min-width:280px;">
-        <label style="font-size:12px;">Show <select id="rfqShow"><option value="open">Open RFQs and notes</option><option value="rfq">RFQs only</option><option value="general">General notes only</option><option value="closed">Closed / done</option><option value="all">Everything</option></select></label>
+        <label style="font-size:12px;">Show <select id="rfqShow"><option value="open">Open RFQs and notes</option><option value="rfq">RFQs only</option><option value="general">General notes only</option><option value="closed">Closed / done</option><option value="all">Everything</option><option value="trash">Trash (${trash.length}) — restorable</option></select></label>
         <label style="font-size:12px;">Customer <select id="rfqCustomer"><option value="">All customers</option>${customers.filter(c => !c.archived).sort((a, b) => a.companyName.localeCompare(b.companyName)).map(c => `<option value="${c.id}">${escapeHtml(c.companyName)}</option>`).join('')}</select></label>
         <label style="font-size:12px;"><input type="checkbox" id="rfqCustView"> Customer view <span class="muted-text">(hides suppliers &amp; internal notes)</span></label>
         <button class="btn-line btn-sm" id="btnPrintCust" style="display:none;">Print customer update</button>
@@ -201,7 +235,7 @@ async function renderRfqList() {
   function filtered() {
     const term = q('rfqSearch').value.trim().toLowerCase(); const show = q('rfqShow').value; const cust = Number(q('rfqCustomer').value) || 0;
     const custView = q('rfqCustView').checked;
-    return all.filter(n => {
+    return (show === 'trash' ? trash : all).filter(n => {
       const closed = isClosedNote(n);
       if (custView && !isRfq(n)) return false;
       if (show === 'open' && closed) return false; if (show === 'rfq' && (!isRfq(n) || closed)) return false;
@@ -220,7 +254,7 @@ async function renderRfqList() {
     const custView = q('rfqCustView').checked; const rows = filtered();
     q('btnPrintCust').style.display = custView ? '' : 'none';
     document.querySelectorAll('.ball-card').forEach(b => b.classList.toggle('ball-active', b.dataset.ball === ballFilter));
-    const showLbl = { open: 'open RFQs and general notes', rfq: 'open RFQs', general: 'open general notes', closed: 'closed RFQs and finished notes', all: 'everything' }[q('rfqShow').value];
+    const showLbl = { open: 'open RFQs and general notes', rfq: 'open RFQs', general: 'open general notes', closed: 'closed RFQs (moved to the Trash 5 days after closing) and finished notes', all: 'everything except the Trash', trash: `RFQs in the Trash (deleted for good ${RFQ_TRASH_DAYS} days after moving there; open one and click “Restore RFQ”)` }[q('rfqShow').value];
     const cust = Number(q('rfqCustomer').value);
     q('rfqBasis').innerHTML = `Showing <b>${escapeHtml(showLbl)}</b>${cust ? ' for <b>' + escapeHtml((custMap[cust] || {}).companyName || '') + '</b>' : ' for all customers'}${ballFilter ? ' · where the ball is with <b>' + escapeHtml(ballFilter) + '</b>' : ''}${q('rfqSearch').value.trim() ? ' · matching “' + escapeHtml(q('rfqSearch').value.trim()) + '”' : ''}${custView ? ' · <b>Customer view</b>: internal details are hidden' : ''} · <b>${rows.length}</b> row${rows.length === 1 ? '' : 's'}.`;
     if (!rows.length) { q('rfqTableWrap').innerHTML = `<div class="empty-inline">${all.length ? 'Nothing matches these filters. Change “Show”, the customer or the search.' : 'No RFQs yet. Click “+ New RFQ” when a customer sends you an RFQ or inquiry.'}</div>`; return; }
@@ -239,7 +273,7 @@ async function renderRfqList() {
       return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"${rowStyle}><td>${escapeHtml(n.noteNo)}</td><td>${escapeHtml(n.referenceEmail || '—')}</td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(n.endUser || '—')}</td><td>${formatDate(n.date)}</td><td>${statusBadge(st)}</td>
         <td>${closed ? '<span class="muted-text">—</span>' : `${ballChip(b)}<div class="wait-text ${waitClass(b)}">${waitText(b)}</div>`}</td>
         <td>${formatDate(lastActivityDate(n))}${lastAct ? `<div class="muted-text">${escapeHtml(lastAct.type + ': ' + lastAct.text)}</div>` : ''}</td>
-        <td>${info.badgeText ? statusBadge(info.badgeText) : `<span class="muted-text">${escapeHtml(info.text)}</span>`}</td></tr>`;
+        <td>${info.badgeText ? statusBadge(info.badgeText) : `<span class="muted-text">${escapeHtml(info.text)}</span>`}${closed && isRfq(n) && closedNotice(n) ? `<div class="muted-text" style="font-size:11px;">${escapeHtml(closedNotice(n))}</div>` : ''}</td></tr>`;
     }).join('')}</tbody></table>`;
   }
 
@@ -277,7 +311,7 @@ async function renderRfqDetail(id) {
 
   const [customer, suppliers, quote] = await Promise.all([DB.dbGet('customers', note.customerId), DB.dbGetAll('suppliers'), note.quotationId ? DB.dbGetAll('quotations').then(all => quoteForRfq(note, all)) : null]);
   note.suppliers = note.suppliers || []; note.activity = note.activity || [];
-  const info = getReminderInfo(note); const b = ballInfo(note); const st = effectiveRfqStatus(note, quote); const closed = note.status === 'Closed';
+  const info = getReminderInfo(note); const b = ballInfo(note); const st = effectiveRfqStatus(note, quote); const closed = note.status === 'Closed'; const trashed = isTrashed(note);
   Router.setBreadcrumb([{ label: 'RFQ Tracker', hash: '/rfq-tracker' }, { label: note.noteNo }]);
   const save = async (msg) => { note.updatedAt = new Date().toISOString(); await DB.dbPut('notes', note); if (msg) await DB.logActivity(msg); renderRfqDetail(id); };
   const supName = (sid) => (note.suppliers.find(s => s.id === sid) || {}).name || '';
@@ -290,10 +324,11 @@ async function renderRfqDetail(id) {
         ${quote ? `<a class="btn-amber" href="#/quotations/${quote.id}">View Quotation ${escapeHtml(quote.quotationNo)}</a>` : `<button class="btn-amber" id="btnConvert" ${closed ? 'disabled' : ''}>Convert to Quotation</button>`}
         <button class="btn-line" id="btnCustUpdate">Customer update (print)</button>
         <button class="btn-line" id="btnEdit">Edit</button>
-        <button class="btn-line" id="btnClose">${closed ? 'Reopen RFQ' : 'Close RFQ'}</button>
+        <button class="btn-line" id="btnClose">${trashed ? 'Restore RFQ' : closed ? 'Reopen RFQ' : 'Close RFQ'}</button>
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
+    ${closed && closedNotice(note) ? `<div class="card ${trashed ? 'danger-card' : ''}"><b>${escapeHtml(closedNotice(note))}</b> ${trashed ? 'Click “Restore RFQ” to bring it back as an open RFQ.' : 'Click “Reopen RFQ” to keep it.'}</div>` : ''}
     ${(info.state === 'overdue' || info.state === 'today') && !closed ? `<div class="card danger-card"><b>${escapeHtml(info.text)}</b> — the ball is with <b>${escapeHtml(b.label)}</b> (${escapeHtml(waitText(b))}). Log what you did, or follow up.</div>` : ''}
 
     <div class="card">
@@ -339,7 +374,11 @@ async function renderRfqDetail(id) {
   const q = (i) => document.getElementById(i);
   q('btnEdit').onclick = () => Router.navigate(`/rfq-tracker/${note.id}/edit`);
   q('btnCustUpdate').onclick = () => printCustomerUpdate([{ n: note, qt: quote }], customer ? customer.companyName : note.title, () => '');
-  q('btnClose').onclick = async () => { note.status = closed ? 'Sourcing' : 'Closed'; await save(`${closed ? 'Reopened' : 'Closed'} RFQ ${note.noteNo}`); };
+  q('btnClose').onclick = async () => {
+    if (closed) { note.status = 'Sourcing'; delete note.closedAt; delete note.trashedAt; delete note.closedReason; note.ballWith = 'Us'; note.ballSince = todayISO(); }
+    else { note.status = 'Closed'; note.closedAt = todayISO(); delete note.trashedAt; }
+    await save(`${trashed ? 'Restored RFQ ' + note.noteNo + ' from the Trash' : closed ? 'Reopened RFQ ' + note.noteNo : 'Closed RFQ ' + note.noteNo}`);
+  };
   q('btnDelete').onclick = async () => { if (!confirm(`Delete ${note.noteNo}? This cannot be undone.`)) return; await DB.dbDelete('notes', note.id); await DB.logActivity(`Deleted RFQ ${note.noteNo}`); toast('Deleted.'); Router.navigate('/rfq-tracker'); };
   if (q('btnConvert')) q('btnConvert').onclick = () => { window.RFQ_PREFILL = { rfqId: note.id, customerId: note.customerId, endUser: note.endUser || '', rfqRef: note.referenceEmail || '' }; Router.navigate('/quotations/new'); };
   if (q('selStatus')) q('selStatus').onchange = async (e) => { note.status = e.target.value; await save(`Set RFQ ${note.noteNo} status to ${note.status}`); };
@@ -489,4 +528,4 @@ async function linkRfqToQuotation(rfqId, quotationId, quotationNo) {
   n.ballWith = 'Us'; n.ballSince = todayISO(); n.ballSupplierEntryId = '';
   await DB.dbPut('notes', n); await DB.logActivity(`Created quotation ${quotationNo} from RFQ ${n.noteNo}`);
 }
-window.RfqTracker = { quoteForRfq, reconcileRfqs, applyQuoteState, latestQuote, linkRfqToQuotation, getReminderInfo, ballInfo, effectiveRfqStatus, customerStatusText, customerNextStep };
+window.RfqTracker = { purgeClosedRfqs, isTrashed, quoteForRfq, reconcileRfqs, applyQuoteState, latestQuote, linkRfqToQuotation, getReminderInfo, ballInfo, effectiveRfqStatus, customerStatusText, customerNextStep };

@@ -1199,6 +1199,9 @@ async function renderQuoteDetail(id) {
     DB.dbGetAll('suppliers')
   ]);
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
+  // The linked RFQ may have been moved to the Trash or deleted for good (closed RFQs are cleaned up automatically).
+  const rfqRec = q.rfqNoteId ? await DB.dbGet('notes', Number(q.rfqNoteId)) : null;
+  const rfqGone = !!q.rfqNoteId && !rfqRec; const rfqInTrash = !!(rfqRec && rfqRec.trashedAt);
   const vatModeLabel = { NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' }[q.vatMode] || (q.vatMode || '—');
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: `${q.quotationNo} (Rev ${padRev(q.revision)})` }]);
@@ -1345,7 +1348,7 @@ async function renderQuoteDetail(id) {
         <div class="detail-item"><div class="detail-label">Customer</div><div class="detail-value">${customer ? `<a href="#/customers/${customer.id}">${escapeHtml(customer.companyName)}</a>` : escapeHtml(q.customerSnapshot?.companyName || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Date</div><div class="detail-value">${formatDate(q.date)}</div></div>
         <div class="detail-item"><div class="detail-label">Valid Until</div><div class="detail-value">${formatDate(q.validUntil) || 'No validity date set'}${expiryInfo.badgeText ? ' ' + statusBadge(expiryInfo.badgeText) : ''}${expiryInfo.state !== 'none' && expiryInfo.state !== 'closed' ? `<br><span class="muted-text">${escapeHtml(expiryInfo.text)}</span>` : ''}</div></div>
-        <div class="detail-item"><div class="detail-label">RFQ Reference</div><div class="detail-value">${escapeHtml(q.rfqRef || '—')}${q.rfqNoteId ? ` <a href="#/rfq-tracker/${q.rfqNoteId}">(open in RFQ Tracker)</a>` : ''}</div></div>
+        <div class="detail-item"><div class="detail-label">RFQ Reference</div><div class="detail-value">${escapeHtml(q.rfqRef || '—')}${q.rfqNoteId ? (rfqGone ? ` <span class="muted-text">(RFQ deleted from the RFQ Tracker)</span>` : ` <a href="#/rfq-tracker/${q.rfqNoteId}">(open in RFQ Tracker${rfqInTrash ? ' — in the Trash' : ''})</a>`) : ''}</div></div>
         <div class="detail-item"><div class="detail-label">Project</div><div class="detail-value">${escapeHtml(q.projectName || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">End-User</div><div class="detail-value">${escapeHtml(q.endUser || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Salesperson</div><div class="detail-value">${escapeHtml(q.salesperson || '—')}</div></div>
