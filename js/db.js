@@ -5,7 +5,7 @@
    ============================================================ */
 
 const DB_NAME = 'HadrontechDB';
-const DB_VERSION = 8; // v8 adds the 'partners' and 'distributions' stores — existing data is untouched on upgrade.
+const DB_VERSION = 9; // v9 adds the 'deliveryReceipts' store (v8 added 'partners' and 'distributions') — existing data is untouched on upgrade.
 let _db = null;
 
 /** Opens (and if needed, creates/upgrades) the database. Call once at startup. */
@@ -92,6 +92,10 @@ function openDB() {
       // made, so changing a partner's default % later never rewrites distribution history.
       mk('distributions', { keyPath: 'id', autoIncrement: true }, [
         ['distributionNo', 'distributionNo', true], ['date', 'date']
+      ]);
+      // Delivery Receipts: one per delivery recorded on a Sales Order (proof of delivery, no prices).
+      mk('deliveryReceipts', { keyPath: 'id', autoIncrement: true }, [
+        ['drNo', 'drNo', true], ['salesOrderId', 'salesOrderId'], ['date', 'date']
       ]);
       mk('counters', { keyPath: 'name' });
       mk('settings', { keyPath: 'key' });
@@ -186,6 +190,7 @@ async function ensureCounters() {
     { name: 'rfq', prefix: 'HT-RFQ', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'partner', prefix: 'HT-PTR', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'employee', prefix: 'HT-EMP', next: 1, pattern: 'YEARSEQ', digits: 4 },   // Employee # (printed on payslips)
+    { name: 'deliveryReceipt', prefix: 'HT-DR', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'distribution', prefix: 'HT-DIST', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {

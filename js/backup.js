@@ -3,7 +3,7 @@
    This is the primary safety net for an offline, single-device app.
    ============================================================ */
 
-const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'technicalOffers', 'expenses', 'notes', 'partners', 'distributions', 'counters', 'settings', 'activity'];
+const BACKUP_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs', 'enquiries', 'stockMovements', 'proformaInvoices', 'technicalOffers', 'expenses', 'notes', 'partners', 'distributions', 'deliveryReceipts', 'counters', 'settings', 'activity'];
 const APP_VERSION = '1.0.0';
 
 Router.route('/settings/backup', renderBackupPage);
@@ -80,6 +80,7 @@ async function renderBackupPage() {
         <button class="btn-line btn-sm" data-csv="notes">RFQ Tracker.csv</button>
         <button class="btn-line btn-sm" data-csv="partners">Partners.csv</button>
         <button class="btn-line btn-sm" data-csv="distributions">Distributions.csv</button>
+        <button class="btn-line btn-sm" data-csv="deliveryReceipts">Delivery Receipts.csv</button>
       </div>
     </div>
   `;
@@ -305,6 +306,7 @@ const CSV_COLUMNS = {
   expenses: [{ label: 'Expense No', value: 'expenseNo' }, { label: 'Date', value: 'date' }, { label: 'Category', value: 'category' }, { label: 'Description', value: 'description' }, { label: 'Payee', value: 'payee' }, { label: 'Paid to / Bought from', value: 'vendor' }, { label: 'Amount', value: 'amount' }, { label: 'Payment Method', value: 'paymentMethod' }, { label: 'Reference No', value: 'referenceNo' }, { label: 'Created By', value: 'createdBy' }],
   notes: [{ label: 'Ref No', value: 'noteNo' }, { label: 'Type', value: r => r.kind === 'RFQ' ? 'RFQ' : 'General note' }, { label: 'Date', value: 'date' }, { label: 'Customer / For', value: 'title' }, { label: 'RFQ / Inquiry Reference', value: 'referenceEmail' }, { label: 'End-User', value: 'endUser' }, { label: 'Ball With', value: 'ballWith' }, { label: 'Quotation', value: 'quotationNo' }, { label: 'Suppliers Asked', value: r => (r.suppliers || []).map(s => s.name).join('; ') }, { label: 'Remind After (days)', value: 'remindAfterDays' }, { label: 'Status', value: 'status' }, { label: 'Created By', value: 'createdBy' }],
   partners: [{ label: 'Partner No', value: 'partnerNo' }, { label: 'Name', value: 'name' }, { label: 'Role', value: 'role' }, { label: 'Default Split %', value: 'defaultSplitPercent' }, { label: 'Status', value: 'status' }],
+  deliveryReceipts: [{ label: 'Receipt No', value: 'drNo' }, { label: 'Delivery Date', value: 'date' }, { label: 'Customer', value: r => (r.customerSnapshot || {}).companyName || '' }, { label: 'Sales Order', value: 'soNo' }, { label: 'Customer PO', value: 'customerPoNo' }, { label: 'Official Invoice No', value: 'invoiceNo' }, { label: 'Delivered By', value: 'deliveredBy' }, { label: 'Vehicle / Courier / Waybill', value: 'vehicle' }, { label: 'Items', value: r => (r.lines || []).map(l => l.qty + ' ' + l.uom + ' ' + l.description).join(' | ') }, { label: 'Status', value: 'status' }, { label: 'Signed By', value: 'receivedBy' }, { label: 'Signed Copy Received', value: 'receivedDate' }, { label: 'Created By', value: 'createdBy' }],
   distributions: [{ label: 'Distribution No', value: 'distributionNo' }, { label: 'Month', value: 'month' }, { label: 'Gross Profit', value: 'grossProfitTotal' }, { label: 'Expenses', value: 'expensesTotal' }, { label: 'Net Profit', value: 'netProfit' }, { label: 'Reserve %', value: 'reservePercent' }, { label: 'Reserve Amount', value: 'reserveAmount' }, { label: 'Distributable Amount', value: 'distributableAmount' }, { label: 'Cash Received in Month', value: 'cashReceivedInMonth' }, { label: 'Reference', value: 'reference' }, { label: 'Created By', value: 'createdBy' }]
 };
 

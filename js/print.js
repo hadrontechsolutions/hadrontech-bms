@@ -334,4 +334,29 @@ async function printPayslips(dist, onlyIdx) {
   printShell(onlyIdx === null || onlyIdx === undefined ? `Payslips ${dist.distributionNo}` : `Payslip ${D.slipNumber(dist, dist.splits[onlyIdx], onlyIdx)}`, pages);
 }
 
-window.Print = { printPayslips, printQuotation, printSalesOrder, printSupplierPO, printProformaInvoice, printTechnicalOffer };
+/** Delivery Receipt: proof of delivery. No prices. The customer signs the "Received" box. */
+async function printDeliveryReceipt(dr) {
+  const settings = await DB.getSettings();
+  const rows = (dr.lines || []).map((l, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(l.description)}${l.brand || l.modelNo ? `<br><span style="font-size:10px;color:#666;">${escapeHtml([l.brand, l.modelNo].filter(Boolean).join(' · '))}</span>` : ''}</td><td class="p-num">${l.qty} ${escapeHtml(l.uom)}</td><td class="p-num">${l.ordered} ${escapeHtml(l.uom)}</td><td class="p-num">${l.balance} ${escapeHtml(l.uom)}</td></tr>`).join('');
+  const cust = dr.customerSnapshot || {};
+  printShell(dr.drNo, `
+    <div class="p-head">${coBlock(settings)}
+      <div><div class="p-doc-title">Delivery Receipt</div><div class="p-doc-no">${escapeHtml(dr.drNo)}</div>
+      <div class="p-dates">Date: ${formatDate(dr.date)}${dr.customerPoNo ? `<br>Your PO #: ${escapeHtml(dr.customerPoNo)}` : ''}${dr.soNo ? `<br>Our Order #: ${escapeHtml(dr.soNo)}` : ''}${dr.invoiceNo ? `<br>Invoice #: ${escapeHtml(dr.invoiceNo)}` : ''}</div></div>
+    </div>
+    <div class="p-grid2">
+      <div><div class="p-label">Delivered To</div><b>${escapeHtml(cust.companyName || '')}</b>${cust.contactPerson ? `<br><span style="font-size:11px;">Attn: ${escapeHtml(cust.contactPerson)}</span>` : ''}<br><span style="font-size:11px;white-space:pre-line;">${escapeHtml(dr.shippingAddress || '—')}</span></div>
+      <div><div class="p-label">Delivery</div><div style="font-size:11px;">Delivered by: ${escapeHtml(dr.deliveredBy || '—')}${dr.vehicle ? `<br>Vehicle / Courier / Waybill: ${escapeHtml(dr.vehicle)}` : ''}</div></div>
+    </div>
+    <table class="p-items"><thead><tr><th>#</th><th>Description</th><th>Qty Delivered</th><th>Qty Ordered</th><th>Balance to Deliver</th></tr></thead><tbody>${rows}</tbody></table>
+    ${dr.remarks ? `<div class="p-terms"><b>Remarks:</b>\n${escapeHtml(dr.remarks)}</div>` : ''}
+    <div class="p-terms" style="margin-top:18px;">Received the above items in good order and condition.</div>
+    <div class="p-sign">
+      <div><div class="box">Delivered by: ${escapeHtml(dr.deliveredBy || '')}<br>Signature over printed name</div></div>
+      <div><div class="box">Received by (customer): Signature over printed name<br>Date received: ____________________</div></div>
+    </div>
+    <div class="p-foot">${escapeHtml(settings.companyName)} · Delivery Receipt — proof of delivery only. The official invoice is issued separately.</div>
+  `);
+}
+
+window.Print = { printDeliveryReceipt, printPayslips, printQuotation, printSalesOrder, printSupplierPO, printProformaInvoice, printTechnicalOffer };

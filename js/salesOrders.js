@@ -180,6 +180,7 @@ async function renderSODetail(id) {
     DB.dbQueryIndex('proformaInvoices', 'salesOrderId', so.id)
   ]);
   const existingPI = existingPIs[0] || null;
+  const deliveryReceipts = (await DB.dbQueryIndex('deliveryReceipts', 'salesOrderId', so.id)).sort((a, b) => String(a.drNo).localeCompare(String(b.drNo)));
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
 
   Router.setBreadcrumb([{ label: 'Sales Orders', hash: '/sales-orders' }, { label: so.soNo }]);
@@ -319,6 +320,10 @@ async function renderSODetail(id) {
 
     ${relatedTable('Supplier Purchase Orders', supplierPOs, ['poNo', 'poDate', 'status', 'totalCost'], '/supplier-pos', so.currency)}
 
+    <div class="card"><h3 class="section-title">Delivery Receipts</h3>
+      ${deliveryReceipts.length ? `<table class="data-table compact"><thead><tr><th>Receipt No.</th><th>Delivery Date</th><th>Items</th><th>Status</th></tr></thead><tbody>${deliveryReceipts.map(d => `<tr class="clickable-row" data-hash="/delivery-receipts/${d.id}"><td><a href="#/delivery-receipts/${d.id}">${escapeHtml(d.drNo)}</a></td><td>${formatDate(d.date)}</td><td>${(d.lines || []).map(l => escapeHtml(l.qty + ' ' + l.uom + ' ' + l.description)).join('; ')}</td><td>${statusBadge(d.status)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-inline">No deliveries yet. Click “Record Delivery” — a numbered Delivery Receipt is created for each delivery, ready to print and sign.</div>'}
+    </div>
+
     <div id="recordDeliveryHost"></div>
 
     <div class="meta-strip">Created ${formatDate(so.createdAt)} by ${escapeHtml(so.createdBy || '—')} · Last modified ${formatDate(so.updatedAt)} by ${escapeHtml(so.modifiedBy || '—')}</div>
@@ -341,6 +346,7 @@ async function renderSODetail(id) {
     renderSODetail(id);
   }));
   document.getElementById('btnDelete').onclick = async () => {
+    if (deliveryReceipts.length) { alert(`Sales order ${so.soNo} has ${deliveryReceipts.length} delivery receipt(s) (${deliveryReceipts.map(d => d.drNo).join(', ')}) and can't be deleted. Void the receipts first if they were made by mistake.`); return; }
     if (!confirm(`Delete sales order ${so.soNo}? This cannot be undone.`)) return;
     await DB.dbDelete('salesOrders', so.id);
     await DB.logActivity(`Deleted sales order ${so.soNo}`);
@@ -415,6 +421,13 @@ async function renderRecordDeliveryForm(so, id) {
     <div class="card">
       <h3 class="section-title">Record Delivery</h3>
       <p class="muted-text">Enter how many units actually went out to the customer for each line. This can be done more than once for partial shipments — only the quantity entered here leaves stock. You can't deliver more than what's actually On Hand — if a supplier order hasn't been received yet, receive it first.</p>
+      <div class="form-grid" style="margin-bottom:12px;">
+        <div class="field"><label>Delivery date</label><input type="date" id="dl_date" value="${todayISO()}"></div>
+        <div class="field"><label>Delivered by</label><input id="dl_by" value="${escapeHtml((await DB.getSettings()).userName || '')}"></div>
+        <div class="field"><label>Vehicle / courier / waybill (optional)</label><input id="dl_vehicle"></div>
+        <div class="field"><label>Official invoice no. (BIR, optional)</label><input id="dl_inv"></div>
+        <div class="field field-wide"><label>Remarks (optional, printed on the receipt)</label><input id="dl_remarks"></div>
+      </div>
       <table class="data-table compact">
         <thead><tr><th>Description</th><th>Ordered</th><th>Delivered So Far</th><th>Delivering Now</th></tr></thead>
         <tbody>
@@ -447,7 +460,7 @@ async function renderRecordDeliveryForm(so, id) {
     const rows = [...host.querySelectorAll('tr[data-lineid]')];
     const settings = await DB.getSettings();
     const now = new Date().toISOString();
-    let anyDelivered = false;
+    let anyDelivered = false; const deliveredNow = [], moveIds = [];
     const projAvailNow = await projectAvailableByLine(so);
 
     for (const row of rows) {
@@ -473,14 +486,14 @@ async function renderRecordDeliveryForm(so, id) {
       }
 
       line.deliveredQty = r2((line.deliveredQty || 0) + qtyNow);
-      anyDelivered = true;
+      anyDelivered = true; deliveredNow.push({ lineId, qty: qtyNow });
 
       if (line.itemId && !line.compNo) {
-        await DB.dbAdd('stockMovements', {
+        moveIds.push(await DB.dbAdd('stockMovements', {
           productId: Number(line.itemId), type: 'Delivery', qty: -qtyNow, date: todayISO(),
           reference: `Sales Order ${so.soNo}`, referenceId: so.id, referenceLineId: lineId,
           note: '', createdBy: settings.userName, createdAt: now
-        });
+        }));
       }
     }
 
@@ -496,8 +509,12 @@ async function renderRecordDeliveryForm(so, id) {
     so.updatedAt = now; so.modifiedBy = settings.userName;
     await DB.dbPut('salesOrders', so);
     await DB.logActivity(`Recorded delivery for sales order ${so.soNo}`);
-    toast('Delivery recorded.');
-    renderSODetail(id);
+    // One numbered Delivery Receipt per delivery (printable, no prices, signed by the customer).
+    const g = (i) => (document.getElementById(i) || {}).value || '';
+    const made = await window.DeliveryReceipts.createDeliveryReceipt(so, deliveredNow, { date: g('dl_date'), deliveredBy: g('dl_by').trim(), vehicle: g('dl_vehicle').trim(), invoiceNo: g('dl_inv').trim(), remarks: g('dl_remarks').trim() });
+    for (const mid of moveIds) { const m = await DB.dbGet('stockMovements', mid); if (m) { m.reference = `Delivery Receipt ${made.drNo} (${so.soNo})`; await DB.dbPut('stockMovements', m); } }
+    toast(`Delivery recorded — Delivery Receipt ${made.drNo} created.`);
+    Router.navigate(`/delivery-receipts/${made.id}`);
   };
 }
 

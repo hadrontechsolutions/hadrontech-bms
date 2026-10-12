@@ -29,6 +29,7 @@ This document should still be kept current by hand, since it explains *why* thin
 | `notes` | notes.js (RFQ Tracker; legacy plain notes kept as "General note") | ✅ | ✅ | ✅ | ✅ (RFQs needing follow-up) | — |
 | `partners` | partners.js (generic entity engine) | ✅ | ✅ | ✅ | — | — |
 | `distributions` | distributions.js | ✅ | ✅ | ✅ | ✅ (Business Reserve) | — |
+| `deliveryReceipts` | deliveryReceipts.js | ✅ | ✅ | ✅ | — | — |
 | `counters` | db.js | ✅ | — (internal) | — | — | — |
 | `settings` | settings.js | ✅ | — (internal) | — | — | — |
 | `activity` | db.js | ✅ | — (internal) | — | — | — |
@@ -170,3 +171,9 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Every Partner / Employee gets an automatic number: Employees `HT-EMP-<year>-NNNN` (counter `employee`), Partners `HT-PTR-<year>-NNNN`. Shown on the Edit form, in the list and on the Distribution; printed on the payslip (copied onto each split as `partnerNo`, falling back to the person's current number for older distributions). Changing the Type re-issues a number with the right prefix. `cfg.beforeSave` in the entity engine may be async.
 - A month with no profit (Net Profit <= 0) pays out ₱0 and adds ₱0 to the reserve (`computeDistribution`); the form says so.
 - Expense category **Packaging & Supplies** (account "Packaging Supplies Expense"). Test: test-employee-number.js.
+
+## Delivery Receipts (js/deliveryReceipts.js, routes `#/delivery-receipts…`, store `deliveryReceipts`, DB v9, counter `deliveryReceipt` = `HT-DR-<year>-NNNN`)
+- Created automatically by **Sales Order → Record Delivery** (one numbered receipt per delivery, incl. partial ones). The form also asks delivery date, delivered by, vehicle/courier/waybill, the **official BIR invoice no.** (written on the receipt; the BIR invoice itself is a separate physical document) and remarks. After saving, the receipt page opens.
+- A receipt snapshots the delivered lines (description, qty delivered, ordered, delivered so far, balance), customer, ship-to and customer PO #. **No prices.** Print = `Print.printDeliveryReceipt` (signature boxes: delivered by / received by customer + date).
+- Status: Issued → Signed copy received (name + date) · Voided. **Void** (reason required) puts the quantities back on the Sales Order, returns stock and recalculates the order status; receipts are never deleted. A Sales Order that has receipts cannot be deleted. Stock movements of a delivery refer to the receipt number.
+- Sidebar entry sits between Supplier POs and Payments; the Sales Order page lists its receipts; included in Backup, Delivery Receipts.csv and Search. Test: test-delivery-receipts.js.
