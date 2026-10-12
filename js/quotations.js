@@ -392,6 +392,14 @@ async function renderQuoteForm(id) {
   if (!record && window.RFQ_PREFILL) {
     const pre = window.RFQ_PREFILL; window.RFQ_PREFILL = null;
     q.customerId = pre.customerId; q.rfqRef = pre.rfqRef || ''; q.endUser = pre.endUser || ''; q.rfqNoteId = pre.rfqId;
+    // The customer is already chosen, so the dropdown's change handler never fires: apply the
+    // customer's own saved terms here (same rule as picking the customer by hand).
+    const preCust = customers.find(c => c.id === Number(pre.customerId));
+    if (preCust) {
+      q.paymentTerms = preCust.paymentTerms || settings.defaultPaymentTerms;
+      q.incoterms = preCust.incoterms || settings.defaultIncoterms;
+      if (preCust.salesperson) q.salesperson = preCust.salesperson;
+    }
   }
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: isEdit ? q.quotationNo : 'New Quotation' }]);
