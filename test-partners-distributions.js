@@ -68,8 +68,8 @@ async function main() {
   console.log('STEP 5: THE ACTUAL FIX: Net Profit correctly computes as Gross Profit minus Expenses (40,000 - 8,000 = 32,000), not gross profit alone:', totalsText.includes('32,000.00'));
 
   /* ============ Reserve applies to Net Profit, not Gross Profit ============ */
-  doc.getElementById('f_reservePercent').value = '25';
-  doc.getElementById('f_reservePercent').dispatchEvent(new win.Event('input'));
+  doc.querySelector('.sp-percent').value = '75';
+  doc.querySelector('.sp-percent').dispatchEvent(new win.Event('input'));
   await wait(30);
   const totalsAfterReserve = doc.getElementById('distTotalsPreview').textContent;
   console.log('STEP 6: Reserve is correctly applied to Net Profit (25% of 32,000 = 8,000), not to Gross Profit directly:', totalsAfterReserve.includes('8,000.00'));
@@ -80,8 +80,8 @@ async function main() {
   console.log('STEP 8: THE CASH CHECK: Distributable Amount (24,000) exceeds actual cash received in September (25,000)? No -- so it should show the informational cash figure, NOT a warning:', cashWarningText.includes('25,000.00') && !cashWarningText.includes('var(--danger)'));
 
   // Now push reserve down so distributable exceeds what was actually collected
-  doc.getElementById('f_reservePercent').value = '0';
-  doc.getElementById('f_reservePercent').dispatchEvent(new win.Event('input'));
+  doc.querySelector('.sp-percent').value = '100';
+  doc.querySelector('.sp-percent').dispatchEvent(new win.Event('input'));
   await wait(30);
   const cashWarningText2 = doc.getElementById('cashWarning').innerHTML;
   console.log('STEP 9: With reserve at 0%, Distributable (32,000) now exceeds Cash Received (25,000) -- the red warning correctly appears:', cashWarningText2.includes('var(--danger)') && cashWarningText2.includes('exceeds'));
@@ -92,8 +92,8 @@ async function main() {
   console.log('STEP 11: REGRESSION: the split amount still computes correctly (100% of 32,000 = 32,000):', doc.querySelector('.sp-amount').textContent.includes('32,000.00'));
 
   /* ============ Save and verify the persisted record ============ */
-  doc.getElementById('f_reservePercent').value = '25';
-  doc.getElementById('f_reservePercent').dispatchEvent(new win.Event('input'));
+  doc.querySelector('.sp-percent').value = '75';
+  doc.querySelector('.sp-percent').dispatchEvent(new win.Event('input'));
   await wait(30);
   doc.getElementById('f_reference').value = 'September profit split';
   doc.getElementById('distForm').dispatchEvent(new win.Event('submit', { cancelable: true }));

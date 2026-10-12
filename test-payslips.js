@@ -16,10 +16,10 @@ async function main() {
   const now = new Date().toISOString();
   for (const [n, r, pct] of [['Gian', 'Owner', 40], ['Wife', 'Operations', 30], ['Father', 'Adviser', 30]]) await win.DB.dbAdd('partners', { partnerNo: 'P-' + n, name: n, role: r, defaultSplitPercent: pct, status: 'Active', createdAt: now });
   await go('#/distributions/new');
-  fire(doc.getElementById('f_grossProfit'), '100000'); fire(doc.getElementById('f_expenses'), '20000'); fire(doc.getElementById('f_reservePercent'), '10');
+  fire(doc.getElementById('f_grossProfit'), '100000'); fire(doc.getElementById('f_expenses'), '20000');
   doc.getElementById('distForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(250);
   let dist = (await win.DB.dbGetAll('distributions'))[0];
-  ok('1 distribution saved: distributable 72,000 and shares 28,800 / 21,600 / 21,600', dist && dist.distributableAmount === 72000 && dist.splits.map(s => s.amount).join() === '28800,21600,21600', dist && JSON.stringify(dist.splits.map(s => s.amount)));
+  ok('1 distribution saved: paid out 80,000 (shares are % of Net Profit) = 32,000 / 24,000 / 24,000', dist && dist.distributableAmount === 80000 && dist.reserveAmount === 0 && dist.splits.map(s => s.amount).join() === '32000,24000,24000', dist && JSON.stringify(dist.splits.map(s => s.amount)));
   ok('2 each split keeps the partner role and a stable payslip sequence 1-3', dist.splits.map(s => s.partnerRole).join() === 'Owner,Operations,Adviser' && dist.splits.map(s => s.slipSeq).join() === '1,2,3');
   await go('#/distributions/' + dist.id, 150);
   const body = doc.getElementById('content').textContent;
@@ -30,12 +30,12 @@ async function main() {
   let tr = doc.querySelector('tr[data-ai="0"]'); fire(tr.querySelector('.adj-label'), 'Cash advance, Sept 12'); fire(tr.querySelector('.adj-amount'), '5000');
   doc.getElementById('btnAddAdj').click(); await wait(30);
   tr = doc.querySelector('tr[data-ai="1"]'); fire(tr.querySelector('.adj-label'), 'Bonus'); fire(tr.querySelector('.adj-kind'), 'add', 'change'); fire(tr.querySelector('.adj-amount'), '1000');
-  ok('4 live Net Pay = 21,600 − 5,000 + 1,000 = 17,600', /17,600\.00/.test(doc.getElementById('slipNet').textContent), doc.getElementById('slipNet').textContent);
+  ok('4 live Net Pay = 24,000 − 5,000 + 1,000 = 20,000', /20,000\.00/.test(doc.getElementById('slipNet').textContent), doc.getElementById('slipNet').textContent);
   fire(doc.getElementById('slip_paidDate'), '2026-10-10'); fire(doc.getElementById('slip_method'), 'Bank Transfer', 'change'); fire(doc.getElementById('slip_ref'), 'BDO-123');
   doc.getElementById('btnSaveSlip').click(); await wait(250);
   dist = await win.DB.dbGet('distributions', dist.id);
-  ok('5 saved: adjustments, net pay 17,600, paid date, method and reference', dist.splits[1].netPay === 17600 && dist.splits[1].adjustments.length === 2 && dist.splits[1].paidDate === '2026-10-10' && dist.splits[1].paidMethod === 'Bank Transfer' && dist.splits[1].paidReference === 'BDO-123', JSON.stringify(dist.splits[1]));
-  ok('6 detail shows Paid for partner 2 and Unpaid for the others; Net Pay column updated', /Paid/.test(doc.getElementById('content').textContent) && (doc.getElementById('content').textContent.match(/Unpaid/g) || []).length === 2 && /17,600\.00/.test(doc.getElementById('content').textContent));
+  ok('5 saved: adjustments, net pay 17,600, paid date, method and reference', dist.splits[1].netPay === 20000 && dist.splits[1].adjustments.length === 2 && dist.splits[1].paidDate === '2026-10-10' && dist.splits[1].paidMethod === 'Bank Transfer' && dist.splits[1].paidReference === 'BDO-123', JSON.stringify(dist.splits[1]));
+  ok('6 detail shows Paid for partner 2 and Unpaid for the others; Net Pay column updated', /Paid/.test(doc.getElementById('content').textContent) && (doc.getElementById('content').textContent.match(/Unpaid/g) || []).length === 2 && /20,000\.00/.test(doc.getElementById('content').textContent));
   // negative net rejected
   doc.querySelectorAll('[data-slip-edit]')[2].click(); await wait(60);
   doc.getElementById('btnAddAdj').click(); await wait(30);
@@ -45,7 +45,7 @@ async function main() {
   // printing
   let printed = ''; win.open = () => ({ document: { write: (h) => { printed = h; }, close: () => {} } });
   doc.querySelectorAll('[data-slip-print]')[1].click(); await wait(200);
-  ok('8 payslip for partner 2: number, period, name/role, business totals, deduction, bonus, Net Pay', new RegExp(dist.distributionNo + '-02').test(printed) && /Payslip/i.test(printed) && /Wife/.test(printed) && /Operations/.test(printed) && /Cash advance, Sept 12/.test(printed) && /Bonus/.test(printed) && /₱17,600\.00/.test(printed) && /₱72,000\.00/.test(printed) && /Paid on/.test(printed) && /BDO-123/.test(printed), printed.slice(0, 60));
+  ok('8 payslip for partner 2: number, period, name/role, business totals, deduction, bonus, Net Pay', new RegExp(dist.distributionNo + '-02').test(printed) && /Payslip/i.test(printed) && /Wife/.test(printed) && /Operations/.test(printed) && /Cash advance, Sept 12/.test(printed) && /Bonus/.test(printed) && /₱20,000\.00/.test(printed) && /₱80,000\.00/.test(printed) && /Paid on/.test(printed) && /BDO-123/.test(printed), printed.slice(0, 60));
   ok('9 it shows ONLY her own amount: no other partner names or shares (28,800 / Gian / Father)', !/Gian|Father|28,800/.test(printed.replace(/Hadrontech[^<]*/g, '')), (printed.match(/Gian|Father|28,800/g) || []).join());
   ok('9b unpaid wording and signature lines present', /Received by/.test(printed) && !/NaN|undefined/.test(printed));
   doc.getElementById('btnPrintAllSlips').click(); await wait(200); if (process.env.DUMP) fs.writeFileSync(process.env.DUMP, printed);
@@ -76,7 +76,7 @@ async function main() {
   ok('22 employee saved with type Employee', willie && willie.partnerType === 'Employee');
   await go('#/distributions'); ok('23 Distributions button reads "Manage Partners & Employees"', /Manage Partners & Employees/.test(doc.getElementById('content').textContent) || !!([...doc.querySelectorAll('a')].find(a => /Manage Partners/.test(a.textContent) && /Employees/.test(a.textContent))));
   await go('#/distributions/new');
-  fire(doc.getElementById('f_grossProfit'), '7021.15'); fire(doc.getElementById('f_expenses'), '1457.15'); fire(doc.getElementById('f_reservePercent'), '0');
+  fire(doc.getElementById('f_grossProfit'), '7021.15'); fire(doc.getElementById('f_expenses'), '1457.15'); [...doc.querySelectorAll('.sp-percent')].forEach((el, i, all) => fire(el, i === all.length - 1 ? '10' : '30'));
   doc.getElementById('distForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(250);
   const d2 = (await win.DB.dbGetAll('distributions')).find(d => d.id !== dist.id && d.splits.some(s => s.partnerName === 'Willie Sicat'));
   const wi = d2.splits.findIndex(s => s.partnerName === 'Willie Sicat');
@@ -88,7 +88,7 @@ async function main() {
   ok('27 and does not call itself a partner payslip / profit distribution', !/partner's share/.test(printed) && /confidential statement of your earnings/.test(printed));
   const gi = d2.splits.findIndex(s => s.partnerName === 'Gian');
   doc.querySelectorAll('[data-slip-print]')[gi].click(); await wait(200);
-  ok('28 a partner payslip on the same distribution still shows the business results', /Gross Profit/.test(printed) && /Distributable Amount/.test(printed) && !/Willie/.test(printed));
+  ok('28 a partner payslip on the same distribution still shows the business results', /Gross Profit/.test(printed) && /Kept in the Business Reserve/.test(printed) && !/Willie/.test(printed));
   doc.getElementById('btnPrintAllSlips').click(); await wait(200);
   ok('29 Print All mixes both kinds correctly (business results appear for partners only)', (printed.match(/Gross Profit/g) || []).length === d2.splits.filter(s => s.partnerName !== 'Willie Sicat').length && /Incentive for/.test(printed));
   // switching an existing person to Employee protects their older payslips too

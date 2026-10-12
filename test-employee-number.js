@@ -36,10 +36,10 @@ let fails = 0, pass = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ?
   ok('9 payslip prints the Employee #', slip.includes('Employee #:') && slip.includes(d.splits[0].partnerNo), slip.slice(0, 80));
 
   // loss month
-  const c = win.computeDistribution(7021.15, 10195.15, 10, [{ percent: 15 }]);
+  const c = win.computeDistribution(7021.15, 10195.15, [{ percent: 15 }]);
   ok('10 loss month: reserve 0, distributable 0, splits 0', c.reserveAmount === 0 && c.distributableAmount === 0 && c.splits[0].amount === 0 && c.netProfit === -3174, JSON.stringify(c));
-  const p = win.computeDistribution(10000, 4000, 10, [{ percent: 50 }]);
-  ok('11 profit month unchanged (net 6000, reserve 600, distributable 5400, split 2700)', p.reserveAmount === 600 && p.distributableAmount === 5400 && p.splits[0].amount === 2700);
+  const p = win.computeDistribution(10000, 4000, [{ percent: 50 }]);
+  ok('11 profit month: net 6000, 50% share = 3000 paid out, 3000 stays in the reserve', p.reserveAmount === 3000 && p.distributableAmount === 3000 && p.splits[0].amount === 3000 && p.reservePercent === 50);
   ok('12 Packaging & Supplies category exists', win.ExpenseCategories.includes('Packaging & Supplies'));
   ok('no script errors', errs.length === 0, errs.join('|'));
   console.log(`${pass} passed, ${fails} failed`); process.exit(fails ? 1 : 0);

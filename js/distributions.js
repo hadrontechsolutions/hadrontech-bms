@@ -12,10 +12,10 @@
 
    Waterfall: Gross Profit (sum of every Sales Order's own computed
    margin, across the month) MINUS Expenses (sum of every Expense
-   recorded in that same month) = Net Profit -> minus Reserve % (an
-   optional extra buffer, since real expenses are already subtracted
-   here) -> Distributable Amount -> split among partners by their
-   (editable, per-distribution) %.
+   recorded in that same month) = Net Profit -> each partner / employee
+   receives their (editable, per-distribution) % OF NET PROFIT. Whatever
+   is not allocated (100% minus the shares) stays in the business as the
+   Business Reserve - there is no separate Reserve % to fill in.
 
    Still fully manual: the business owner decides WHEN to create a
    distribution and picks WHICH month it covers. Nothing is
@@ -26,9 +26,9 @@
 
    Cash Received in the month (actual customer payments collected,
    from Proforma Invoice payment history) is shown alongside the
-   Distributable Amount as a sanity check -- Net Profit is still an
+   amount distributed as a sanity check -- Net Profit is still an
    earned/accrual figure, and some of a month's orders may not be
-   fully paid yet. If Distributable Amount exceeds Cash Received,
+   fully paid yet. If the amount distributed exceeds Cash Received,
    a live red warning appears. A nudge, not a block.
    ============================================================ */
 
@@ -86,20 +86,19 @@ function computeMonthlyFigures(month, salesOrders, expenses, proformaInvoices) {
   return { ordersCount: ordersInMonth.length, grossProfitTotal, expensesCount: expensesInMonth.length, expensesTotal, cashReceivedInMonth, zeroCostOrders };
 }
 
-function computeDistribution(grossProfitTotal, expensesTotal, reservePercent, splits) {
+/** Shares are a % of NET PROFIT. `distributableAmount` = the total paid out to partners/employees; the rest
+ *  (net profit minus that) is retained as the Business Reserve. A month with no profit pays out and retains nothing. */
+function computeDistribution(grossProfitTotal, expensesTotal, splits) {
   const gross = Number(grossProfitTotal) || 0;
   const expenses = Number(expensesTotal) || 0;
   const netProfit = r2(gross - expenses);
-  const resPct = Number(reservePercent) || 0;
-  // A month with no profit sets nothing aside and distributes nothing (a loss never reduces the reserve).
-  const reserveAmount = netProfit > 0 ? r2(netProfit * resPct / 100) : 0;
-  const distributableAmount = netProfit > 0 ? r2(netProfit - reserveAmount) : 0;
-  const splitsWithAmounts = splits.map(s => ({
-    ...s,
-    amount: r2(distributableAmount * (Number(s.percent) || 0) / 100)
-  }));
+  const base = netProfit > 0 ? netProfit : 0;
+  const splitsWithAmounts = splits.map(s => ({ ...s, amount: r2(base * (Number(s.percent) || 0) / 100) }));
   const totalPercent = r2(splits.reduce((sum, s) => sum + (Number(s.percent) || 0), 0));
-  return { gross, expenses, netProfit, reserveAmount, distributableAmount, splits: splitsWithAmounts, totalPercent };
+  const distributableAmount = r2(splitsWithAmounts.reduce((t, s) => t + s.amount, 0));
+  const reserveAmount = r2(base - distributableAmount);
+  const reservePercent = r2(Math.max(0, 100 - totalPercent));
+  return { gross, expenses, netProfit, reserveAmount, reservePercent, distributableAmount, splits: splitsWithAmounts, totalPercent };
 }
 
 
@@ -240,13 +239,16 @@ async function renderDistributionDetail(id) {
         <div class="line"><span>Gross Profit (${dist.month})</span><span>${formatMoney(dist.grossProfitTotal, 'PHP')}</span></div>
         <div class="line"><span>Expenses (${dist.month})</span><span>-${formatMoney(dist.expensesTotal, 'PHP')}</span></div>
         <div class="line grand"><span>Net Profit</span><span>${formatMoney(dist.netProfit, 'PHP')}</span></div>
-        <div class="line"><span>Reserve (${dist.reservePercent}%)</span><span>-${formatMoney(dist.reserveAmount, 'PHP')}</span></div>
-        <div class="line grand"><span>Distributable Amount</span><span>${formatMoney(dist.distributableAmount, 'PHP')}</span></div>
+        ${dist.splitBasis === 'net'
+          ? `<div class="line"><span>Paid out to partners &amp; employees (${r2(100 - dist.reservePercent)}% of Net Profit)</span><span>-${formatMoney(dist.distributableAmount, 'PHP')}</span></div>
+        <div class="line grand"><span>Kept in the Business Reserve (${dist.reservePercent}% of Net Profit)</span><span>${formatMoney(dist.reserveAmount, 'PHP')}</span></div>`
+          : `<div class="line"><span>Reserve (${dist.reservePercent}%)</span><span>-${formatMoney(dist.reserveAmount, 'PHP')}</span></div>
+        <div class="line grand"><span>Distributable Amount</span><span>${formatMoney(dist.distributableAmount, 'PHP')}</span></div>`}
       </div>
       <div class="detail-item" style="margin-top:10px;">
         <div class="detail-label">Cash Received This Month (actual, all customer payments)</div>
         <div class="detail-value">${formatMoney(dist.cashReceivedInMonth, 'PHP')}</div>
-        ${exceeds ? `<div style="color:var(--danger); font-weight:700; margin-top:4px;">⚠ The Distributable Amount exceeded the cash actually received this month, at the time of distribution.</div>` : ''}
+        ${exceeds ? `<div style="color:var(--danger); font-weight:700; margin-top:4px;">⚠ The amount paid out exceeded the cash actually received this month, at the time of distribution.</div>` : ''}
       </div>
     </div>
 
@@ -392,9 +394,6 @@ async function renderDistributionForm(record) {
           <div class="field"><label>Expenses (PHP)</label><input type="number" min="0" step="0.01" id="f_expenses" value="${record?.expensesTotal ?? 0}">
             <p class="muted-text" style="margin-top:4px;">Auto-filled from this month's recorded Expenses — adjustable if needed.</p>
           </div>
-          <div class="field"><label>Reserve %</label><input type="number" min="0" max="100" step="0.01" id="f_reservePercent" value="${record?.reservePercent ?? (companySettings.defaultReservePercent ?? 10)}">
-            <p class="muted-text" style="margin-top:4px;">Set aside for the business before the split. Starts at your default from Settings → Defaults &amp; Terms; change it for this month if needed.</p>
-          </div>
         </div>
 
         <div class="totals" id="distTotalsPreview" style="margin-top:14px;"></div>
@@ -452,15 +451,14 @@ async function renderDistributionForm(record) {
   function currentInputs() {
     return {
       grossProfit: document.getElementById('f_grossProfit').value,
-      expenses: document.getElementById('f_expenses').value,
-      reservePercent: document.getElementById('f_reservePercent').value
+      expenses: document.getElementById('f_expenses').value
     };
   }
 
   function drawSplits() {
     const body = document.getElementById('splitsBody');
-    const { grossProfit, expenses, reservePercent } = currentInputs();
-    const computed = computeDistribution(grossProfit, expenses, reservePercent, splits);
+    const { grossProfit, expenses } = currentInputs();
+    const computed = computeDistribution(grossProfit, expenses, splits);
     body.innerHTML = splits.map((s, i) => `
       <tr data-idx="${i}">
         <td><input class="sp-name" value="${escapeHtml(s.partnerName)}" style="width:160px;" ${s.partnerId ? 'readonly' : ''}></td>
@@ -483,30 +481,30 @@ async function renderDistributionForm(record) {
     const totalPct = computed.totalPercent;
     if (splits.length === 0) {
       warnEl.textContent = '';
-    } else if (r2(totalPct) !== 100) {
-      warnEl.innerHTML = `<span style="color:var(--danger); font-weight:600;">⚠ Percentages add up to ${totalPct}%, not 100% — the distributable amount won't be fully accounted for.</span>`;
+    } else if (totalPct > 100) {
+      warnEl.innerHTML = `<span style="color:var(--danger); font-weight:600;">⚠ Shares add up to ${totalPct}% of Net Profit — more than 100%. Lower a percentage before saving.</span>`;
     } else {
-      warnEl.innerHTML = `<span style="color:var(--ok);">✓ Percentages add up to 100%.</span>`;
+      warnEl.innerHTML = `<span style="color:var(--ok);">✓ Shares add up to ${totalPct}% of Net Profit. The other ${r2(100 - totalPct)}% stays in the Business Reserve.</span>`;
     }
   }
 
   function drawTotalsPreview() {
-    const { grossProfit, expenses, reservePercent } = currentInputs();
-    const computed = computeDistribution(grossProfit, expenses, reservePercent, splits);
+    const { grossProfit, expenses } = currentInputs();
+    const computed = computeDistribution(grossProfit, expenses, splits);
     document.getElementById('distTotalsPreview').innerHTML = `
       <div class="line"><span>Gross Profit</span><span>${formatMoney(computed.gross, 'PHP')}</span></div>
       <div class="line"><span>Expenses</span><span>-${formatMoney(computed.expenses, 'PHP')}</span></div>
       <div class="line grand"><span>Net Profit</span><span>${formatMoney(computed.netProfit, 'PHP')}</span></div>
-      <div class="line"><span>Reserve (${Number(reservePercent) || 0}%)</span><span>-${formatMoney(computed.reserveAmount, 'PHP')}</span></div>
-      <div class="line grand"><span>Distributable Amount</span><span>${formatMoney(computed.distributableAmount, 'PHP')}</span></div>
-      ${computed.netProfit <= 0 ? '<p class="muted-text" style="margin-top:8px;"><b>No profit this month</b> — nothing is set aside for the Business Reserve and nothing is distributed.</p>' : ''}
+      <div class="line"><span>Paid out to partners &amp; employees (${computed.totalPercent}% of Net Profit)</span><span>-${formatMoney(computed.distributableAmount, 'PHP')}</span></div>
+      <div class="line grand"><span>Kept in the Business Reserve (${computed.reservePercent}% of Net Profit)</span><span>${formatMoney(computed.reserveAmount, 'PHP')}</span></div>
+      ${computed.netProfit <= 0 ? '<p class="muted-text" style="margin-top:8px;"><b>No profit this month</b> — nothing is paid out and nothing is added to the Business Reserve.</p>' : ''}
     `;
     // Net Profit is still an earned/accrual figure -- some of this month's orders may not be
     // fully paid yet. Comparing against actual cash collected this month keeps this distribution
     // grounded in real money, the same principle behind every other sanity check in this app.
     const warnEl = document.getElementById('cashWarning');
     if (computed.distributableAmount > currentCashReceived) {
-      warnEl.innerHTML = `<span style="color:var(--danger); font-weight:700;">⚠ Distributable Amount (${formatMoney(computed.distributableAmount, 'PHP')}) exceeds the ${formatMoney(currentCashReceived, 'PHP')} actually received in cash this month.</span>`;
+      warnEl.innerHTML = `<span style="color:var(--danger); font-weight:700;">⚠ Amount paid out (${formatMoney(computed.distributableAmount, 'PHP')}) exceeds the ${formatMoney(currentCashReceived, 'PHP')} actually received in cash this month.</span>`;
     } else {
       warnEl.innerHTML = `<span class="muted-text">Cash Received This Month: ${formatMoney(currentCashReceived, 'PHP')}</span>`;
     }
@@ -517,7 +515,6 @@ async function renderDistributionForm(record) {
   document.getElementById('f_month').addEventListener('change', () => { applyMonthDefaults(); markDirty(); });
   document.getElementById('f_grossProfit').addEventListener('input', () => { refreshAll(); markDirty(); });
   document.getElementById('f_expenses').addEventListener('input', () => { refreshAll(); markDirty(); });
-  document.getElementById('f_reservePercent').addEventListener('input', () => { refreshAll(); markDirty(); });
   document.getElementById('btnAddSplit').addEventListener('click', () => {
     splits.push({ partnerId: null, partnerName: '', percent: 0 });
     refreshAll(); markDirty();
@@ -538,10 +535,11 @@ async function renderDistributionForm(record) {
     if (btn.disabled) return;
     btn.disabled = true;
     try {
-      const { grossProfit, expenses, reservePercent } = currentInputs();
+      const { grossProfit, expenses } = currentInputs();
       const month = document.getElementById('f_month').value;
       if (!month) { toast('Choose a month.', 'err'); btn.disabled = false; return; }
-      const computed = computeDistribution(grossProfit, expenses, reservePercent, splits);
+      const computed = computeDistribution(grossProfit, expenses, splits);
+      if (computed.totalPercent > 100) { toast(`Shares add up to ${computed.totalPercent}% — they cannot be more than 100% of Net Profit.`, 'err'); btn.disabled = false; return; }
       if (computed.netProfit <= 0) { toast('Net Profit must be greater than 0 to distribute anything.', 'err'); btn.disabled = false; return; }
       if (splits.some(s => !s.partnerName || !s.partnerName.trim())) { toast('Every partner split needs a name.', 'err'); btn.disabled = false; return; }
       const settings = await DB.getSettings();
@@ -551,7 +549,8 @@ async function renderDistributionForm(record) {
         grossProfitTotal: computed.gross,
         expensesTotal: computed.expenses,
         netProfit: computed.netProfit,
-        reservePercent: Number(reservePercent) || 0,
+        reservePercent: computed.reservePercent,
+        splitBasis: 'net',
         reserveAmount: computed.reserveAmount,
         distributableAmount: computed.distributableAmount,
         cashReceivedInMonth: currentCashReceived,

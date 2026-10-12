@@ -298,13 +298,16 @@ async function printPayslips(dist, onlyIdx) {
         <tr><td>Gross Profit</td><td class="p-num">${m(dist.grossProfitTotal)}</td></tr>
         <tr><td>Less: Operating Expenses</td><td class="p-num">− ${m(dist.expensesTotal)}</td></tr>
         <tr><td><b>Net Profit</b></td><td class="p-num"><b>${m(dist.netProfit)}</b></td></tr>
-        <tr><td>Less: Business Reserve (${Number(dist.reservePercent) || 0}%)</td><td class="p-num">− ${m(dist.reserveAmount)}</td></tr>
-        <tr><td><b>Distributable Amount</b></td><td class="p-num"><b>${m(dist.distributableAmount)}</b></td></tr>
+        ${dist.splitBasis === 'net'
+          ? `<tr><td>Paid out to partners &amp; employees</td><td class="p-num">${m(dist.distributableAmount)}</td></tr>
+        <tr><td><b>Kept in the Business Reserve (${Number(dist.reservePercent) || 0}%)</b></td><td class="p-num"><b>${m(dist.reserveAmount)}</b></td></tr>`
+          : `<tr><td>Less: Business Reserve (${Number(dist.reservePercent) || 0}%)</td><td class="p-num">− ${m(dist.reserveAmount)}</td></tr>
+        <tr><td><b>Distributable Amount</b></td><td class="p-num"><b>${m(dist.distributableAmount)}</b></td></tr>`}
       </tbody></table>`;
-    const shareLabel = isEmployee ? `Incentive for ${escapeHtml(D.monthLabel(dist.month))}` : `Profit share (${Number(s.percent) || 0}% of ${m(dist.distributableAmount)})`;
+    const shareLabel = isEmployee ? `Incentive for ${escapeHtml(D.monthLabel(dist.month))}` : (dist.splitBasis === 'net' ? `Profit share (${Number(s.percent) || 0}% of Net Profit ${m(dist.netProfit)})` : `Profit share (${Number(s.percent) || 0}% of ${m(dist.distributableAmount)})`);
     const rightBlock = isEmployee
       ? `<div><div class="p-label">Payment</div><div style="font-size:11px;">${s.paidDate ? 'Paid ' + formatDate(s.paidDate) + (s.paidMethod ? ' via ' + escapeHtml(s.paidMethod) : '') : 'Not yet paid'}${s.paidReference ? '<br>Ref: ' + escapeHtml(s.paidReference) : ''}</div></div>`
-      : `<div><div class="p-label">Profit Share</div><div style="font-size:11px;">Share: <b>${Number(s.percent) || 0}%</b> of the Distributable Amount<br>Distribution: ${escapeHtml(dist.distributionNo)}${dist.reference ? '<br>' + escapeHtml(dist.reference) : ''}</div></div>`;
+      : `<div><div class="p-label">Profit Share</div><div style="font-size:11px;">Share: <b>${Number(s.percent) || 0}%</b> of ${dist.splitBasis === 'net' ? 'Net Profit' : 'the Distributable Amount'}<br>Distribution: ${escapeHtml(dist.distributionNo)}${dist.reference ? '<br>' + escapeHtml(dist.reference) : ''}</div></div>`;
     const footNote = isEmployee
       ? 'This payslip is a confidential statement of your earnings for the period above.'
       : "This payslip is a statement of the partner's share of the business profit distributed for the period above. It is not a payroll payslip.";
