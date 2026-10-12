@@ -210,7 +210,7 @@ async function renderForm(cfg, id) {
     const settings = await DB.getSettings();
     if (isEdit) {
       obj.updatedAt = now; obj.modifiedBy = settings.userName;
-      if (cfg.beforeSave) { const bad = cfg.beforeSave(obj, e.target, record); if (bad) { toast(bad, 'err'); return; } }
+      if (cfg.beforeSave) { const bad = await cfg.beforeSave(obj, e.target, record); if (bad) { toast(bad, 'err'); return; } }
       await DB.dbPut(cfg.key, obj);
       await DB.logActivity(`Updated ${cfg.label.toLowerCase()} ${obj[cfg.titleField]}`);
       toast(`${cfg.label} updated.`);
@@ -218,7 +218,7 @@ async function renderForm(cfg, id) {
       obj.createdAt = now; obj.updatedAt = now;
       obj.createdBy = settings.userName; obj.modifiedBy = settings.userName;
       obj.status = obj.status || (cfg.defaultStatus || 'Active');
-      if (cfg.beforeSave) { const bad = cfg.beforeSave(obj, e.target, null, true); if (bad) { toast(bad, 'err'); return; } }
+      if (cfg.beforeSave) { const bad = await cfg.beforeSave(obj, e.target, null, true); if (bad) { toast(bad, 'err'); return; } }
       obj[cfg.numberField] = await DB.nextDocNumber(cfg.counterFor ? cfg.counterFor(obj) : cfg.counterName);
       if (cfg.afterNumber) cfg.afterNumber(obj);
       const newId = await DB.dbAdd(cfg.key, obj);

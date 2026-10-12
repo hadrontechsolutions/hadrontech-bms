@@ -23,7 +23,7 @@
 
   const SUGGESTED_ACCOUNT = {
     'Rent': 'Rent Expense', 'Utilities (Electricity, Water)': 'Utilities Expense', 'Communication (Phone, Internet)': 'Communication Expense',
-    'Salaries & Wages': 'Salaries and Wages', 'Office Supplies': 'Office Supplies Expense', 'Transportation & Fuel': 'Transportation and Travel',
+    'Salaries & Wages': 'Salaries and Wages', 'Office Supplies': 'Office Supplies Expense', 'Packaging & Supplies': 'Packaging Supplies Expense', 'Transportation & Fuel': 'Transportation and Travel',
     'Professional Fees': 'Professional Fees', 'Taxes & Licenses': 'Taxes and Licenses', 'Repairs & Maintenance': 'Repairs and Maintenance',
     'Insurance': 'Insurance Expense', 'Bank Charges': 'Bank Charges', 'Representation & Entertainment': 'Representation and Entertainment',
     'Freight & Delivery': 'Freight-out / Delivery Expense', 'Miscellaneous': 'Miscellaneous Expense'

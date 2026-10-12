@@ -165,3 +165,8 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - **Payee is always our business** (Settings company name): pre-filled on new expenses; older entries and variants such as "Hadrontech Solutions" are corrected when the list opens. The real recipient goes in the optional **Paid to / Bought from** field (`vendor`) - shown in the list, Reports, backup CSV, and used as the Payee in the Bookkeeper Pack disbursements.
 - List is newest expense date first (`cfg.sortList`; Entities also supports `cfg.beforeList`).
 - Saving warns about a possible double entry (same description and amount within 7 days; monthly bills are not flagged). Test: test-expenses-improvements.js.
+
+## Employee # / Partner # and Distributions (js/partners.js, js/distributions.js)
+- Every Partner / Employee gets an automatic number: Employees `HT-EMP-<year>-NNNN` (counter `employee`), Partners `HT-PTR-<year>-NNNN`. Shown on the Edit form, in the list and on the Distribution; printed on the payslip (copied onto each split as `partnerNo`, falling back to the person's current number for older distributions). Changing the Type re-issues a number with the right prefix. `cfg.beforeSave` in the entity engine may be async.
+- A month with no profit (Net Profit <= 0) sets aside ₱0 reserve and distributes ₱0 (`computeDistribution`); the form says so.
+- Expense category **Packaging & Supplies** (account "Packaging Supplies Expense"). Test: test-employee-number.js.

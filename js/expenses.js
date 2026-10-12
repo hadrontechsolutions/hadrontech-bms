@@ -21,7 +21,7 @@
 
 const EXPENSE_CATEGORIES = [
   'Rent', 'Utilities (Electricity, Water)', 'Communication (Phone, Internet)',
-  'Salaries & Wages', 'Office Supplies', 'Transportation & Fuel', 'Professional Fees',
+  'Salaries & Wages', 'Office Supplies', 'Packaging & Supplies', 'Transportation & Fuel', 'Professional Fees',
   'Taxes & Licenses', 'Repairs & Maintenance', 'Insurance', 'Bank Charges',
   'Representation & Entertainment', 'Freight & Delivery', 'Miscellaneous'
 ];

@@ -91,8 +91,9 @@ function computeDistribution(grossProfitTotal, expensesTotal, reservePercent, sp
   const expenses = Number(expensesTotal) || 0;
   const netProfit = r2(gross - expenses);
   const resPct = Number(reservePercent) || 0;
-  const reserveAmount = r2(netProfit * resPct / 100);
-  const distributableAmount = r2(netProfit - reserveAmount);
+  // A month with no profit sets nothing aside and distributes nothing (a loss never reduces the reserve).
+  const reserveAmount = netProfit > 0 ? r2(netProfit * resPct / 100) : 0;
+  const distributableAmount = netProfit > 0 ? r2(netProfit - reserveAmount) : 0;
   const splitsWithAmounts = splits.map(s => ({
     ...s,
     amount: r2(distributableAmount * (Number(s.percent) || 0) / 100)
@@ -255,7 +256,8 @@ async function renderDistributionDetail(id) {
         <thead><tr><th>Name</th><th>Percent</th><th>Share</th><th>Advances / Adjustments</th><th>Net Pay</th><th>Paid</th><th></th></tr></thead>
         <tbody>${(dist.splits || []).map((s, i) => {
           const adj = splitAdjustments(s).reduce((t, a) => t + (a.kind === 'add' ? 1 : -1) * (Number(a.amount) || 0), 0);
-          return `<tr><td>${escapeHtml(s.partnerName)}${isEmployeeSplit(s) ? ' <span class="badge badge-info">Employee</span>' : ''}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td>
+          const pno = s.partnerNo || (peopleById[String(s.partnerId)] || {}).partnerNo || '';
+          return `<tr><td>${escapeHtml(s.partnerName)}${isEmployeeSplit(s) ? ' <span class="badge badge-info">Employee</span>' : ''}${pno ? `<div class="muted-text" style="font-size:11px;">${escapeHtml(pno)}</div>` : ''}</td><td>${s.percent}%</td><td>${formatMoney(s.amount, 'PHP')}</td>
             <td>${adj ? (adj > 0 ? '+' : '-') + formatMoney(Math.abs(adj), 'PHP') : '—'}</td>
             <td><b>${formatMoney(splitNetPay(s), 'PHP')}</b></td>
             <td>${s.paidDate ? `<span class="badge badge-paid">Paid ${formatDate(s.paidDate)}</span>` : '<span class="badge badge-pending">Unpaid</span>'}</td>
@@ -369,7 +371,7 @@ async function renderDistributionForm(record) {
   // originally saved with (its own snapshot), not today's Partners list, so past history never
   // silently shifts if partners or their defaults change later.
   let splits = isNew
-    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, partnerRole: p.role || '', partnerType: p.partnerType || '', percent: p.defaultSplitPercent ?? 0 }))
+    ? partners.map(p => ({ partnerId: p.id, partnerName: p.name, partnerRole: p.role || '', partnerType: p.partnerType || '', partnerNo: p.partnerNo || '', percent: p.defaultSplitPercent ?? 0 }))
     : (record.splits || []).map(s => ({ ...s }));
 
   const defaultMonth = record?.month || todayISO().slice(0, 7);
@@ -497,8 +499,8 @@ async function renderDistributionForm(record) {
       <div class="line grand"><span>Net Profit</span><span>${formatMoney(computed.netProfit, 'PHP')}</span></div>
       <div class="line"><span>Reserve (${Number(reservePercent) || 0}%)</span><span>-${formatMoney(computed.reserveAmount, 'PHP')}</span></div>
       <div class="line grand"><span>Distributable Amount</span><span>${formatMoney(computed.distributableAmount, 'PHP')}</span></div>
+      ${computed.netProfit <= 0 ? '<p class="muted-text" style="margin-top:8px;"><b>No profit this month</b> — nothing is set aside for the Business Reserve and nothing is distributed.</p>' : ''}
     `;
-
     // Net Profit is still an earned/accrual figure -- some of this month's orders may not be
     // fully paid yet. Comparing against actual cash collected this month keeps this distribution
     // grounded in real money, the same principle behind every other sanity check in this app.
@@ -557,7 +559,7 @@ async function renderDistributionForm(record) {
         splits: (() => {
           let nextSeq = Math.max(0, ...computed.splits.map(x => Number(x.slipSeq) || 0)) + 1;
           return computed.splits.map(s => {
-            const out = { partnerId: s.partnerId, partnerName: s.partnerName, partnerRole: s.partnerRole || '', partnerType: s.partnerType || '', percent: Number(s.percent) || 0, amount: s.amount,
+            const out = { partnerId: s.partnerId, partnerName: s.partnerName, partnerRole: s.partnerRole || '', partnerType: s.partnerType || '', partnerNo: s.partnerNo || '', percent: Number(s.percent) || 0, amount: s.amount,
               slipSeq: s.slipSeq || nextSeq++, adjustments: splitAdjustments(s), paidDate: s.paidDate || '', paidMethod: s.paidMethod || '', paidReference: s.paidReference || '' };
             out.netPay = splitNetPay(out);
             return out;

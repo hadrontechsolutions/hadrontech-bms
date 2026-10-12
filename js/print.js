@@ -314,7 +314,7 @@ async function printPayslips(dist, onlyIdx) {
         <div class="p-dates">Pay Period: ${escapeHtml(D.monthLabel(dist.month))}<br>${s.paidDate ? 'Date Paid: ' + formatDate(s.paidDate) : 'Date Paid: —'}</div></div>
       </div>
       <div class="p-grid2">
-        <div><div class="p-label">${isEmployee ? 'Employee' : 'Partner'}</div><b style="font-size:15px;">${escapeHtml(s.partnerName)}</b>${role ? `<br><span style="font-size:11px;color:#666;">${escapeHtml(role)}</span>` : ''}</div>
+        <div><div class="p-label">${isEmployee ? 'Employee' : 'Partner'}</div><b style="font-size:15px;">${escapeHtml(s.partnerName)}</b>${(s.partnerNo || person.partnerNo) ? `<br><span style="font-size:11px;"><b>${isEmployee ? 'Employee #' : 'Partner #'}:</b> ${escapeHtml(s.partnerNo || person.partnerNo)}</span>` : ''}${role ? `<br><span style="font-size:11px;color:#666;">${escapeHtml(role)}</span>` : ''}</div>
         ${rightBlock}
       </div>
       ${businessBlock}

@@ -185,6 +185,7 @@ async function ensureCounters() {
     { name: 'note', prefix: 'HT-NOTE', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'rfq', prefix: 'HT-RFQ', next: 1, pattern: 'YEARSEQ', digits: 4 },
     { name: 'partner', prefix: 'HT-PTR', next: 1, pattern: 'YEARSEQ', digits: 4 },
+    { name: 'employee', prefix: 'HT-EMP', next: 1, pattern: 'YEARSEQ', digits: 4 },   // Employee # (printed on payslips)
     { name: 'distribution', prefix: 'HT-DIST', next: 1, pattern: 'YEARSEQ', digits: 4 },
   ];
   for (const d of defaults) {
