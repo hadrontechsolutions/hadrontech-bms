@@ -177,3 +177,6 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - A receipt snapshots the delivered lines (description, qty delivered, ordered, delivered so far, balance), customer, ship-to and customer PO #. **No prices.** Print = `Print.printDeliveryReceipt` (signature boxes: delivered by / received by customer + date).
 - Status: Issued → Signed copy received (name + date) · Voided. **Void** (reason required) puts the quantities back on the Sales Order, returns stock and recalculates the order status; receipts are never deleted. A Sales Order that has receipts cannot be deleted. Stock movements of a delivery refer to the receipt number.
 - Sidebar entry sits between Supplier POs and Payments; the Sales Order page lists its receipts; included in Backup, Delivery Receipts.csv and Search. Test: test-delivery-receipts.js.
+
+## Printed quotation: Validity Period
+- Under "Valid Until" the printed quotation shows **Validity Period: N Days** (`validityDaysText` in print.js) = days from the quotation date to Valid Until, so an extended validity prints the new length. Left out if either date is missing or Valid Until is before the date; "1 Day" / "Same day only" for the edge cases. Test: test-quotation-validity-days.js.

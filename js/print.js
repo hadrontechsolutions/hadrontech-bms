@@ -67,6 +67,14 @@ function bankDetailsHTML(settings) {
   ].filter(Boolean).join('\n')}</div>`;
 }
 
+/** "15 Days": how long the quotation is valid, counted from the quotation date to Valid Until. Empty when either date is missing or Valid Until is before the date. */
+function validityDaysText(q) {
+  if (!q || !q.date || !q.validUntil) return '';
+  const d = daysBetweenISO(String(q.date).slice(0, 10), String(q.validUntil).slice(0, 10));
+  if (!Number.isFinite(d) || d < 0) return '';
+  return d === 0 ? 'Same day only' : `${d} ${d === 1 ? 'Day' : 'Days'}`;
+}
+
 async function printQuotation(q, customer) {
   const settings = await DB.getSettings();
   const custName = customer?.companyName || q.customerSnapshot?.companyName || '';
@@ -118,7 +126,7 @@ async function printQuotation(q, customer) {
     <div class="p-head">
       ${coBlock(settings)}
       <div><div class="p-doc-title">Sales Quotation</div><div class="p-doc-no">${escapeHtml(q.quotationNo)}</div>
-      <div class="p-dates">${q.rfqRef ? `Your Ref: ${escapeHtml(q.rfqRef)}<br>` : ''}Revision: ${padRev(q.revision)}<br>Date: ${formatDate(q.date)}<br>Valid Until: ${formatDate(q.validUntil)}</div></div>
+      <div class="p-dates">${q.rfqRef ? `Your Ref: ${escapeHtml(q.rfqRef)}<br>` : ''}Revision: ${padRev(q.revision)}<br>Date: ${formatDate(q.date)}<br>Valid Until: ${formatDate(q.validUntil)}${validityDaysText(q) ? `<br>Validity Period: <b>${validityDaysText(q)}</b>` : ''}</div></div>
     </div>
     <div class="p-grid2">
       <div><div class="p-label">Quote For</div><b>${escapeHtml(custName)}</b><br><span style="font-size:11px;color:#666;">${escapeHtml(custAddr)}</span>
