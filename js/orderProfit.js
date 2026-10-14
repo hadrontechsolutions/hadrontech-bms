@@ -57,19 +57,26 @@
       let payState = paidInFull ? 'Paid in full' : (pis.length ? `Not fully paid yet` : 'No invoice yet');
 
       // ----- actual cost -----
+      const payPHP = (p, x) => (window.SupplierPOs && SupplierPOs.spoPaymentPHP) ? SupplierPOs.spoPaymentPHP(p, x)
+        : ((p.currency || 'PHP') === 'PHP' ? { php: r2(x.amount), estimated: false } : (Number(x.phpAmount) > 0 ? { php: r2(x.phpAmount), estimated: false } : { php: r2((Number(x.amount) || 0) * (Number(x.exchangeRate) > 0 ? Number(x.exchangeRate) : (Number(p.exchangeRate) || 0))), estimated: true }));
       const supplierLines = pos.map(p => {
         const cur = p.currency || 'PHP';
         let poRate = cur === 'PHP' ? 1 : (Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : (Number(refRates[cur]) || 0));
         if (!poRate) { poRate = 1; warnings.push(`Supplier PO ${p.poNo} (${cur}) has no exchange rate`); }
         const pays = p.payments || [];
         const paidAmt = r2(pays.reduce((s, x) => s + (Number(x.amount) || 0), 0));
-        const paidPHP = r2(pays.reduce((s, x) => s + (Number(x.amount) || 0) * (cur === 'PHP' ? 1 : (Number(x.exchangeRate) > 0 ? Number(x.exchangeRate) : poRate)), 0));
+        const calc = pays.map(x => payPHP(p, x));
+        const paidPHP = r2(calc.reduce((s, c) => s + c.php, 0));
+        const estimatedPaid = calc.some(c => c.estimated);
         const unpaid = Math.max(0, r2((Number(p.totalCost) || 0) - paidAmt));
-        return { id: p.id, poNo: p.poNo, supplierId: p.supplierId, status: p.status, currency: cur, total: r2(p.totalCost), paidPHP, unpaidPHP: r2(unpaid * poRate), costPHP: r2(paidPHP + unpaid * poRate), fullyPaid: unpaid <= 0.005 };
+        return { id: p.id, poNo: p.poNo, supplierId: p.supplierId, status: p.status, currency: cur, poRate, total: r2(p.totalCost), computedPHP: r2((Number(p.totalCost) || 0) * poRate), paidPHP, unpaidPHP: r2(unpaid * poRate), costPHP: r2(paidPHP + unpaid * poRate), fullyPaid: unpaid <= 0.005, estimatedPaid, confirmed: !estimatedPaid && unpaid <= 0.005 };
       });
       const suppliersCost = r2(supplierLines.reduce((s, l) => s + l.costPHP, 0));
+      const suppliersComputed = r2(supplierLines.reduce((s, l) => s + l.computedPHP, 0));
       const additional = costBySO[so.id] || 0;
       const actualCost = r2(suppliersCost + additional);
+      const computedCost = r2(suppliersComputed + additional);
+      const costConfirmed = supplierLines.every(l => l.confirmed);
       const unpaidSuppliers = supplierLines.filter(l => !l.fullyPaid).length;
 
       let actualSales = null, actualProfit = null, difference = null, diffPct = null, note = '';
@@ -87,7 +94,7 @@
         id: so.id, soNo: so.soNo, orderDate: d10(so.orderDate), status: so.status, customer: (custMap[so.customerId] || {}).companyName || '', customerId: so.customerId,
         sales: soSales, quotedCost, quotedProfit, quotedPct: soSales ? r2(quotedProfit / soSales * 100) : 0,
         invoiced, customerPaid, balance, paidInFull, payState, actualSales,
-        suppliersCost, additional, actualCost, supplierLines, additionalLines: (costLines[so.id] || []).slice().sort((a, b) => d10(a.date).localeCompare(d10(b.date))),
+        suppliersCost, suppliersComputed, computedCost, costConfirmed, additional, actualCost, supplierLines, additionalLines: (costLines[so.id] || []).slice().sort((a, b) => d10(a.date).localeCompare(d10(b.date))),
         unpaidSuppliers, actualProfit, difference, diffPct, note, warnings, profitNote: so.profitNote || '', counted: actualProfit != null
       });
     });
@@ -98,7 +105,7 @@
     const totals = {
       shown: rows.length, counted: counted.length, notCounted: rows.length - counted.length,
       sales: sum(counted, 'sales'), actualSales: sum(counted, 'actualSales'), quotedCost: sum(counted, 'quotedCost'), quotedProfit: sum(counted, 'quotedProfit'),
-      actualCost: sum(counted, 'actualCost'), actualProfit: sum(counted, 'actualProfit'), additional: sum(counted, 'additional'), difference: sum(counted, 'difference')
+      actualCost: sum(counted, 'actualCost'), computedCost: sum(counted, 'computedCost'), actualProfit: sum(counted, 'actualProfit'), additional: sum(counted, 'additional'), difference: sum(counted, 'difference')
     };
     totals.quotedPct = totals.sales ? r2(totals.quotedProfit / totals.sales * 100) : 0;
     totals.actualPct = totals.actualSales ? r2(totals.actualProfit / totals.actualSales * 100) : 0;
@@ -145,16 +152,17 @@
       if (!rows.length) { q('opWrap').innerHTML = '<div class="empty-inline">No orders to show yet. Orders appear here once they are delivered, or once a customer payment or a supplier payment has been recorded.</div>'; return; }
       q('opWrap').innerHTML = `
         <div style="overflow-x:auto;"><table class="data-table compact">
-          <thead><tr><th>Sales Order</th><th>Customer</th><th>Order date</th><th>Sales (before VAT)</th><th>Quoted cost</th><th>Gross profit as ordered</th><th>Actual cost</th><th>Actual profit</th><th>Difference (actual − ordered)</th><th>Customer payment</th></tr></thead>
+          <thead><tr><th>Sales Order</th><th>Customer</th><th>Order date</th><th>Sales (before VAT)</th><th>Quoted cost</th><th>Gross profit as ordered</th><th>Cost at PO rates (computed)</th><th>Actual cost</th><th>Actual profit</th><th>Difference (actual − ordered)</th><th>Customer payment</th></tr></thead>
           <tbody>${rows.map(r => `<tr class="clickable-row" data-hash="/order-profit/${r.id}">
             <td style="white-space:nowrap;"><a href="#/order-profit/${r.id}">${escapeHtml(r.soNo)}</a></td><td>${escapeHtml(r.customer || '—')}</td><td style="white-space:nowrap;">${formatDate(r.orderDate)}</td>
             <td>${money(r.sales)}</td><td>${money(r.quotedCost)}</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td>
-            <td>${money(r.actualCost)}${r.additional ? ` <span class="cost-tag" title="Includes additional costs">⚠ incl. ${money(r.additional)}</span>` : ''}</td>
+            <td>${money(r.computedCost)}</td>
+            <td>${money(r.actualCost)}${r.costConfirmed ? '' : ' <span class="cost-tag" title="Some supplier payments are still on the estimated rate, or a supplier is not fully paid — enter the actual PHP paid on the Supplier PO">⚠ not confirmed</span>'}${r.additional ? ` <span class="cost-tag" title="Includes additional costs">⚠ incl. ${money(r.additional)}</span>` : ''}</td>
             <td>${r.actualProfit == null ? profitCell(r) : `<b>${money(r.actualProfit)}</b> <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td>
             <td>${diffCell(r)}</td><td>${escapeHtml(r.payState)}</td></tr>`).join('')}</tbody>
-          <tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);"><td colspan="3">TOTAL — ${t.counted} fully paid order${t.counted === 1 ? '' : 's'}</td><td>${money(t.sales)}</td><td>${money(t.quotedCost)}</td><td>${money(t.quotedProfit)} (${pctTxt(t.quotedPct)})</td><td>${money(t.actualCost)}</td><td>${money(t.actualProfit)} (${pctTxt(t.actualPct)})</td><td><span class="${t.difference < -0.005 ? 'cost-red' : ''}">${t.difference > 0.005 ? '+' : ''}${money(t.difference)}</span></td><td></td></tr></tfoot>
+          <tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);"><td colspan="3">TOTAL — ${t.counted} fully paid order${t.counted === 1 ? '' : 's'}</td><td>${money(t.sales)}</td><td>${money(t.quotedCost)}</td><td>${money(t.quotedProfit)} (${pctTxt(t.quotedPct)})</td><td>${money(t.computedCost)}</td><td>${money(t.actualCost)}</td><td>${money(t.actualProfit)} (${pctTxt(t.actualPct)})</td><td><span class="${t.difference < -0.005 ? 'cost-red' : ''}">${t.difference > 0.005 ? '+' : ''}${money(t.difference)}</span></td><td></td></tr></tfoot>
         </table></div>
-        <p class="muted-text small" style="margin-top:10px;">${t.notCounted ? `${t.notCounted} order${t.notCounted === 1 ? ' is' : 's are'} not fully paid yet (or not in PHP) and ${t.notCounted === 1 ? 'is' : 'are'} left out of the totals. ` : ''}Totals count only the fully paid orders above. "Difference" is actual profit less gross profit as ordered; a negative difference is shown in red. Click an order to see exactly where the cost came from.</p>`;
+        <p class="muted-text small" style="margin-top:10px;">${t.notCounted ? `${t.notCounted} order${t.notCounted === 1 ? ' is' : 's are'} not fully paid yet (or not in PHP) and ${t.notCounted === 1 ? 'is' : 'are'} left out of the totals. ` : ''}Totals count only the fully paid orders above. “Cost at PO rates (computed)” is each Supplier PO's total at the exchange rate on the PO; “Actual cost” uses the pesos you actually paid (type them on the Supplier PO payment). A “not confirmed” tag means part of the actual cost is still an estimate. "Difference" is actual profit less gross profit as ordered; a negative difference is shown in red. Click an order to see exactly where the cost came from.</p>`;
     };
     ['opFrom', 'opTo'].forEach(i => q(i).onchange = draw); q('opSearch').oninput = draw;
     draw();
@@ -189,13 +197,14 @@
         <p class="muted-text small">${r.actualProfit == null ? '' : worse ? 'The actual profit is LOWER than the profit this order was priced to earn.' : 'The actual profit is at or above the profit this order was priced to earn.'} In the cost rows, a positive Difference means the order cost more than quoted; a negative one means it cost less.</p>
       </div>
       <div class="card"><h3 class="section-title">Where the actual cost came from</h3>
-        <table class="data-table compact"><thead><tr><th>Supplier PO</th><th>Supplier</th><th>Status</th><th>PO total</th><th>Paid (at payment rate)</th><th>Still unpaid (at PO rate)</th><th>Cost in PHP</th></tr></thead><tbody>
-          ${r.supplierLines.length ? r.supplierLines.map(l => `<tr><td><a href="#/supplier-pos/${l.id}">${escapeHtml(l.poNo)}</a></td><td>${escapeHtml((supMap[l.supplierId] || {}).companyName || '—')}</td><td>${statusBadge(l.status)}</td><td>${formatMoney(l.total, l.currency)}</td><td>${money(l.paidPHP)}</td><td>${l.unpaidPHP ? money(l.unpaidPHP) : '—'}</td><td>${money(l.costPHP)}</td></tr>`).join('') : '<tr><td colspan="7" class="muted-text">No Supplier PO is linked to this order.</td></tr>'}
-          <tr style="font-weight:700;"><td colspan="6" style="text-align:right;">Supplier costs</td><td>${money(r.suppliersCost)}</td></tr>
-          ${r.additionalLines.map(x => `<tr><td colspan="2"><a class="cost-tag" href="#/expenses/${x.id}">⚠ ${escapeHtml(x.expenseNo || 'Expense')}</a></td><td>${escapeHtml(x.category || '')}</td><td colspan="3">${escapeHtml(x.description || '')}${x.vendor ? ' — ' + escapeHtml(x.vendor) : ''} (${formatDate(x.date)})</td><td class="cost-red">${money(x.amount)}</td></tr>`).join('')}
-          <tr style="font-weight:700;"><td colspan="6" style="text-align:right;">Additional costs</td><td class="${r.additional ? 'cost-red' : ''}">${money(r.additional)}</td></tr>
-          <tr style="font-weight:800; border-top:2px solid var(--ink);"><td colspan="6" style="text-align:right;">Total actual cost</td><td>${money(r.actualCost)}</td></tr>
+        <table class="data-table compact"><thead><tr><th>Supplier PO</th><th>Supplier</th><th>Status</th><th>PO total</th><th>Computed in PHP (PO total × PO rate)</th><th>Actually paid (PHP)</th><th>Still unpaid (at PO rate)</th><th>Cost used (PHP)</th></tr></thead><tbody>
+          ${r.supplierLines.length ? r.supplierLines.map(l => `<tr><td><a href="#/supplier-pos/${l.id}">${escapeHtml(l.poNo)}</a></td><td>${escapeHtml((supMap[l.supplierId] || {}).companyName || '—')}</td><td>${statusBadge(l.status)}</td><td>${formatMoney(l.total, l.currency)}</td><td>${money(l.computedPHP)}${l.currency !== 'PHP' ? `<div class="muted-text" style="font-size:11px;">at ${Number(l.poRate).toFixed(4)}</div>` : ''}</td><td>${money(l.paidPHP)}${l.estimatedPaid ? ` <span class="cost-tag" title="No actual PHP amount entered — estimated rate">⚠ estimated rate</span>` : ''}</td><td>${l.unpaidPHP ? money(l.unpaidPHP) : '—'}</td><td>${money(l.costPHP)}</td></tr>`).join('') : '<tr><td colspan="8" class="muted-text">No Supplier PO is linked to this order.</td></tr>'}
+          <tr style="font-weight:700;"><td colspan="4" style="text-align:right;">Supplier costs</td><td>${money(r.suppliersComputed)}</td><td colspan="2"></td><td>${money(r.suppliersCost)}</td></tr>
+          ${r.additionalLines.map(x => `<tr><td colspan="2"><a class="cost-tag" href="#/expenses/${x.id}">⚠ ${escapeHtml(x.expenseNo || 'Expense')}</a></td><td>${escapeHtml(x.category || '')}</td><td colspan="4">${escapeHtml(x.description || '')}${x.vendor ? ' — ' + escapeHtml(x.vendor) : ''} (${formatDate(x.date)})</td><td class="cost-red">${money(x.amount)}</td></tr>`).join('')}
+          <tr style="font-weight:700;"><td colspan="7" style="text-align:right;">Additional costs</td><td class="${r.additional ? 'cost-red' : ''}">${money(r.additional)}</td></tr>
+          <tr style="font-weight:800; border-top:2px solid var(--ink);"><td colspan="4" style="text-align:right;">Total — computed at PO rates vs actual</td><td>${money(r.computedCost)}</td><td colspan="2" style="text-align:right;">Total actual cost</td><td>${money(r.actualCost)}</td></tr>
         </tbody></table>
+        ${r.costConfirmed ? '<p class="muted-text small">Every supplier payment on this order has the actual PHP paid entered, and every Supplier PO is fully paid — this is the actual cost.</p>' : '<p class="small" style="color:var(--danger);">⚠ Not confirmed yet: some payments still use the estimated rate, or a Supplier PO is not fully paid. Open the Supplier PO and enter the <b>actual PHP paid</b> to confirm the cost.</p>'}
         ${r.unpaidSuppliers ? `<p class="muted-text small">${r.unpaidSuppliers} Supplier PO${r.unpaidSuppliers === 1 ? ' is' : 's are'} not fully paid yet; the unpaid part is counted at the PO's own exchange rate.</p>` : ''}
         ${r.warnings.length ? `<p class="small" style="color:var(--danger);">⚠ ${r.warnings.map(escapeHtml).join(' · ')}</p>` : ''}
       </div>

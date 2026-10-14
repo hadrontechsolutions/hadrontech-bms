@@ -199,3 +199,9 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Only stored input: `salesOrders.profitNote` (a review note; changes no figure).
 - Business Performance Report: new section on screen, "Order Profit" workbook tab (now 11 tabs) and a block in the PDF summary — same `OrderProfit.compute` figures (orders picked by order date).
 - Tests: test-order-profit.js (test-owner-report.js now expects 11 tabs)
+
+## Supplier PO payments — ACTUAL PHP paid (js/supplierPOs.js; used by js/orderProfit.js, bookkeeperPack via exchangeRate)
+- Record Payment on a foreign-currency Supplier PO asks for **Actual amount paid in PHP (from your bank slip)**. The payment stores `phpAmount` (truth) and `exchangeRate = phpAmount / amount` (derived, unrounded). A payment saved without it keeps only the estimated rate and is flagged **"estimated rate"**. PHP POs: the amount is already PHP.
+- Payment History (foreign POs) shows Actually paid (PHP), Rate used, a "Computed at the PO's estimated rate vs actually paid" line, and a **Correct / Enter actual PHP** button per payment. A correction keeps the previous figures in `payment.history`, sets `correctedAt/correctedBy`, and writes the activity log. `SupplierPOs.spoPaymentPHP(po, payment)` → `{ php, estimated, rate }` is the single definition.
+- Order Profit: per Supplier PO shows Computed (PO total × PO rate) vs Actually paid; list/report columns "Cost at PO rates (computed)" and "Actual cost"; a red "not confirmed" tag while any payment is on an estimated rate or a supplier PO is not fully paid. Business Performance Report "Order Profit" tab has the same columns (computed cost total, actual cost total).
+- Tests: test-supplier-po-actual-paid.js, test-order-profit.js
