@@ -481,5 +481,6 @@ td.desc-col{max-width:320px; width:320px;}
 .cost-alert a{color:var(--danger); text-decoration:underline;}
 .cost-tag{display:inline-block; background:var(--danger-lt); color:var(--danger); border:1px solid var(--danger); border-radius:var(--radius-sm); font-weight:700; font-size:11px; padding:1px 7px; white-space:nowrap;}
 .cost-red{color:var(--danger); font-weight:700;}
+.profit-green{color:var(--ok); font-weight:700;}
 .card.cost-card{border:2px solid var(--danger);}
 .rate-from-settings{display:inline-block; background:#fff4e0; color:#8a5200; border:1px solid #f0cf94; border-radius:var(--radius-sm); font-size:11px; padding:1px 7px;}

@@ -124,7 +124,10 @@
 
   const money = (v) => formatMoney(v, 'PHP');
   const pctTxt = (v) => (v == null ? '—' : (Math.round(v * 100) / 100) + '%');
-  const diffCell = (r) => r.difference == null ? '—' : `<span class="${r.difference < -0.005 ? 'cost-red' : ''}">${r.difference > 0.005 ? '+' : ''}${money(r.difference)}</span>`;
+  /* Colour rule used on every screen: profit above what the order was priced to earn = green, below = red, equal (within 1 centavo) = plain. */
+  const tone = (diff) => diff == null ? '' : diff > 0.005 ? 'profit-green' : diff < -0.005 ? 'cost-red' : '';
+  const signed = (v) => (v > 0.005 ? '+' : v < -0.005 ? '\u2212' : '') + money(Math.abs(v));
+  const diffCell = (r) => r.difference == null ? '—' : `<span class="${tone(r.difference)}">${signed(r.difference)}</span>`;
   const profitCell = (r) => r.actualProfit == null ? `<span class="badge badge-pending" title="${escapeHtml(r.note)}">${r.paidInFull || !r.balance ? 'Not worked out' : 'Not fully paid yet'}</span>` : money(r.actualProfit);
 
   /* ---------------- list page ---------------- */
@@ -161,11 +164,11 @@
             <td>${money(r.sales)}</td><td>${money(r.quotedCost)}</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td>
             <td>${money(r.computedCost)}</td>
             <td>${money(r.actualCost)}${r.costConfirmed ? '' : ' <span class="cost-tag" title="Some supplier payments are still on the estimated rate, or a supplier is not fully paid — enter the actual PHP paid on the Supplier PO">⚠ not confirmed</span>'}${r.additional ? ` <span class="cost-tag" title="Includes additional costs">⚠ incl. ${money(r.additional)}</span>` : ''}</td>
-            <td>${r.actualProfit == null ? profitCell(r) : `<b>${money(r.actualProfit)}</b> <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td>
+            <td>${r.actualProfit == null ? profitCell(r) : `<b class="${tone(r.difference)}">${money(r.actualProfit)}</b> <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td>
             <td>${diffCell(r)}</td><td>${escapeHtml(r.payState)}</td></tr>`).join('')}</tbody>
-          <tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);"><td colspan="3">TOTAL — ${t.counted} fully paid order${t.counted === 1 ? '' : 's'}</td><td>${money(t.sales)}</td><td>${money(t.quotedCost)}</td><td>${money(t.quotedProfit)} (${pctTxt(t.quotedPct)})</td><td>${money(t.computedCost)}</td><td>${money(t.actualCost)}</td><td>${money(t.actualProfit)} (${pctTxt(t.actualPct)})</td><td><span class="${t.difference < -0.005 ? 'cost-red' : ''}">${t.difference > 0.005 ? '+' : ''}${money(t.difference)}</span></td><td></td></tr></tfoot>
+          <tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);"><td colspan="3">TOTAL — ${t.counted} fully paid order${t.counted === 1 ? '' : 's'}</td><td>${money(t.sales)}</td><td>${money(t.quotedCost)}</td><td>${money(t.quotedProfit)} (${pctTxt(t.quotedPct)})</td><td>${money(t.computedCost)}</td><td>${money(t.actualCost)}</td><td><span class="${tone(t.difference)}">${money(t.actualProfit)}</span> (${pctTxt(t.actualPct)})</td><td><span class="${tone(t.difference)}">${signed(t.difference)}</span></td><td></td></tr></tfoot>
         </table></div>
-        <p class="muted-text small" style="margin-top:10px;">${t.notCounted ? `${t.notCounted} order${t.notCounted === 1 ? ' is' : 's are'} not fully paid yet (or not in PHP) and ${t.notCounted === 1 ? 'is' : 'are'} left out of the totals. ` : ''}Totals count only the fully paid orders above. “Cost at PO rates (computed)” is each Supplier PO's total at the exchange rate on the PO; “Actual cost” uses the pesos you actually paid (type them on the Supplier PO payment). A “not confirmed” tag means part of the actual cost is still an estimate. "Difference" is actual profit less gross profit as ordered; a negative difference is shown in red. Click an order to see exactly where the cost came from.</p>`;
+        <p class="muted-text small" style="margin-top:10px;">${t.notCounted ? `${t.notCounted} order${t.notCounted === 1 ? ' is' : 's are'} not fully paid yet (or not in PHP) and ${t.notCounted === 1 ? 'is' : 'are'} left out of the totals. ` : ''}Totals count only the fully paid orders above. “Cost at PO rates (computed)” is each Supplier PO's total at the exchange rate on the PO; “Actual cost” uses the pesos you actually paid (type them on the Supplier PO payment). A “not confirmed” tag means part of the actual cost is still an estimate. "Difference" is actual profit less gross profit as ordered; a positive difference is shown in green and a negative one in red. Click an order to see exactly where the cost came from.</p>`;
     };
     ['opFrom', 'opTo'].forEach(i => q(i).onchange = draw); q('opSearch').oninput = draw;
     draw();
@@ -183,6 +186,8 @@
     const supMap = Object.fromEntries((data.suppliers || []).map(s => [s.id, s]));
     const pi = (data.proformaInvoices || []).find(p => p.salesOrderId === so.id);
     const worse = r.difference != null && r.difference < -0.005;
+    const costDiff = r2(r.actualCost - r.quotedCost);
+    const costTone = costDiff < -0.005 ? 'profit-green' : costDiff > 0.005 ? 'cost-red' : '';
     content.innerHTML = `
       <div class="page-head"><div><div class="doc-number-tag">${escapeHtml(r.soNo)}</div><h1>${escapeHtml(r.customer || '—')} — Order Profit</h1></div>
         <div class="page-actions"><a class="btn-line" href="#/sales-orders/${so.id}">Open Sales Order</a><button class="btn-amber" id="opAddCost">+ Add Additional Cost</button></div></div>
@@ -191,12 +196,12 @@
         <h3 class="section-title">Gross profit as ordered vs actual profit (PHP)</h3>
         <table class="data-table compact"><thead><tr><th></th><th>As ordered (quoted)</th><th>Actual</th><th>Difference</th></tr></thead><tbody>
           <tr><td>Sales (before VAT)</td><td>${money(r.sales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales - r.sales)}</td></tr>
-          <tr><td>Supplier costs (incl. their freight &amp; taxes)</td><td rowspan="2">${money(r.quotedCost)}<div class="muted-text small">${r.freightAssumed > 0 ? `quoted item cost ${money(r.quotedCost - r.freightAssumed)} + freight ${money(r.freightAssumed)} (expected to be passed straight through, same as the freight billed to the customer)` : 'quoted cost of the lines'}</div></td><td>${money(r.suppliersCost)}</td><td rowspan="2">${money(r.actualCost - r.quotedCost)}</td></tr>
+          <tr><td>Supplier costs (incl. their freight &amp; taxes)</td><td rowspan="2">${money(r.quotedCost)}<div class="muted-text small">${r.freightAssumed > 0 ? `quoted item cost ${money(r.quotedCost - r.freightAssumed)} + freight ${money(r.freightAssumed)} (expected to be passed straight through, same as the freight billed to the customer)` : 'quoted cost of the lines'}</div></td><td>${money(r.suppliersCost)}</td><td rowspan="2" class="${costTone}">${signed(costDiff)}</td></tr>
           <tr><td>Additional costs (unexpected)</td><td class="${r.additional ? 'cost-red' : ''}">${money(r.additional)}</td></tr>
-          <tr style="font-weight:700;"><td>Total cost</td><td>${money(r.quotedCost)}</td><td>${money(r.actualCost)}</td><td>${money(r.actualCost - r.quotedCost)}</td></tr>
-          <tr style="font-weight:800; border-top:2px solid var(--ink);"><td>Profit</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td><td>${r.actualProfit == null ? profitCell(r) : `${money(r.actualProfit)} <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td><td>${r.difference == null ? '—' : `<span class="${worse ? 'cost-red' : ''}">${r.difference > 0.005 ? '+' : ''}${money(r.difference)}</span>`}</td></tr>
+          <tr style="font-weight:700;"><td>Total cost</td><td>${money(r.quotedCost)}</td><td>${money(r.actualCost)}</td><td class="${costTone}">${signed(costDiff)}</td></tr>
+          <tr style="font-weight:800; border-top:2px solid var(--ink);"><td>Profit</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td><td>${r.actualProfit == null ? profitCell(r) : `<span class="${tone(r.difference)}">${money(r.actualProfit)}</span> <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td><td>${diffCell(r)}</td></tr>
         </tbody></table>
-        <p class="muted-text small">${r.actualProfit == null ? '' : worse ? 'The actual profit is LOWER than the profit this order was priced to earn.' : 'The actual profit is at or above the profit this order was priced to earn.'} In the cost rows, a positive Difference means the order cost more than quoted; a negative one means it cost less.</p>
+        <p class="muted-text small">${r.actualProfit == null ? '' : worse ? 'The actual profit is LOWER than the profit this order was priced to earn.' : 'The actual profit is at or above the profit this order was priced to earn.'} Green means we earned more than the order was priced to earn and red means less. In the cost rows, a plus Difference means the order cost more than quoted (red); a minus means it cost less (green).</p>
       </div>
       <div class="card"><h3 class="section-title">Where the actual cost came from</h3>
         <table class="data-table compact"><thead><tr><th>Supplier PO</th><th>Supplier</th><th>Status</th><th>PO total</th><th>Computed in PHP</th><th>Actually paid (PHP)</th><th>Still unpaid (at PO rate)</th><th>Cost used (PHP)</th></tr></thead><tbody>
@@ -230,5 +235,5 @@
     };
   }
 
-  window.OrderProfit = { compute, loadData };
+  window.OrderProfit = { tone: (d) => d == null ? '' : d > 0.005 ? 'profit-green' : d < -0.005 ? 'cost-red' : '', compute, loadData };
 })();
