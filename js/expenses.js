@@ -23,7 +23,7 @@ const EXPENSE_CATEGORIES = [
   'Rent', 'Utilities (Electricity, Water)', 'Communication (Phone, Internet)',
   'Salaries & Wages', 'Office Supplies', 'Packaging & Supplies', 'Transportation & Fuel', 'Professional Fees',
   'Taxes & Licenses', 'Repairs & Maintenance', 'Insurance', 'Bank Charges',
-  'Representation & Entertainment', 'Freight & Delivery', 'Miscellaneous'
+  'Representation & Entertainment', 'Freight & Delivery', 'Import Duties & Brokerage', 'Miscellaneous'
 ];
 const EXPENSE_PAYMENT_METHODS = ['Cash', 'Bank Transfer', 'Check', 'Company Card', 'Other'];
 
@@ -56,15 +56,22 @@ Entities.defineEntity({
   counterName: 'expense',
   titleField: 'description',
   defaultStatus: 'Recorded',
-  searchFields: ['description', 'payee', 'vendor', 'category', 'referenceNo'],
+  searchFields: ['description', 'payee', 'vendor', 'category', 'referenceNo', 'soNo'],
   // Newest expense date first (the entry order used to leave Oct 8 below Oct 12 and Aug 24 last).
   sortList: (a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
   beforeList: async () => { await normalizeExpensePayees(); },
   afterFormRender: (form, record) => setupExpenseForm(form, record),
+  // Link to a Sales Order (optional): the order number is copied onto the expense so lists and reports can show it.
+  beforeSave: async (obj) => {
+    const so = obj.salesOrderId ? await DB.dbGet('salesOrders', Number(obj.salesOrderId)) : null;
+    obj.salesOrderId = so ? so.id : '';
+    obj.soNo = so ? so.soNo : '';
+  },
   listColumns: [
     { key: 'date', label: 'Date', render: r => formatDate(r.date) },
     { key: 'category', label: 'Category' },
     { key: 'description', label: 'Description' },
+    { key: 'soNo', label: 'Sales Order', render: r => r.salesOrderId ? `<a href="#/sales-orders/${r.salesOrderId}">${escapeHtml(r.soNo || 'Sales Order')}</a>` : '—' },
     { key: 'vendor', label: 'Paid to / Bought from', render: r => escapeHtml(r.vendor || '—') },
     { key: 'payee', label: 'Payee' },
     { key: 'amount', label: 'Amount', render: r => formatMoney(r.amount, 'PHP') }
@@ -75,6 +82,7 @@ Entities.defineEntity({
     { name: 'description', label: 'Description', type: 'text', required: true },
     { name: 'payee', label: 'Payee (our business)', type: 'text' },
     { name: 'vendor', label: 'Paid to / Bought from (landlord, utility, store — optional)', type: 'text' },
+    { name: 'salesOrderId', label: 'Cost of Sales Order (optional — pick one for import duties, courier, etc. tied to a specific order)', type: 'select-dynamic', optionsFrom: 'salesOrders', optionsLabel: 'soNo' },
     { name: 'amount', label: 'Amount (PHP)', type: 'money', required: true },
     { name: 'paymentMethod', label: 'Payment Method', type: 'select', options: EXPENSE_PAYMENT_METHODS },
     { name: 'referenceNo', label: 'Reference / OR No.', type: 'text' },
@@ -82,4 +90,7 @@ Entities.defineEntity({
   ]
 });
 
+/** Costs on a Sales Order are the same Expense records, shown on the order and counted once in the books. */
+var SO_COST_TYPES = ['Import Duties & Brokerage', 'Freight & Delivery', 'Bank Charges', 'Packaging & Supplies', 'Miscellaneous'];
 window.ExpenseCategories = EXPENSE_CATEGORIES;
+window.ExpenseHelpers = { isOurName, SO_COST_TYPES, EXPENSE_PAYMENT_METHODS };

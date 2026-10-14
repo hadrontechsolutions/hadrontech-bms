@@ -167,6 +167,83 @@ async function syncSOStatusFromSupplierPOs(soId) {
 
 Router.route('/sales-orders/:id', (p) => renderSODetail(p.id));
 
+/** Estimated margin for one order, in PHP. Returns null (with a reason) when it cannot be worked out honestly. */
+function soMarginFigures(so, supplierPOs, addCosts) {
+  const addTotal = r2(addCosts.reduce((s, x) => s + (Number(x.amount) || 0), 0));
+  const livePOs = (supplierPOs || []).filter(p => p.status !== 'Cancelled');
+  let poTotal = 0, reason = '';
+  if ((so.currency || 'PHP') !== 'PHP') reason = `This order is in ${so.currency}, so the margin is not worked out here.`;
+  for (const p of livePOs) {
+    const c = p.currency || 'PHP';
+    const rate = c === 'PHP' ? 1 : (Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : 0);
+    if (!rate) { reason = reason || `Supplier PO ${p.poNo} has no exchange rate, so the margin is not worked out here.`; continue; }
+    poTotal += (Number(p.totalCost) || 0) * rate;
+  }
+  poTotal = r2(poTotal);
+  const sales = r2((Number(so.grandTotal) || 0) - (Number(so.vatTotal) || 0));
+  return { addTotal, poTotal, sales, poCount: livePOs.length, reason, margin: reason ? null : r2(sales - poTotal - addTotal) };
+}
+
+/** "Additional Costs" card: unexpected costs we absorb on this order (import duties, courier, brokerage...).
+ *  Each row is an ordinary Expense linked to the order, so it is booked once and flows to the reports and bookkeeper pack. */
+function soCostsCardHTML(so, supplierPOs, addCosts) {
+  const f = soMarginFigures(so, supplierPOs, addCosts);
+  const types = (window.ExpenseHelpers || {}).SO_COST_TYPES || ['Miscellaneous'];
+  const rows = addCosts.map(x => `<tr><td>${formatDate(x.date)}</td><td>${escapeHtml(x.category || '')}</td><td>${escapeHtml(x.description || '')}${x.vendor ? `<div class="muted-text" style="font-size:11px;">${escapeHtml(x.vendor)}</div>` : ''}</td><td>${escapeHtml(x.referenceNo || '—')}</td><td>${formatMoney(x.amount, 'PHP')}</td><td><a href="#/expenses/${x.id}">${escapeHtml(x.expenseNo || 'View')}</a></td></tr>`).join('');
+  const money = (v) => formatMoney(v, 'PHP');
+  return `
+    <div class="card" id="soCostsCard"><h3 class="section-title">Additional Costs <span class="count-pill">${addCosts.length}</span></h3>
+      <p class="muted-text small">Costs we pay on this order that were not in the quotation — import duties, brokerage, courier, bank charges. They are absorbed by us (not added to the customer's total) and are recorded in Expenses automatically.</p>
+      ${addCosts.length ? `<table class="data-table compact"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th>Amount</th><th>Expense</th></tr></thead><tbody>${rows}
+        <tr><td colspan="4" style="text-align:right;"><b>Total additional costs</b></td><td><b>${money(f.addTotal)}</b></td><td></td></tr></tbody></table>` : '<div class="empty-inline">No additional costs recorded for this order.</div>'}
+      <div class="btn-row" style="margin-top:10px;"><button class="btn-line btn-sm" id="btnAddSoCost">+ Add Additional Cost</button></div>
+      <div id="soCostForm" style="display:none; margin-top:12px;">
+        <div class="form-grid">
+          <div class="field"><label>Date *</label><input type="date" id="ac_date" value="${todayISO()}"></div>
+          <div class="field"><label>Type *</label><select id="ac_type">${types.map(t => `<option>${escapeHtml(t)}</option>`).join('')}</select></div>
+          <div class="field"><label>Description *</label><input type="text" id="ac_desc" placeholder="e.g. UPS import charges — brokerage, government charge, VAT on service"></div>
+          <div class="field"><label>Amount (PHP) *</label><input type="number" step="0.01" min="0" id="ac_amount"></div>
+          <div class="field"><label>Paid to (optional)</label><input type="text" id="ac_vendor" placeholder="e.g. UPS"></div>
+          <div class="field"><label>Reference / Tracking / OR No.</label><input type="text" id="ac_ref"></div>
+          <div class="field"><label>Payment Method</label><select id="ac_method">${((window.ExpenseHelpers || {}).EXPENSE_PAYMENT_METHODS || ['Cash']).map(m => `<option>${escapeHtml(m)}</option>`).join('')}</select></div>
+        </div>
+        <div class="btn-row" style="margin-top:10px;"><button class="btn-amber btn-sm" id="btnSaveSoCost">Save Cost</button><button class="btn-line btn-sm" id="btnCancelSoCost">Cancel</button></div>
+      </div>
+      <h4 style="margin:16px 0 6px;">Order margin (estimate, PHP)</h4>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Order sales (total less VAT)</div><div class="detail-value">${money(f.sales)}</div></div>
+        <div class="detail-item"><div class="detail-label">Supplier PO costs (${f.poCount} PO${f.poCount === 1 ? '' : 's'}, cancelled excluded)</div><div class="detail-value">${f.reason && f.poCount ? '—' : money(f.poTotal)}</div></div>
+        <div class="detail-item"><div class="detail-label">Additional costs</div><div class="detail-value">${money(f.addTotal)}</div></div>
+        <div class="detail-item"><div class="detail-label">Estimated margin</div><div class="detail-value">${f.margin == null ? '—' : `<b>${money(f.margin)}</b>${f.sales > 0 ? ` <span class="muted-text">(${(f.margin / f.sales * 100).toFixed(1)}%)</span>` : ''}`}</div></div>
+      </div>
+      <p class="muted-text small">${f.reason ? escapeHtml(f.reason) : 'Estimated margin = order sales − supplier PO costs (including their freight and taxes) − additional costs. Operating expenses such as rent are not included.'}</p>
+    </div>`;
+}
+
+async function wireSOCosts(so, id) {
+  const q = (i) => document.getElementById(i);
+  const form = q('soCostForm'); if (!form) return;
+  q('btnAddSoCost').onclick = () => { form.style.display = ''; q('ac_desc').focus(); };
+  q('btnCancelSoCost').onclick = () => { form.style.display = 'none'; };
+  q('btnSaveSoCost').onclick = async () => {
+    const date = q('ac_date').value, desc = q('ac_desc').value.trim(), amount = Number(q('ac_amount').value);
+    if (!date || !desc || !(amount > 0)) { toast('Enter the date, a description and an amount above zero.', 'err'); return; }
+    const all = await DB.dbGetAll('expenses');
+    const dup = all.find(x => String(x.description || '').trim().toLowerCase() === desc.toLowerCase() && Number(x.amount) === amount && x.date && Math.abs(daysBetweenISO(String(x.date).slice(0, 10), date)) <= 7);
+    if (dup && !confirm(`Possible double entry: "${dup.description}" for ${formatMoney(dup.amount, 'PHP')} is already recorded on ${formatDate(dup.date)}. Save this one anyway?`)) return;
+    const settings = await DB.getSettings(), now = new Date().toISOString();
+    const rec = {
+      date, category: q('ac_type').value, description: desc, payee: settings.companyName || 'Hadrontech Industrial Solutions', vendor: q('ac_vendor').value.trim(),
+      amount: r2(amount), paymentMethod: q('ac_method').value, referenceNo: q('ac_ref').value.trim(), notes: `Additional cost on ${so.soNo}`,
+      salesOrderId: so.id, soNo: so.soNo, status: 'Recorded', createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName
+    };
+    rec.expenseNo = await DB.nextDocNumber('expense');
+    await DB.dbAdd('expenses', rec);
+    await DB.logActivity(`Added additional cost ${rec.expenseNo} (${formatMoney(rec.amount, 'PHP')}) to sales order ${so.soNo}`);
+    toast('Additional cost saved and recorded in Expenses.'); renderSODetail(id);
+  };
+}
+
 async function renderSODetail(id) {
   const so = await DB.dbGet('salesOrders', Number(id));
   const content = document.getElementById('content');
@@ -182,6 +259,7 @@ async function renderSODetail(id) {
   const existingPI = existingPIs[0] || null;
   const deliveryReceipts = (await DB.dbQueryIndex('deliveryReceipts', 'salesOrderId', so.id)).sort((a, b) => String(a.drNo).localeCompare(String(b.drNo)));
   const supMap = Object.fromEntries(suppliers.map(s => [s.id, s]));
+  const addCosts = (await DB.dbGetAll('expenses')).filter(x => String(x.salesOrderId) === String(so.id)).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
   Router.setBreadcrumb([{ label: 'Sales Orders', hash: '/sales-orders' }, { label: so.soNo }]);
 
@@ -320,6 +398,8 @@ async function renderSODetail(id) {
 
     ${relatedTable('Supplier Purchase Orders', supplierPOs, ['poNo', 'poDate', 'status', 'totalCost'], '/supplier-pos', so.currency)}
 
+    ${soCostsCardHTML(so, supplierPOs, addCosts)}
+
     <div class="card"><h3 class="section-title">Delivery Receipts</h3>
       ${deliveryReceipts.length ? `<table class="data-table compact"><thead><tr><th>Receipt No.</th><th>Delivery Date</th><th>Items</th><th>Status</th></tr></thead><tbody>${deliveryReceipts.map(d => `<tr class="clickable-row" data-hash="/delivery-receipts/${d.id}"><td><a href="#/delivery-receipts/${d.id}">${escapeHtml(d.drNo)}</a></td><td>${formatDate(d.date)}</td><td>${(d.lines || []).map(l => escapeHtml(l.qty + ' ' + l.uom + ' ' + l.description)).join('; ')}</td><td>${statusBadge(d.status)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-inline">No deliveries yet. Click “Record Delivery” — a numbered Delivery Receipt is created for each delivery, ready to print and sign.</div>'}
     </div>
@@ -329,6 +409,7 @@ async function renderSODetail(id) {
     <div class="meta-strip">Created ${formatDate(so.createdAt)} by ${escapeHtml(so.createdBy || '—')} · Last modified ${formatDate(so.updatedAt)} by ${escapeHtml(so.modifiedBy || '—')}</div>
   `;
 
+  wireSOCosts(so, id);
   document.getElementById('btnPrint').onclick = () => Print.printSalesOrder(so, customer, customerPO, quotation);
   document.getElementById('btnProforma').onclick = () => ProformaInvoices.getOrCreateProformaInvoice(so);
   document.getElementById('btnRecordDelivery').onclick = () => {

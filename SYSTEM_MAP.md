@@ -180,3 +180,10 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 
 ## Printed quotation: Validity Period
 - Under "Valid Until" the printed quotation shows **Validity Period: N Days** (`validityDaysText` in print.js) = days from the quotation date to Valid Until, so an extended validity prints the new length. Left out if either date is missing or Valid Until is before the date; "1 Day" / "Same day only" for the edge cases. Test: test-quotation-validity-days.js.
+
+## Sales Order — Additional Costs (js/salesOrders.js, js/expenses.js)
+- Unexpected costs we absorb on an order (import duties, brokerage, courier, bank charges) are added on the Sales Order page under **Additional Costs**. They are not added to the customer's total.
+- Each row is an ordinary **Expense** with `salesOrderId` + `soNo` (no new store, no DB version change), so it is booked once and flows to Expense reports, the Bookkeeper Pack and the Business Net Profit.
+- New expense category **Import Duties & Brokerage** (bookkeeper account "Import Duties and Brokerage Expense"). The Expense form has an optional "Cost of Sales Order" dropdown; the Expenses list has a Sales Order column.
+- The Sales Order shows an **Order margin (estimate, PHP)**: order sales (total less VAT) − non-cancelled Supplier PO costs (converted at each PO's exchange rate) − additional costs. Not shown for non-PHP orders or POs without a rate.
+- Test: test-so-additional-costs.js
