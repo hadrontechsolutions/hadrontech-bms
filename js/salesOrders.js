@@ -180,13 +180,6 @@ function soMarginFigures(so, supplierPOs, addCosts) {
   return { addTotal, sales, gp, reason, margin: reason ? null : r2(gp - addTotal) };
 }
 
-/** Red banner at the top of the order: the same total, number of entries and margin that the card below shows. */
-function soCostBannerHTML(so, supplierPOs, addCosts) {
-  const f = soMarginFigures(so, supplierPOs, addCosts);
-  const n = addCosts.length;
-  return `<div class="cost-alert">⚠ Unexpected costs paid on this order: ${formatMoney(f.addTotal, 'PHP')} (${n} entr${n === 1 ? 'y' : 'ies'}). Absorbed by us — not added to the customer's total.${f.margin != null ? ` Profit on this order after these costs: ${formatMoney(f.margin, 'PHP')}.` : ''} <a href="#soCostsCard" onclick="document.getElementById('soCostsCard').scrollIntoView({behavior:'smooth'});return false;">See details ↓</a></div>`;
-}
-
 /** "Additional Costs" card: unexpected costs we absorb on this order (import duties, courier, brokerage...).
  *  Each row is an ordinary Expense linked to the order, so it is booked once and flows to the reports and bookkeeper pack. */
 function soCostsCardHTML(so, supplierPOs, addCosts) {
@@ -313,7 +306,6 @@ async function renderSODetail(id) {
       </div>
     </div>
 
-    ${addCosts.length ? soCostBannerHTML(so, supplierPOs, addCosts) : ''}
 
     ${nextStep ? `<div class="card next-step ${nextStep.done ? 'done' : ''}"><div class="ns-label">Next step</div><div class="ns-text">${nextStep.done ? '✓ ' : ''}${escapeHtml(nextStep.text)}</div></div>` : ''}
 
