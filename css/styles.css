@@ -477,7 +477,7 @@ td.desc-col{max-width:320px; width:320px;}
 .timeline{margin-top:6px; margin-left:4px;}
 
 /* Unexpected (additional) costs on a Sales Order — always red so they are seen at once */
-.cost-alert{background:var(--danger-lt); border:2px solid var(--danger); color:var(--danger); font-weight:700; font-size:14px; border-radius:var(--radius); padding:12px 18px; margin-bottom:16px;}
+.cost-alert{background:var(--danger-lt); border:2px solid var(--danger); color:var(--danger); font-weight:400; font-size:14px; border-radius:var(--radius); padding:12px 18px; margin-bottom:16px;}
 .cost-alert a{color:var(--danger); text-decoration:underline;}
 .cost-tag{display:inline-block; background:var(--danger-lt); color:var(--danger); border:1px solid var(--danger); border-radius:var(--radius-sm); font-weight:700; font-size:11px; padding:1px 7px; white-space:nowrap;}
 .cost-red{color:var(--danger); font-weight:700;}
