@@ -93,6 +93,7 @@
     /* ---- profit on won quotations (same figures as the Gross Profit report) ---- */
     const wonQ = periodQ.filter(q => q.status === 'Won' && phpOnly(q));
     out.profit = { rows: wonQ.map(q => ({ no: q.quotationNo, customer: cname(q.customerId), date: d10(q.date), net: r2(q.netSubtotal), profit: r2(q.grossProfit), margin: Number(q.grossMarginPercent) || 0 })), net: r2(wonQ.reduce((s, q) => s + (Number(q.netSubtotal) || 0), 0)), profitTotal: r2(wonQ.reduce((s, q) => s + (Number(q.grossProfit) || 0), 0)) };
+    out.orderProfit = window.OrderProfit ? window.OrderProfit.compute(data, { from, to }) : { rows: [], totals: { counted: 0, notCounted: 0 } };
     out.profit.margin = out.profit.net ? r2((out.profit.profitTotal / out.profit.net) * 100) : 0;
 
     /* ---- orders ---- */
@@ -180,6 +181,10 @@
     table('Profitability', 'PROFIT ON WON QUOTATIONS — issued in the period', ['Quotation', 'Date', 'Customer', 'Net sales', 'Gross profit', 'Margin %'], [16, 11, 36, 18, 18, 11],
       rep.profit.rows.map(r => [{ v: r.no, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.customer, s: 'txt' }, money(r.net), money(r.profit), { v: r.margin / 100, s: 'pct' }]),
       [[3, rep.profit.net], [4, rep.profit.profitTotal]], 'Gross profit is the figure calculated on each quotation (selling price less its costs) — the same as Reports → Gross Profit. PHP quotations only.');
+    table('Order Profit', 'ORDER PROFIT — gross profit as ordered vs ACTUAL profit, orders placed in the period', ['Sales Order', 'Order date', 'Customer', 'Sales (before VAT)', 'Quoted cost', 'Gross profit as ordered', 'Actual cost', 'Of which additional costs', 'Actual profit', 'Difference (actual − ordered)', 'Customer payment'], [16, 11, 32, 18, 16, 18, 16, 16, 16, 20, 22],
+      rep.orderProfit.rows.map(r => [{ v: r.soNo, s: 'txt' }, r.orderDate ? { d: r.orderDate, s: 'date' } : { v: '', s: 'txt' }, { v: r.customer, s: 'txt' }, money(r.sales), money(r.quotedCost), money(r.quotedProfit), money(r.actualCost), money(r.additional), r.actualProfit == null ? { v: 'Not fully paid yet', s: 'txt' } : money(r.actualProfit), r.difference == null ? { v: '', s: 'txt' } : money(r.difference), { v: r.payState, s: 'txt' }]),
+      [[3, rep.orderProfit.totals.sales], [4, rep.orderProfit.totals.quotedCost], [5, rep.orderProfit.totals.quotedProfit], [6, rep.orderProfit.totals.actualCost], [7, rep.orderProfit.totals.additional], [8, rep.orderProfit.totals.actualProfit], [9, rep.orderProfit.totals.difference]],
+      'Internal figures. Gross profit as ordered = sales less the quoted cost (same as Reports → Gross Profit and Distributions). Actual profit = what the customer paid, less Supplier POs at the rates actually paid, less Additional Costs. Only orders PAID IN FULL are counted in the totals; others are listed as "Not fully paid yet". Orders are picked by order date.');
     table('Receivables', `WHO OWES US — unpaid invoices as of ${rep.to}`, ['Invoice', 'Customer', 'Invoice date', 'Days', 'Cur', 'Balance', 'PHP Balance', 'Current (0-30)', '31-60', '61-90', 'Over 90'], [16, 34, 12, 7, 6, 15, 17, 15, 14, 14, 14],
       rep.pack.arRows.map(r => [{ v: r.invoiceNo, s: 'txt' }, { v: r.customer, s: 'txt' }, { d: r.date, s: 'date' }, { v: r.days, s: 'int' }, { v: r.currency, s: 'txt' }, money(r.balance), money(r.phpBalance), money(r.bucket === 'b0' ? r.phpBalance : 0), money(r.bucket === 'b30' ? r.phpBalance : 0), money(r.bucket === 'b60' ? r.phpBalance : 0), money(r.bucket === 'b90' ? r.phpBalance : 0)]),
       [[6, t.arClosing], [7, rep.pack.arAging.b0], [8, rep.pack.arAging.b30], [9, rep.pack.arAging.b60], [10, rep.pack.arAging.b90]]);
@@ -229,8 +234,21 @@
       ${block('Position at period end', [row('Receivables — customers owe us', f(t.arClosing)), row('Payables — we owe suppliers', f(t.apClosing)), row('Inventory on hand', f(t.inventory)), row('Business Reserve', f(t.reserveEnd))])}
       ${block('Pipeline & orders', [row('Quotations issued', `${P.quotedCount} · ${f(P.quotedValue)}`), row('Won / Lost', `${(P.byStatus.Won || { count: 0 }).count} / ${(P.byStatus.Lost || { count: 0 }).count}${P.winRateCount != null ? ' · win rate ' + P.winRateCount + '%' : ''}`), row('Open quotations now', `${P.openCount} · ${f(P.openValue)}`), row('Active sales orders now', `${O.activeCount} · ${f(O.activeValue)}`), row('Gross profit on won quotations', `${f(rep.profit.profitTotal)} (${rep.profit.margin}%)`)])}
       ${top.length ? block('Top customers this period', top.map(c => row(c.name || '(no name)', f(c.invoiced) + ` <span style="font-weight:400;color:#777;">(${Math.round(c.share * 100)}%)</span>`))) : ''}
+      ${rep.orderProfit.totals.counted ? block('Profit: as ordered vs actual (fully paid orders placed in this period)', [row('Orders counted', String(rep.orderProfit.totals.counted)), row('Gross profit as ordered', f(rep.orderProfit.totals.quotedProfit) + ` (${rep.orderProfit.totals.quotedPct}%)`), row('Actual profit', f(rep.orderProfit.totals.actualProfit) + ` (${rep.orderProfit.totals.actualPct}%)`), row('Difference (actual − ordered)', f(rep.orderProfit.totals.difference), true)].concat(rep.orderProfit.totals.additional ? [row('Of the actual cost: unexpected additional costs', f(rep.orderProfit.totals.additional))] : [])) : ''}
       ${rep.attention.length ? `<div class="bp-sec">Needs attention</div><ul style="font-size:11px; line-height:1.6; margin:6px 0 0 18px;">${rep.attention.map(a => `<li style="color:${a.level === 'warn' ? '#b3261e' : '#555'}">${escapeHtml(a.text)}</li>`).join('')}</ul>` : ''}
       <div class="p-terms">Management figures from the owners’ own records, unaudited. The full detail — pipeline, active orders, customers, 12-month trend, profit, receivables, payables, expenses and cash — is in the accompanying Excel workbook.</div>`;
+  }
+
+  /* On-screen card: same figures as the Order Profit page. */
+  function orderProfitCardHTML(rep) {
+    const op = rep.orderProfit, t = op.totals, f = (n) => formatMoney(n, 'PHP');
+    const pc = (v) => (Math.round(v * 100) / 100) + '%';
+    if (!op.rows.length) return `<div class="card"><h3 class="section-title">Profit: gross profit as ordered vs actual profit</h3><div class="empty-inline">No delivered or paid order was placed between ${escapeHtml(rep.periodText)}. This section lists orders by the date the order was placed.</div></div>`;
+    return `<div class="card"><h3 class="section-title">Profit: gross profit as ordered vs actual profit <span class="muted-text" style="font-weight:400;">(orders placed ${escapeHtml(rep.periodText)} · internal)</span></h3>
+      <div style="overflow-x:auto;"><table class="data-table compact"><thead><tr><th>Sales Order</th><th>Customer</th><th>Gross profit as ordered</th><th>Actual cost</th><th>Actual profit</th><th>Difference (actual − ordered)</th></tr></thead><tbody>
+      ${op.rows.map(r => `<tr class="clickable-row" data-hash="/order-profit/${r.id}"><td><a href="#/order-profit/${r.id}">${escapeHtml(r.soNo)}</a></td><td>${escapeHtml(r.customer || '—')}</td><td>${f(r.quotedProfit)} <span class="muted-text">(${pc(r.quotedPct)})</span></td><td>${f(r.actualCost)}${r.additional ? ` <span class="cost-tag">⚠ incl. ${f(r.additional)}</span>` : ''}</td><td>${r.actualProfit == null ? '<span class="badge badge-pending">Not fully paid yet</span>' : `<b>${f(r.actualProfit)}</b> <span class="muted-text">(${pc(r.diffPct)})</span>`}</td><td>${r.difference == null ? '—' : `<span class="${r.difference < -0.005 ? 'cost-red' : ''}">${r.difference > 0.005 ? '+' : ''}${f(r.difference)}</span>`}</td></tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);"><td colspan="2">TOTAL — ${t.counted} fully paid order${t.counted === 1 ? '' : 's'}</td><td>${f(t.quotedProfit)} (${pc(t.quotedPct)})</td><td>${f(t.actualCost)}</td><td>${f(t.actualProfit)} (${pc(t.actualPct)})</td><td><span class="${t.difference < -0.005 ? 'cost-red' : ''}">${t.difference > 0.005 ? '+' : ''}${f(t.difference)}</span></td></tr></tfoot></table></div>
+      <p class="muted-text small" style="margin-bottom:0;">${t.notCounted ? `${t.notCounted} order${t.notCounted === 1 ? ' is' : 's are'} not fully paid yet and left out of the totals. ` : ''}Actual profit = what the customer paid less Supplier POs (at the rates actually paid) and Additional Costs. Orders are picked by the date the order was placed. Detail: <a href="#/order-profit">Order Profit</a>.</p></div>`;
   }
 
   /* ---------- page ---------- */
@@ -274,8 +292,9 @@
           <div class="stat-card"><div class="stat-card-num">${O.activeCount}</div><div class="stat-card-lbl">Active orders (${f(O.activeValue)})</div></div>
         </div>
         <div class="card"><h3 class="section-title">Needs your attention</h3>${rep.attention.length ? `<ul class="bp-warn">${rep.attention.map(a => `<li class="${a.level}">${a.level === 'warn' ? '⚠' : 'ℹ'} ${escapeHtml(a.text)}</li>`).join('')}</ul>` : '<div class="text-ok">✓ Nothing urgent.</div>'}</div>
+        ${orderProfitCardHTML(rep)}
         <div class="card"><div class="btn-row"><button class="btn-amber" id="orXlsx">Download Excel workbook (.xlsx)</button><button class="btn-line" id="orPdf">Open PDF summary (Print → Save as PDF)</button></div>
-        <div class="muted-text" style="margin-top:8px;">Workbook tabs: Overview, Sales Pipeline, Orders, Customers, Monthly Trend, Profitability, Receivables, Payables, Expenses &amp; Cash, Notes.</div></div>`;
+        <div class="muted-text" style="margin-top:8px;">Workbook tabs: Overview, Sales Pipeline, Orders, Customers, Monthly Trend, Profitability, Order Profit, Receivables, Payables, Expenses &amp; Cash, Notes.</div></div>`;
       q('orXlsx').onclick = () => {
         const bytes = window.BookkeeperPack.xl.workbookBytes(buildSheets(rep, co));
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

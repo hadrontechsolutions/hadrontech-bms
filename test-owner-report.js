@@ -76,7 +76,7 @@ print('ROW|' + '|'.join(str(c.value) for c in ws[7]))
 print('CUST|' + '|'.join(str(c.value) for c in wb['Customers'][6]))
 `, file], { encoding: 'utf8' });
   const pick = (k) => ((py.stdout || '').split('\n').find(l => l.startsWith(k + '|')) || '');
-  ok('12 workbook opens with all 10 tabs', pick('SHEETS') === 'SHEETS|Overview|Sales Pipeline|Orders|Customers|Monthly Trend|Profitability|Receivables|Payables|Expenses & Cash|Notes', py.stdout + py.stderr);
+  ok('12 workbook opens with all 11 tabs', pick('SHEETS') === 'SHEETS|Overview|Sales Pipeline|Orders|Customers|Monthly Trend|Profitability|Order Profit|Receivables|Payables|Expenses & Cash|Notes', py.stdout + py.stderr);
   ok('13 Overview comparison table and Customers ranking are present', /Sales invoiced/.test(pick('ROW')) && /No TIN Corp/.test(pick('CUST')), pick('ROW') + pick('CUST'));
   const sum = OR.summaryHTML(rep, co); ok('14 PDF summary has period, comparison and attention, no NaN', /Business Performance Report/.test(sum) && /Aug 1, 2026/.test(sum) && /Needs attention/.test(sum) && !/NaN|undefined/.test(sum));
 

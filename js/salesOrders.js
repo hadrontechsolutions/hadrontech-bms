@@ -415,6 +415,7 @@ async function renderSODetail(id) {
   `;
 
   wireSOCosts(so, id);
+  if (window.__openAddCost === so.id) { window.__openAddCost = null; const b = document.getElementById('btnAddSoCost'); if (b) { b.click(); const cc = document.getElementById('soCostsCard'); if (cc && cc.scrollIntoView) cc.scrollIntoView(); } }
   document.getElementById('btnPrint').onclick = () => Print.printSalesOrder(so, customer, customerPO, quotation);
   document.getElementById('btnProforma').onclick = () => ProformaInvoices.getOrCreateProformaInvoice(so);
   document.getElementById('btnRecordDelivery').onclick = () => {

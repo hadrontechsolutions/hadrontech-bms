@@ -189,3 +189,13 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Profit on one order uses the SAME basis as the Gross Profit report and Distributions: sales (before VAT) less quoted cost = gross profit as ordered; then less additional costs. (Supplier PO actual prices are deliberately not used, so numbers never disagree between screens.) Profit % turns red below 10%.
 - Gross Profit (Won Quotations) report: columns Gross Profit as Quoted · Additional Costs Paid (red) · Profit After Additional Costs · Margin % After. Costs are matched through the order's quotation number (all revisions).
 - Test: test-so-additional-costs.js
+
+## Order Profit — gross profit as ordered vs ACTUAL profit (js/orderProfit.js; linked into js/ownerReport.js)
+- Sidebar "💹 Order Profit" (list `/order-profit`, detail `/order-profit/:salesOrderId`). Internal only — never printed for customers.
+- Gross profit as ordered = soGrossProfit (same as Gross Profit report and Distributions) + any freight/other billed to the customer. Quoted cost = sales (before VAT) − that profit.
+- Actual cost (PHP) = Supplier POs of the order (cancelled/draft excluded): paid part at each payment's exchange rate + unpaid part at the PO's rate; plus Additional Costs (expenses linked to the order). Nothing is typed twice; extra costs are entered as Additional Costs on the Sales Order (the detail page has "+ Add Additional Cost", which opens that form).
+- Actual profit is worked out only when the customer's invoice is PAID IN FULL (and the order/invoice are in PHP); other orders are listed as "Not fully paid yet" and left out of totals. Difference = actual − ordered; negative shows red.
+- Orders listed: not Cancelled/Draft and either Delivered/Partially Delivered or carrying a customer or supplier payment. Filter by order date and search.
+- Only stored input: `salesOrders.profitNote` (a review note; changes no figure).
+- Business Performance Report: new section on screen, "Order Profit" workbook tab (now 11 tabs) and a block in the PDF summary — same `OrderProfit.compute` figures (orders picked by order date).
+- Tests: test-order-profit.js (test-owner-report.js now expects 11 tabs)
