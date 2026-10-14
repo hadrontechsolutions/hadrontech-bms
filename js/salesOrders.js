@@ -84,7 +84,8 @@ async function createFromCustomerPO(po, quotation) {
 
 Router.route('/sales-orders', async () => {
   Router.setBreadcrumb([{ label: 'Sales Orders' }]);
-  const [allRaw, customers, customerPOs, quotations] = await Promise.all([DB.dbGetAll('salesOrders'), DB.dbGetAll('customers'), DB.dbGetAll('customerPOs'), DB.dbGetAll('quotations')]);
+  const [allRaw, customers, customerPOs, quotations, expensesAll] = await Promise.all([DB.dbGetAll('salesOrders'), DB.dbGetAll('customers'), DB.dbGetAll('customerPOs'), DB.dbGetAll('quotations'), DB.dbGetAll('expenses')]);
+  const costBySO = ExpenseHelpers.soCostTotals(expensesAll);
   const all = allRaw.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   const custMap = Object.fromEntries(customers.map(c => [c.id, c]));
   const cpoMap = Object.fromEntries(customerPOs.map(p => [p.id, p]));
@@ -117,7 +118,7 @@ Router.route('/sales-orders', async () => {
         <td>${escapeHtml(so.soNo)}</td><td>${escapeHtml(custMap[so.customerId]?.companyName || '—')}</td>
         <td>${escapeHtml(quoteMap[so.quotationId]?.quotationNo || '—')}</td>
         <td>${escapeHtml(cpoMap[so.customerPOId]?.customerPoNumber || cpoMap[so.customerPOId]?.poNo || '—')}</td>
-        <td>${formatDate(so.orderDate)}</td><td>${badgeHTML}</td><td>${formatMoney(so.grandTotal, so.currency)}</td>
+        <td>${formatDate(so.orderDate)}</td><td>${badgeHTML}</td><td>${formatMoney(so.grandTotal, so.currency)}${costBySO[so.id] ? `<div><span class="cost-tag" title="Unexpected costs we paid on this order">⚠ +${formatMoney(costBySO[so.id], 'PHP')} costs</span></div>` : ''}</td>
       </tr>`;
     }).join('');
     document.getElementById('emptyMsg').style.display = rows.length ? 'none' : 'block';
@@ -167,21 +168,23 @@ async function syncSOStatusFromSupplierPOs(soId) {
 
 Router.route('/sales-orders/:id', (p) => renderSODetail(p.id));
 
-/** Estimated margin for one order, in PHP. Returns null (with a reason) when it cannot be worked out honestly. */
+/** Profit figures for one order, in PHP, on the SAME basis as the Gross Profit report and Distributions:
+ *  selling price (before VAT) less the quoted cost of its lines = gross profit as ordered; then less additional costs. */
 function soMarginFigures(so, supplierPOs, addCosts) {
   const addTotal = r2(addCosts.reduce((s, x) => s + (Number(x.amount) || 0), 0));
-  const livePOs = (supplierPOs || []).filter(p => p.status !== 'Cancelled');
-  let poTotal = 0, reason = '';
-  if ((so.currency || 'PHP') !== 'PHP') reason = `This order is in ${so.currency}, so the margin is not worked out here.`;
-  for (const p of livePOs) {
-    const c = p.currency || 'PHP';
-    const rate = c === 'PHP' ? 1 : (Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : 0);
-    if (!rate) { reason = reason || `Supplier PO ${p.poNo} has no exchange rate, so the margin is not worked out here.`; continue; }
-    poTotal += (Number(p.totalCost) || 0) * rate;
-  }
-  poTotal = r2(poTotal);
-  const sales = r2((Number(so.grandTotal) || 0) - (Number(so.vatTotal) || 0));
-  return { addTotal, poTotal, sales, poCount: livePOs.length, reason, margin: reason ? null : r2(sales - poTotal - addTotal) };
+  const reason = (so.currency || 'PHP') !== 'PHP' ? `This order is in ${so.currency}, so the profit after additional costs is not worked out here.` : '';
+  const lines = so.lines || [];
+  let sales = 0;
+  lines.forEach(l => { sales = r2(sales + QuoteCalc.computeLine(l, so.currency).net); });
+  const gp = typeof soGrossProfit === 'function' ? soGrossProfit(so) : 0;
+  return { addTotal, sales, gp, reason, margin: reason ? null : r2(gp - addTotal) };
+}
+
+/** Red banner at the top of the order: the same total, number of entries and margin that the card below shows. */
+function soCostBannerHTML(so, supplierPOs, addCosts) {
+  const f = soMarginFigures(so, supplierPOs, addCosts);
+  const n = addCosts.length;
+  return `<div class="cost-alert">⚠ Unexpected costs paid on this order: ${formatMoney(f.addTotal, 'PHP')} (${n} entr${n === 1 ? 'y' : 'ies'}). Absorbed by us — not added to the customer's total.${f.margin != null ? ` Profit on this order after these costs: ${formatMoney(f.margin, 'PHP')}.` : ''} <a href="#soCostsCard" onclick="document.getElementById('soCostsCard').scrollIntoView({behavior:'smooth'});return false;">See details ↓</a></div>`;
 }
 
 /** "Additional Costs" card: unexpected costs we absorb on this order (import duties, courier, brokerage...).
@@ -189,13 +192,13 @@ function soMarginFigures(so, supplierPOs, addCosts) {
 function soCostsCardHTML(so, supplierPOs, addCosts) {
   const f = soMarginFigures(so, supplierPOs, addCosts);
   const types = (window.ExpenseHelpers || {}).SO_COST_TYPES || ['Miscellaneous'];
-  const rows = addCosts.map(x => `<tr><td>${formatDate(x.date)}</td><td>${escapeHtml(x.category || '')}</td><td>${escapeHtml(x.description || '')}${x.vendor ? `<div class="muted-text" style="font-size:11px;">${escapeHtml(x.vendor)}</div>` : ''}</td><td>${escapeHtml(x.referenceNo || '—')}</td><td>${formatMoney(x.amount, 'PHP')}</td><td><a href="#/expenses/${x.id}">${escapeHtml(x.expenseNo || 'View')}</a></td></tr>`).join('');
+  const rows = addCosts.map(x => `<tr><td>${formatDate(x.date)}</td><td>${escapeHtml(x.category || '')}</td><td>${escapeHtml(x.description || '')}${x.vendor ? `<div class="muted-text" style="font-size:11px;">${escapeHtml(x.vendor)}</div>` : ''}</td><td>${escapeHtml(x.referenceNo || '—')}</td><td class="cost-red">${formatMoney(x.amount, 'PHP')}</td><td><a href="#/expenses/${x.id}">${escapeHtml(x.expenseNo || 'View')}</a></td></tr>`).join('');
   const money = (v) => formatMoney(v, 'PHP');
   return `
-    <div class="card" id="soCostsCard"><h3 class="section-title">Additional Costs <span class="count-pill">${addCosts.length}</span></h3>
+    <div class="card ${addCosts.length ? 'cost-card' : ''}" id="soCostsCard"><h3 class="section-title">Additional Costs <span class="count-pill">${addCosts.length}</span></h3>
       <p class="muted-text small">Costs we pay on this order that were not in the quotation — import duties, brokerage, courier, bank charges. They are absorbed by us (not added to the customer's total) and are recorded in Expenses automatically.</p>
       ${addCosts.length ? `<table class="data-table compact"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th>Amount</th><th>Expense</th></tr></thead><tbody>${rows}
-        <tr><td colspan="4" style="text-align:right;"><b>Total additional costs</b></td><td><b>${money(f.addTotal)}</b></td><td></td></tr></tbody></table>` : '<div class="empty-inline">No additional costs recorded for this order.</div>'}
+        <tr><td colspan="4" style="text-align:right;"><b>Total additional costs</b></td><td class="cost-red">${money(f.addTotal)}</td><td></td></tr></tbody></table>` : '<div class="empty-inline">No additional costs recorded for this order.</div>'}
       <div class="btn-row" style="margin-top:10px;"><button class="btn-line btn-sm" id="btnAddSoCost">+ Add Additional Cost</button></div>
       <div id="soCostForm" style="display:none; margin-top:12px;">
         <div class="form-grid">
@@ -209,14 +212,14 @@ function soCostsCardHTML(so, supplierPOs, addCosts) {
         </div>
         <div class="btn-row" style="margin-top:10px;"><button class="btn-amber btn-sm" id="btnSaveSoCost">Save Cost</button><button class="btn-line btn-sm" id="btnCancelSoCost">Cancel</button></div>
       </div>
-      <h4 style="margin:16px 0 6px;">Order margin (estimate, PHP)</h4>
+      <h4 style="margin:16px 0 6px;">Profit on this order (PHP) — same basis as the Gross Profit report and Distributions</h4>
       <div class="detail-grid">
-        <div class="detail-item"><div class="detail-label">Order sales (total less VAT)</div><div class="detail-value">${money(f.sales)}</div></div>
-        <div class="detail-item"><div class="detail-label">Supplier PO costs (${f.poCount} PO${f.poCount === 1 ? '' : 's'}, cancelled excluded)</div><div class="detail-value">${f.reason && f.poCount ? '—' : money(f.poTotal)}</div></div>
-        <div class="detail-item"><div class="detail-label">Additional costs</div><div class="detail-value">${money(f.addTotal)}</div></div>
-        <div class="detail-item"><div class="detail-label">Estimated margin</div><div class="detail-value">${f.margin == null ? '—' : `<b>${money(f.margin)}</b>${f.sales > 0 ? ` <span class="muted-text">(${(f.margin / f.sales * 100).toFixed(1)}%)</span>` : ''}`}</div></div>
+        <div class="detail-item"><div class="detail-label">Order sales (before VAT)</div><div class="detail-value">${money(f.sales)}</div></div>
+        <div class="detail-item"><div class="detail-label">Gross profit as ordered (sales less quoted cost)</div><div class="detail-value">${f.reason ? '—' : money(f.gp)}</div></div>
+        <div class="detail-item"><div class="detail-label">Additional costs paid (unexpected)</div><div class="detail-value ${f.addTotal > 0 ? 'cost-red' : ''}">${money(f.addTotal)}</div></div>
+        <div class="detail-item"><div class="detail-label">Profit after additional costs</div><div class="detail-value ${f.margin != null && f.sales > 0 && f.margin / f.sales < 0.10 ? 'cost-red' : ''}">${f.margin == null ? '—' : `<b>${money(f.margin)}</b>${f.sales > 0 ? ` <span class="muted-text">(${(f.margin / f.sales * 100).toFixed(1)}% of sales)</span>` : ''}`}</div></div>
       </div>
-      <p class="muted-text small">${f.reason ? escapeHtml(f.reason) : 'Estimated margin = order sales − supplier PO costs (including their freight and taxes) − additional costs. Operating expenses such as rent are not included.'}</p>
+      <p class="muted-text small">${f.reason ? escapeHtml(f.reason) : 'Profit after additional costs = gross profit as ordered − additional costs. Operating expenses such as rent are not included. Actual Supplier PO prices are not used here, so this matches the reports.'}</p>
     </div>`;
 }
 
@@ -309,6 +312,8 @@ async function renderSODetail(id) {
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
+
+    ${addCosts.length ? soCostBannerHTML(so, supplierPOs, addCosts) : ''}
 
     ${nextStep ? `<div class="card next-step ${nextStep.done ? 'done' : ''}"><div class="ns-label">Next step</div><div class="ns-text">${nextStep.done ? '✓ ' : ''}${escapeHtml(nextStep.text)}</div></div>` : ''}
 

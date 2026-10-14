@@ -49,7 +49,7 @@ function reportBasis(key, view) {
     salesOrderRegister: v === V_AWAIT ? { what: 'Sales orders that are Ready for Delivery or Partially Delivered', dateBy: null } : { what: v ? `Sales orders with status ${v}` : 'All sales orders', dateBy: 'order date' },
     supplierPORegister: { what: v ? `Supplier POs with status ${v}` : 'All supplier POs', dateBy: 'PO date' },
     salesSummary: { what: v === V_MONTH ? 'Sales order totals per month (PHP orders only)' : 'Sales order totals per customer (PHP orders only)', dateBy: 'sales order date — not the invoice date' },
-    grossProfit: { what: 'Won quotations: selling price less cost', dateBy: 'quotation date' },
+    grossProfit: { what: 'Won quotations: selling price less quoted cost, then less any additional (unexpected) costs paid on their Sales Orders', dateBy: 'quotation date' },
     agingReport: v === V_PAYABLES ? { what: 'Supplier POs not yet fully paid', dateBy: 'PO date' } : { what: 'Customer invoices not yet fully paid', dateBy: 'invoice date' },
     salesRegisterBookkeeper: { what: v ? `Sales orders with status ${v}` : 'Sales orders (Cancelled and Draft are left out)', dateBy: 'order date' },
     purchaseRegisterBookkeeper: { what: v ? `Supplier POs with status ${v}` : 'Supplier POs (Cancelled and Draft are left out)', dateBy: 'PO date' },
@@ -163,7 +163,7 @@ async function renderReports(activeKey, initialView) {
         // badge:true renders the cell as a color-coded status pill (statusBadge already escapes
         // its own text safely) instead of plain escaped text. CSV export below is untouched --
         // it always uses the plain raw value, so exported files never contain HTML markup.
-        return `<td>${c.badge ? statusBadge(String(raw)) : escapeHtml(String(raw))}</td>`;
+        return `<td${c.red && c.red(row) ? ' class="cost-red"' : ''}>${c.badge ? statusBadge(String(raw)) : escapeHtml(String(raw))}</td>`;
       }).join('')}</tr>`).join('')}</tbody>
       ${currentTotals ? `<tfoot><tr style="font-weight:700; border-top:2px solid var(--ink); background:rgba(0,0,0,.03);">${currentTotals.map(t => `<td>${escapeHtml(t)}</td>`).join('')}</tr></tfoot>` : ''}
       </table>`;
@@ -352,18 +352,30 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
       return { rows, cols: [{ label: 'Month', value: 'month' }, { label: 'Total Sales', value: 'total' }], totals, note };
     }
     case 'grossProfit': {
-      const rows = quotations.filter(q => q.status === 'Won' && inRange(q.date)
+      // Additional costs (unexpected, absorbed) are linked to Sales Orders; each order belongs to a quotation family (same quotationNo).
+      const allQuotes = await DB.dbGetAll('quotations');
+      const noById = Object.fromEntries(allQuotes.map(q => [q.id, q.quotationNo]));
+      const costBySO = ExpenseHelpers.soCostTotals(await DB.dbGetAll('expenses'));
+      const costByQuoteNo = {};
+      salesOrders.forEach(o => { if (costBySO[o.id] && noById[o.quotationId]) costByQuoteNo[noById[o.quotationId]] = r2((costByQuoteNo[noById[o.quotationId]] || 0) + costBySO[o.id]); });
+      const rows0 = quotations.filter(q => q.status === 'Won' && inRange(q.date)
         && textMatches(custMap[q.customerId]?.companyName, customerFilter)
         && textMatches(q.endUser, endUserFilter));
+      const rows = rows0.map(q => { const ac = (q.currency || 'PHP') === 'PHP' ? (costByQuoteNo[q.quotationNo] || 0) : 0; return Object.assign({}, q, { _addCost: ac, _gpAfter: r2((Number(q.grossProfit) || 0) - ac), _mAfter: Number(q.netSubtotal) ? r2(((Number(q.grossProfit) || 0) - ac) / Number(q.netSubtotal) * 100) : 0 }); });
       const cols = [
         { label: 'Quotation No', value: 'quotationNo' }, { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'Net Sales', value: r => formatMoney(r.netSubtotal, r.currency) }, { label: 'Gross Profit', value: r => formatMoney(r.grossProfit, r.currency) },
-        { label: 'Margin %', value: r => (r.grossMarginPercent || 0) + '%' }
+        { label: 'Net Sales', value: r => formatMoney(r.netSubtotal, r.currency) }, { label: 'Gross Profit as Quoted (price less quoted cost)', value: r => formatMoney(r.grossProfit, r.currency) },
+        { label: 'Additional Costs Paid (unexpected)', value: r => r._addCost ? formatMoney(r._addCost, 'PHP') : '—', red: r => !!r._addCost },
+        { label: 'Profit After Additional Costs', value: r => formatMoney(r._gpAfter, r.currency) },
+        { label: 'Margin % After Additional Costs', value: r => r._mAfter + '%' }
       ];
       const { total: netTotal, note: netNote } = phpAssumedTotal(rows, 'netSubtotal');
       const { total: gpTotal, note: gpNote } = phpAssumedTotal(rows, 'grossProfit');
-      const totals = rows.length === 0 ? null : ['', 'TOTAL', formatMoney(netTotal, 'PHP'), formatMoney(gpTotal, 'PHP'), netTotal ? `${r2((gpTotal / netTotal) * 100)}%` : '0%'];
-      return { rows, cols, totals, note: netNote || gpNote };
+      const { total: afterTotal } = phpAssumedTotal(rows, '_gpAfter');
+      const addTotal = r2(rows.reduce((t, r) => t + r._addCost, 0));
+      const totals = rows.length === 0 ? null : ['', 'TOTAL', formatMoney(netTotal, 'PHP'), formatMoney(gpTotal, 'PHP'), addTotal ? formatMoney(addTotal, 'PHP') : '—', formatMoney(afterTotal, 'PHP'), netTotal ? `${r2((afterTotal / netTotal) * 100)}%` : '0%'];
+      const skipped = rows0.filter(q => (q.currency || 'PHP') !== 'PHP' && costByQuoteNo[q.quotationNo]).length;
+      return { rows, cols, totals, note: [netNote || gpNote, skipped ? `⚠ ${skipped} quotation(s) not in PHP have additional costs (in PHP) that are NOT subtracted here — see their Sales Orders.` : ''].filter(Boolean).join(' ') };
     }
     case 'awaitingDelivery': {
       const rows = salesOrders.filter(o => ['Ready for Delivery', 'Partially Delivered'].includes(o.status)

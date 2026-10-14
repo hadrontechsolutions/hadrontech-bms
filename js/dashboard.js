@@ -5,6 +5,7 @@
 Router.route('/dashboard', async () => {
   Router.setBreadcrumb([{ label: 'Dashboard' }]);
   if (window.RfqTracker) await window.RfqTracker.reconcileRfqs();
+  const expensesAll = await DB.dbGetAll('expenses');
   const [customers, suppliers, quotations, customerPOs, salesOrders, supplierPOs, activity, proformaInvoicesRaw, technicalOffers, notes, distributions] = await Promise.all([
     DB.dbGetAll('customers'), DB.dbGetAll('suppliers'), DB.dbGetAll('quotations'),
     DB.dbGetAll('customerPOs'), DB.dbGetAll('salesOrders'), DB.dbGetAll('supplierPOs'), DB.recentActivity(12),
@@ -100,6 +101,13 @@ Router.route('/dashboard', async () => {
     { n: notesNeedingAction, text: 'RFQs / notes needing follow-up', hash: '/rfq-tracker' }
   ];
   const allClear = attention.every(a => a.n === 0);
+  // Unexpected order costs paid this month (expense date), per order -- same figures as the Sales Order pages.
+  const thisMonth = todayISO().slice(0, 7);
+  const soById = Object.fromEntries(salesOrders.map(o => [o.id, o]));
+  const monthCosts = expensesAll.filter(x => x.salesOrderId && String(x.date || '').slice(0, 7) === thisMonth);
+  const monthCostBySO = ExpenseHelpers.soCostTotals(monthCosts);
+  const monthCostTotal = Math.round(monthCosts.reduce((t, x) => t + (Number(x.amount) || 0), 0) * 100) / 100;
+  const costAlert = monthCosts.length ? `<div class="cost-alert">⚠ Unexpected order costs paid in ${new Date(thisMonth + '-01T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })}: ${formatMoney(monthCostTotal, 'PHP')} on ${Object.keys(monthCostBySO).length} order${Object.keys(monthCostBySO).length === 1 ? '' : 's'} — ${Object.entries(monthCostBySO).map(([id, v]) => `<a href="#/sales-orders/${id}">${escapeHtml((soById[id] || {}).soNo || 'Order')}</a> ${formatMoney(v, 'PHP')}`).join(', ')}</div>` : '';
 
   const content = document.getElementById('content');
   content.innerHTML = `
@@ -117,6 +125,8 @@ Router.route('/dashboard', async () => {
       <button class="qa-btn" data-hash="/reports">Search Records</button>
       <button class="qa-btn" data-hash="/settings/backup">Backup Data</button>
     </div>
+
+    ${costAlert}
 
     <div class="card attention-card">
       <h3 class="section-title">Needs your attention${allClear ? ' — all clear ✓' : ''}</h3>

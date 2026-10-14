@@ -71,7 +71,7 @@ Entities.defineEntity({
     { key: 'date', label: 'Date', render: r => formatDate(r.date) },
     { key: 'category', label: 'Category' },
     { key: 'description', label: 'Description' },
-    { key: 'soNo', label: 'Sales Order', render: r => r.salesOrderId ? `<a href="#/sales-orders/${r.salesOrderId}">${escapeHtml(r.soNo || 'Sales Order')}</a>` : '—' },
+    { key: 'soNo', label: 'Sales Order', render: r => r.salesOrderId ? `<a class="cost-tag" href="#/sales-orders/${r.salesOrderId}">⚠ ${escapeHtml(r.soNo || 'Sales Order')}</a>` : '—' },
     { key: 'vendor', label: 'Paid to / Bought from', render: r => escapeHtml(r.vendor || '—') },
     { key: 'payee', label: 'Payee' },
     { key: 'amount', label: 'Amount', render: r => formatMoney(r.amount, 'PHP') }
@@ -93,4 +93,10 @@ Entities.defineEntity({
 /** Costs on a Sales Order are the same Expense records, shown on the order and counted once in the books. */
 var SO_COST_TYPES = ['Import Duties & Brokerage', 'Freight & Delivery', 'Bank Charges', 'Packaging & Supplies', 'Miscellaneous'];
 window.ExpenseCategories = EXPENSE_CATEGORIES;
-window.ExpenseHelpers = { isOurName, SO_COST_TYPES, EXPENSE_PAYMENT_METHODS };
+/** Additional costs per Sales Order id, from the expense list: { [soId]: totalPHP }. One definition used by every screen and report. */
+function soCostTotals(expenses) {
+  const m = {};
+  (expenses || []).forEach(x => { if (x.salesOrderId) m[x.salesOrderId] = Math.round(((m[x.salesOrderId] || 0) + (Number(x.amount) || 0)) * 100) / 100; });
+  return m;
+}
+window.ExpenseHelpers = { soCostTotals, isOurName, SO_COST_TYPES, EXPENSE_PAYMENT_METHODS };

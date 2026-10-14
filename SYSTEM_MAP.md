@@ -181,9 +181,11 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## Printed quotation: Validity Period
 - Under "Valid Until" the printed quotation shows **Validity Period: N Days** (`validityDaysText` in print.js) = days from the quotation date to Valid Until, so an extended validity prints the new length. Left out if either date is missing or Valid Until is before the date; "1 Day" / "Same day only" for the edge cases. Test: test-quotation-validity-days.js.
 
-## Sales Order — Additional Costs (js/salesOrders.js, js/expenses.js)
+## Sales Order — Additional Costs (js/salesOrders.js, js/expenses.js, js/dashboard.js, js/reports.js)
 - Unexpected costs we absorb on an order (import duties, brokerage, courier, bank charges) are added on the Sales Order page under **Additional Costs**. They are not added to the customer's total.
-- Each row is an ordinary **Expense** with `salesOrderId` + `soNo` (no new store, no DB version change), so it is booked once and flows to Expense reports, the Bookkeeper Pack and the Business Net Profit.
-- New expense category **Import Duties & Brokerage** (bookkeeper account "Import Duties and Brokerage Expense"). The Expense form has an optional "Cost of Sales Order" dropdown; the Expenses list has a Sales Order column.
-- The Sales Order shows an **Order margin (estimate, PHP)**: order sales (total less VAT) − non-cancelled Supplier PO costs (converted at each PO's exchange rate) − additional costs. Not shown for non-PHP orders or POs without a rate.
+- Each row is an ordinary **Expense** with `salesOrderId` + `soNo` (no new store, no DB version change), so it is booked once and flows to Expense reports, the Bookkeeper Pack and Distributions (month expenses). One helper, `ExpenseHelpers.soCostTotals`, gives per-order totals everywhere.
+- New expense category **Import Duties & Brokerage** (bookkeeper account "Import Duties and Brokerage Expense"). The Expense form has an optional "Cost of Sales Order" dropdown; the Expenses list has a red Sales Order marker.
+- Shown in RED (class `.cost-alert`, `.cost-tag`, `.cost-red`): banner at the top of the Sales Order, red Additional Costs card, tag in the Sales Orders list, marker in the Expenses list, banner on the Dashboard (this month, per order, with links).
+- Profit on one order uses the SAME basis as the Gross Profit report and Distributions: sales (before VAT) less quoted cost = gross profit as ordered; then less additional costs. (Supplier PO actual prices are deliberately not used, so numbers never disagree between screens.) Profit % turns red below 10%.
+- Gross Profit (Won Quotations) report: columns Gross Profit as Quoted · Additional Costs Paid (red) · Profit After Additional Costs · Margin % After. Costs are matched through the order's quotation number (all revisions).
 - Test: test-so-additional-costs.js
