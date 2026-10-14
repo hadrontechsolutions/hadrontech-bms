@@ -45,7 +45,7 @@ let fails = 0, pass = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ?
   // detail
   await go('#/order-profit/' + A);
   ok('14 detail shows quoted vs actual and the breakdown (PO-A1, PO-A2, UPS 482.95, total 12,187.87, profit 9,147.28)', ['PO-A1', 'PO-A2', 'HT-EXP-1', '482.95', '12,187.87', '9,147.28', '7,021.15', '2,126.13'].every(x => txt().includes(x)), txt().slice(0, 400));
-  ok('15 detail has the red unexpected-cost banner', !!doc.querySelector('.cost-alert'));
+  ok('15 detail shows the unexpected cost in red in the tables, with no banner box', !doc.querySelector('.cost-alert') && doc.querySelectorAll('td.cost-red').length >= 2);
   doc.getElementById('opNote').value = 'Supplier gave a better price'; doc.getElementById('opSaveNote').click(); await wait(200);
   ok('16 review note is saved on the order and changes no figure', (await DB.dbGet('salesOrders', A)).profitNote === 'Supplier gave a better price' && win.OrderProfit.compute(await win.OrderProfit.loadData(), {}).rows.find(r => r.soNo === 'HT-SO-A').actualProfit === 9147.28);
   doc.getElementById('opAddCost').click(); await wait(500);
