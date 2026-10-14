@@ -43,7 +43,12 @@
       const warnings = [];
       // ----- quoted side (same basis as Gross Profit report / Distributions) -----
       const soSales = r2((Number(so.grandTotal) || 0) - (Number(so.vatTotal) || 0));
-      const quotedProfit = r2((hasFn('soGrossProfit') ? soGrossProfit(so) : 0) + (Number(so.freight) || 0) + (Number(so.other) || 0));
+      // Freight billed to the customer is sales. The matching freight we pay the supplier is cost: if the order lines already
+      // carry a freight estimate it is inside the line cost; if not, we expect it to be passed straight through (cost = billed).
+      const billedFreight = Number(so.freight) || 0;
+      const lineHasFreight = (so.lines || []).some(l => Number(l.estimatedFreightCost) > 0);
+      const freightAssumed = !lineHasFreight && billedFreight > 0 ? billedFreight : 0;
+      const quotedProfit = r2((hasFn('soGrossProfit') ? soGrossProfit(so) : 0) + billedFreight - freightAssumed + (Number(so.other) || 0));
       const quotedCost = r2(soSales - quotedProfit);
       const soPHP = (so.currency || 'PHP') === 'PHP';
 
@@ -90,7 +95,7 @@
 
       rows.push({
         id: so.id, soNo: so.soNo, orderDate: d10(so.orderDate), status: so.status, customer: (custMap[so.customerId] || {}).companyName || '', customerId: so.customerId,
-        sales: soSales, quotedCost, quotedProfit, quotedPct: soSales ? r2(quotedProfit / soSales * 100) : 0,
+        sales: soSales, quotedCost, freightAssumed, quotedProfit, quotedPct: soSales ? r2(quotedProfit / soSales * 100) : 0,
         invoiced, customerPaid, balance, paidInFull, payState, actualSales,
         suppliersCost, suppliersComputed, computedCost, costConfirmed, additional, actualCost, supplierLines, additionalLines: (costLines[so.id] || []).slice().sort((a, b) => d10(a.date).localeCompare(d10(b.date))),
         unpaidSuppliers, actualProfit, difference, diffPct, note, warnings, profitNote: so.profitNote || '', counted: actualProfit != null
@@ -187,7 +192,7 @@
         <h3 class="section-title">Gross profit as ordered vs actual profit (PHP)</h3>
         <table class="data-table compact"><thead><tr><th></th><th>As ordered (quoted)</th><th>Actual</th><th>Difference</th></tr></thead><tbody>
           <tr><td>Sales (before VAT)</td><td>${money(r.sales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales - r.sales)}</td></tr>
-          <tr><td>Supplier costs (incl. their freight &amp; taxes)</td><td rowspan="2">${money(r.quotedCost)}<div class="muted-text small">quoted cost of the lines</div></td><td>${money(r.suppliersCost)}</td><td rowspan="2">${money(r.actualCost - r.quotedCost)}</td></tr>
+          <tr><td>Supplier costs (incl. their freight &amp; taxes)</td><td rowspan="2">${money(r.quotedCost)}<div class="muted-text small">${r.freightAssumed > 0 ? `quoted item cost ${money(r.quotedCost - r.freightAssumed)} + freight ${money(r.freightAssumed)} (expected to be passed straight through, same as the freight billed to the customer)` : 'quoted cost of the lines'}</div></td><td>${money(r.suppliersCost)}</td><td rowspan="2">${money(r.actualCost - r.quotedCost)}</td></tr>
           <tr><td>Additional costs (unexpected)</td><td class="${r.additional ? 'cost-red' : ''}">${money(r.additional)}</td></tr>
           <tr style="font-weight:700;"><td>Total cost</td><td>${money(r.quotedCost)}</td><td>${money(r.actualCost)}</td><td>${money(r.actualCost - r.quotedCost)}</td></tr>
           <tr style="font-weight:800; border-top:2px solid var(--ink);"><td>Profit</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td><td>${r.actualProfit == null ? profitCell(r) : `${money(r.actualProfit)} <span class="muted-text">(${pctTxt(r.diffPct)})</span>`}</td><td>${r.difference == null ? '—' : `<span class="${worse ? 'cost-red' : ''}">${r.difference > 0.005 ? '+' : ''}${money(r.difference)}</span>`}</td></tr>

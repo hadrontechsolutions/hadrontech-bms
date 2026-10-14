@@ -212,3 +212,4 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - PO page shows the rate: saved → plain; from Settings only → amber "from Settings — not saved on this PO"; none and money still unpaid → red "Not set"; fully paid with actual PHP entered → neutral "Not needed".
 - `SupplierPOs.fillMissingRates()` runs once at boot (after seedIfEmpty): foreign POs with no saved rate and a Settings rate get it copied onto the PO (source "Settings HKD rate on <date> (filled in automatically)") and logged in Activity. Idempotent; POs with a rate, PHP POs and currencies absent from Settings are untouched.
 - Test: test-exchange-rate-rule.js.
+- Order Profit "as ordered": freight billed to the customer is sales; the matching supplier freight is cost. If the SO lines carry a freight estimate it is already in the line cost; otherwise freight is assumed passed straight through (cost = billed). Test: test-order-profit-freight.js.
