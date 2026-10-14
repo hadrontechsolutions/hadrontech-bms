@@ -14,6 +14,18 @@ function currencyList(settings) {
   return ['PHP', ...extra];
 }
 
+/** THE rule for a Supplier PO's exchange rate (PHP per 1 unit of the PO's currency), used by every screen and report:
+ *  1) the rate saved on the PO  2) otherwise the Settings rate for that currency  3) otherwise none (a warning is shown).
+ *  Returns { rate, source: 'po' | 'settings' | 'none' }. PHP is always 1. */
+function poRateInfo(po, settings) {
+  const cur = (po && po.currency) || 'PHP';
+  if (cur === 'PHP') return { rate: 1, source: 'po' };
+  if (Number(po.exchangeRate) > 0) return { rate: Number(po.exchangeRate), source: 'po' };
+  const s = Number(((settings && settings.referenceRates) || {})[cur]);
+  if (s > 0) return { rate: s, source: 'settings' };
+  return { rate: 0, source: 'none' };
+}
+
 function formatMoney(n, currency) {
   const cur = currency || 'PHP';
   const symbol = cur === 'PHP' ? '₱' : (cur === 'USD' ? '$' : (cur === 'EUR' ? '€' : cur + ' '));

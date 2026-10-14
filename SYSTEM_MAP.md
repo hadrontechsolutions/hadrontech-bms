@@ -205,3 +205,10 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Payment History (foreign POs) shows Actually paid (PHP), Rate used, a "Computed at the PO's estimated rate vs actually paid" line, and a **Correct / Enter actual PHP** button per payment. A correction keeps the previous figures in `payment.history`, sets `correctedAt/correctedBy`, and writes the activity log. `SupplierPOs.spoPaymentPHP(po, payment)` → `{ php, estimated, rate }` is the single definition.
 - Order Profit: per Supplier PO shows Computed (PO total × PO rate) vs Actually paid; list/report columns "Cost at PO rates (computed)" and "Actual cost"; a red "not confirmed" tag while any payment is on an estimated rate or a supplier PO is not fully paid. Business Performance Report "Order Profit" tab has the same columns (computed cost total, actual cost total).
 - Tests: test-supplier-po-actual-paid.js, test-order-profit.js
+
+## Supplier PO exchange rate — ONE rule (`poRateInfo` in js/utils.js; used by js/supplierPOs.js, js/orderProfit.js, js/bookkeeperPack.js)
+- Rate for a foreign-currency PO = the rate saved on the PO (`exchangeRate`) → else the Settings rate for that currency (`referenceRates`) → else none (warning). PHP is always 1.
+- A payment's PHP value = the actual PHP typed (`phpAmount`) if any, otherwise amount × that rate, tagged "estimated".
+- PO page shows the rate: saved → plain; from Settings only → amber "from Settings — not saved on this PO"; none and money still unpaid → red "Not set"; fully paid with actual PHP entered → neutral "Not needed".
+- `SupplierPOs.fillMissingRates()` runs once at boot (after seedIfEmpty): foreign POs with no saved rate and a Settings rate get it copied onto the PO (source "Settings HKD rate on <date> (filled in automatically)") and logged in Activity. Idempotent; POs with a rate, PHP POs and currencies absent from Settings are untouched.
+- Test: test-exchange-rate-rule.js.

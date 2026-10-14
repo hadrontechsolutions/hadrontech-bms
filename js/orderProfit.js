@@ -23,7 +23,6 @@
   function compute(data, opts) {
     opts = opts || {};
     const custMap = {}; (data.customers || []).forEach(c => custMap[c.id] = c);
-    const refRates = Object.assign({ PHP: 1 }, ((data.settings || {}).referenceRates) || {});
     const poBySO = {}, piBySO = {}, costBySO = {}, costLines = {};
     (data.supplierPOs || []).forEach(p => { if (p.salesOrderId) (poBySO[p.salesOrderId] = poBySO[p.salesOrderId] || []).push(p); });
     (data.proformaInvoices || []).forEach(p => { if (p.salesOrderId) (piBySO[p.salesOrderId] = piBySO[p.salesOrderId] || []).push(p); });
@@ -57,12 +56,11 @@
       let payState = paidInFull ? 'Paid in full' : (pis.length ? `Not fully paid yet` : 'No invoice yet');
 
       // ----- actual cost -----
-      const payPHP = (p, x) => (window.SupplierPOs && SupplierPOs.spoPaymentPHP) ? SupplierPOs.spoPaymentPHP(p, x)
-        : ((p.currency || 'PHP') === 'PHP' ? { php: r2(x.amount), estimated: false } : (Number(x.phpAmount) > 0 ? { php: r2(x.phpAmount), estimated: false } : { php: r2((Number(x.amount) || 0) * (Number(x.exchangeRate) > 0 ? Number(x.exchangeRate) : (Number(p.exchangeRate) || 0))), estimated: true }));
+      const payPHP = (p, x) => SupplierPOs.spoPaymentPHP(p, x, data.settings);
       const supplierLines = pos.map(p => {
         const cur = p.currency || 'PHP';
-        let poRate = cur === 'PHP' ? 1 : (Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : (Number(refRates[cur]) || 0));
-        if (!poRate) { poRate = 1; warnings.push(`Supplier PO ${p.poNo} (${cur}) has no exchange rate`); }
+        const info = poRateInfo(p, data.settings); let poRate = info.rate;
+        if (!poRate) { poRate = 1; warnings.push(`Supplier PO ${p.poNo} (${cur}) has no exchange rate saved and none in Settings`); }
         const pays = p.payments || [];
         const paidAmt = r2(pays.reduce((s, x) => s + (Number(x.amount) || 0), 0));
         const calc = pays.map(x => payPHP(p, x));

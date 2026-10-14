@@ -143,7 +143,9 @@ Router.route('/supplier-pos', async () => {
 
 Router.route('/supplier-pos/:id', (p) => renderSPODetail(p.id));
 
+let SPO_SETTINGS = null; // Settings, loaded when a Supplier PO page opens (for the single exchange-rate rule)
 async function renderSPODetail(id) {
+  SPO_SETTINGS = await DB.getSettings();
   const po = await DB.dbGet('supplierPOs', Number(id));
   const content = document.getElementById('content');
   if (!po) { content.innerHTML = `<div class="empty-state"><h3>Supplier PO not found</h3><p><a href="#/supplier-pos">Back to Supplier POs</a></p></div>`; return; }
@@ -189,7 +191,7 @@ async function renderSPODetail(id) {
         <div class="detail-item"><div class="detail-label">Expected Delivery</div><div class="detail-value">${formatDate(po.expectedDeliveryDate) || '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Supplier's Quotation Ref</div><div class="detail-value">${escapeHtml(po.supplierQuoteRef || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Supplier Invoice / Receipt No.</div><div class="detail-value">${escapeHtml(po.supplierInvoiceNo || '—')}${po.supplierInvoiceDate ? ` <span class="muted-text">· ${formatDate(po.supplierInvoiceDate)}</span>` : ''}</div></div>
-        ${po.currency && po.currency !== 'PHP' ? `<div class="detail-item"><div class="detail-label">Exchange Rate (PHP per ${escapeHtml(po.currency)})</div><div class="detail-value">${po.exchangeRate > 0 ? `${Number(po.exchangeRate).toFixed(4)} <span class="muted-text">· ${escapeHtml(po.exchangeRateSource || 'entered')}</span>` : '<span class="cell-needs-input">Not set</span>'}</div></div>` : ''}
+        ${po.currency && po.currency !== 'PHP' ? `<div class="detail-item"><div class="detail-label">Exchange Rate (PHP per ${escapeHtml(po.currency)})</div><div class="detail-value">${spoRateDisplayHTML(po)}</div></div>` : ''}
         <div class="detail-item"><div class="detail-label">Payment Terms</div><div class="detail-value">${escapeHtml(po.paymentTerms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Incoterms</div><div class="detail-value">${escapeHtml(po.incoterms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Shipping Terms</div><div class="detail-value">${escapeHtml(po.shippingTerms || '—')}</div></div>
@@ -274,13 +276,36 @@ async function renderSPODetail(id) {
   });
 }
 
+/** Exchange-rate line on the Supplier PO page. Red only when no rate exists anywhere AND it would change an amount. */
+function spoRateDisplayHTML(po) {
+  const info = poRateInfo(po, SPO_SETTINGS);
+  if (info.source === 'po') return `${Number(po.exchangeRate).toFixed(4)} <span class="muted-text">· ${escapeHtml(po.exchangeRateSource || 'entered')}</span>`;
+  if (info.source === 'settings') return `${info.rate.toFixed(4)} <span class="rate-from-settings" title="No rate is saved on this PO, so the Settings rate is used. Edit / Revise PO to save it on the PO.">from Settings — not saved on this PO</span>`;
+  const matters = spoBalanceDue(po) > 0.005 || (po.payments || []).some(p => !(Number(p.phpAmount) > 0));
+  return matters ? '<span class="cell-needs-input">Not set — add the currency in Settings or Edit / Revise PO</span>' : '<span class="muted-text">Not needed — fully paid, actual PHP entered</span>';
+}
+
+/** One-time clean-up: older foreign-currency POs with no saved rate get the Settings rate saved on them (marked as such). */
+async function fillMissingRates() {
+  const st = await DB.getSettings(); let n = 0;
+  for (const po of await DB.dbGetAll('supplierPOs')) {
+    if (!po.currency || po.currency === 'PHP' || Number(po.exchangeRate) > 0) continue;
+    const r = Number((st.referenceRates || {})[po.currency]); if (!(r > 0)) continue;
+    po.exchangeRate = r; po.exchangeRateSource = `Settings rate on ${todayISO()} (filled in automatically — no rate was saved on this PO)`;
+    await DB.dbPut('supplierPOs', po);
+    await DB.logActivity(`Supplier PO ${po.poNo}: saved the Settings ${po.currency} rate (${r}) on it — no rate had been saved before`);
+    n++;
+  }
+  return n;
+}
+
 /** PHP value of one payment: the actual PHP typed from the bank slip when there is one (confirmed); otherwise amount x the rate
  *  stored with the payment (an estimate for a foreign-currency PO). */
-function spoPaymentPHP(po, p) {
+function spoPaymentPHP(po, p, settings) {
   const cur = po.currency || 'PHP';
   if (cur === 'PHP') return { php: r2(p.amount), estimated: false, rate: 1 };
   if (Number(p.phpAmount) > 0) return { php: r2(p.phpAmount), estimated: false, rate: Number(p.phpAmount) / (Number(p.amount) || 1) };
-  const rate = Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : (Number(po.exchangeRate) || 0);
+  const rate = Number(p.exchangeRate) > 0 ? Number(p.exchangeRate) : poRateInfo(po, settings || SPO_SETTINGS).rate;
   return { php: r2((Number(p.amount) || 0) * rate), estimated: true, rate };
 }
 
@@ -288,7 +313,7 @@ function spoPaymentHistoryHTML(po) {
   const foreign = po.currency && po.currency !== 'PHP';
   const pays = po.payments || [];
   const calc = pays.map(p => spoPaymentPHP(po, p));
-  const poRate = Number(po.exchangeRate) || 0;
+  const poRate = poRateInfo(po, SPO_SETTINGS).rate;
   const totalPHP = r2(calc.reduce((t, c) => t + c.php, 0)), totalAmt = r2(pays.reduce((t, p) => t + (Number(p.amount) || 0), 0));
   const computed = r2(totalAmt * poRate), anyEst = calc.some(c => c.estimated);
   return `<table class="data-table compact">
@@ -301,7 +326,7 @@ function spoPaymentHistoryHTML(po) {
     </tr>`).join('')}</tbody>
     ${foreign ? `<tfoot><tr style="font-weight:700; border-top:2px solid var(--ink);"><td>Total</td><td>${formatMoney(totalAmt, po.currency)}</td><td>${formatMoney(totalPHP, 'PHP')}</td><td></td><td colspan="4"></td></tr></tfoot>` : ''}
   </table>
-  ${foreign && poRate > 0 ? `<p class="small" style="margin:8px 0 0;">Computed at the PO's estimated rate (${poRate.toFixed(4)}): <b>${formatMoney(computed, 'PHP')}</b> · Actually paid: <b>${formatMoney(totalPHP, 'PHP')}</b> · Difference: <b class="${totalPHP - computed > 0.005 ? 'cost-red' : ''}">${totalPHP - computed > 0.005 ? '+' : ''}${formatMoney(r2(totalPHP - computed), 'PHP')}</b>${anyEst ? ' <span class="cost-red">— includes payments still on the estimated rate</span>' : ''}</p>` : ''}
+  ${foreign && poRate > 0 ? `<p class="small" style="margin:8px 0 0;">Computed at the PO's estimated rate (${poRate.toFixed(4)}${poRateInfo(po, SPO_SETTINGS).source === 'settings' ? ', from Settings' : ''}): <b>${formatMoney(computed, 'PHP')}</b> · Actually paid: <b>${formatMoney(totalPHP, 'PHP')}</b> · Difference: <b class="${totalPHP - computed > 0.005 ? 'cost-red' : ''}">${totalPHP - computed > 0.005 ? '+' : ''}${formatMoney(r2(totalPHP - computed), 'PHP')}</b>${anyEst ? ' <span class="cost-red">— includes payments still on the estimated rate</span>' : ''}</p>` : ''}
   <div id="correctPaymentHostSPO"></div>`;
 }
 
@@ -342,7 +367,7 @@ function renderRecordPaymentFormSPO(po, id) {
           </select>
         </div>
         ${po.currency && po.currency !== 'PHP' ? `<div class="field"><label>Actual amount paid in PHP (from your bank slip)</label><input type="number" min="0" step="0.01" id="spo_pay_php" placeholder="e.g. 10776.92"><div class="muted-text" style="font-size:11px; margin-top:4px;" id="spo_pay_rate_hint">Type the pesos that actually left your account. The real exchange rate is worked out for you and used in the reports.</div></div>
-        <div class="field"><label>Estimated exchange rate (only used if you leave the PHP amount blank)</label><input type="number" min="0" step="0.0001" id="spo_pay_rate" value="${po.exchangeRate > 0 ? po.exchangeRate : ''}"><div class="muted-text" style="font-size:11px; margin-top:4px;">A payment saved without the actual PHP amount is marked “estimated rate” in the reports.</div></div>` : ''}
+        <div class="field"><label>Estimated exchange rate (only used if you leave the PHP amount blank)</label><input type="number" min="0" step="0.0001" id="spo_pay_rate" value="${poRateInfo(po, SPO_SETTINGS).rate > 0 ? poRateInfo(po, SPO_SETTINGS).rate : ''}"><div class="muted-text" style="font-size:11px; margin-top:4px;">A payment saved without the actual PHP amount is marked “estimated rate” in the reports.</div></div>` : ''}
         <div class="field field-wide"><label>Reference / Note</label><input id="spo_pay_reference" placeholder="e.g. Bank reference number, or any note"></div>
       </div>
       <div class="btn-row" style="margin-top:12px;">
@@ -354,7 +379,7 @@ function renderRecordPaymentFormSPO(po, id) {
   host.scrollIntoView && host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   document.getElementById('btnCancelPaymentSPO').onclick = () => { host.innerHTML = ''; };
   const phpEl = document.getElementById('spo_pay_php');
-  if (phpEl) { const upd = () => { const a = Number(document.getElementById('spo_pay_amount').value) || 0, v = Number(phpEl.value) || 0; const h = document.getElementById('spo_pay_rate_hint'); if (h) h.textContent = (a > 0 && v > 0) ? `Actual rate: ${(v / a).toFixed(4)} PHP per ${po.currency}` + (po.exchangeRate > 0 ? ` (the PO estimate was ${Number(po.exchangeRate).toFixed(4)}; ${formatMoney(a * po.exchangeRate, 'PHP')} at the estimate)` : '') : 'Type the pesos that actually left your account. The real exchange rate is worked out for you and used in the reports.'; }; phpEl.oninput = upd; document.getElementById('spo_pay_amount').oninput = upd; }
+  if (phpEl) { const upd = () => { const a = Number(document.getElementById('spo_pay_amount').value) || 0, v = Number(phpEl.value) || 0; const h = document.getElementById('spo_pay_rate_hint'); if (h) h.textContent = (a > 0 && v > 0) ? `Actual rate: ${(v / a).toFixed(4)} PHP per ${po.currency}` + (poRateInfo(po, SPO_SETTINGS).rate > 0 ? ` (the estimate was ${poRateInfo(po, SPO_SETTINGS).rate.toFixed(4)}; ${formatMoney(a * poRateInfo(po, SPO_SETTINGS).rate, 'PHP')} at the estimate)` : '') : 'Type the pesos that actually left your account. The real exchange rate is worked out for you and used in the reports.'; }; phpEl.oninput = upd; document.getElementById('spo_pay_amount').oninput = upd; }
   document.getElementById('btnConfirmPaymentSPO').onclick = async () => {
     const amount = r2(Number(document.getElementById('spo_pay_amount').value) || 0);
     if (amount <= 0) { toast('Enter a payment amount greater than 0.', 'err'); return; }
@@ -367,7 +392,7 @@ function renderRecordPaymentFormSPO(po, id) {
     const rateEntered = foreignPay ? Number((document.getElementById('spo_pay_rate') || {}).value) : 1;
     // The actual PHP paid is the truth; the rate is derived from it. Without it the payment stays an estimate (rate only).
     const payPHP = !foreignPay ? r2(amount) : (phpEntered > 0 ? phpEntered : undefined);
-    const payRate = !foreignPay ? 1 : (phpEntered > 0 ? phpEntered / amount : (rateEntered > 0 ? rateEntered : (Number(po.exchangeRate) || 0)));
+    const payRate = !foreignPay ? 1 : (phpEntered > 0 ? phpEntered / amount : (rateEntered > 0 ? rateEntered : poRateInfo(po, SPO_SETTINGS).rate));
     const settings = await DB.getSettings();
     po.payments = (po.payments || []).concat([{
       id: 'P' + Math.random().toString(36).slice(2, 9),
@@ -397,7 +422,7 @@ async function renderSPOHeaderEdit(po) {
         <div class="field"><label>Supplier Quotation Reference</label><input id="f_supplierQuoteRef" value="${escapeHtml(po.supplierQuoteRef || '')}"></div>
         <div class="field"><label>Supplier Invoice / Receipt No.</label><input id="f_supplierInvoiceNo" value="${escapeHtml(po.supplierInvoiceNo || '')}" placeholder="From the supplier's invoice or receipt"></div>
         <div class="field"><label>Supplier Invoice Date</label><input type="date" id="f_supplierInvoiceDate" value="${po.supplierInvoiceDate || ''}"></div>
-        ${po.currency && po.currency !== 'PHP' ? `<div class="field"><label>Exchange Rate (PHP per 1 ${escapeHtml(po.currency)})</label><input type="number" step="0.0001" min="0" id="f_exchangeRate" value="${po.exchangeRate > 0 ? po.exchangeRate : ''}" placeholder="Rate recognised for this PO"><div class="muted-text" style="font-size:11px; margin-top:4px;">Saved on this PO only — later changes in Settings do not affect it.${po.exchangeRateSource ? ' Source: ' + escapeHtml(po.exchangeRateSource) + '.' : ''}</div></div>` : ''}
+        ${po.currency && po.currency !== 'PHP' ? `<div class="field"><label>Exchange Rate (PHP per 1 ${escapeHtml(po.currency)})</label><input type="number" step="0.0001" min="0" id="f_exchangeRate" value="${poRateInfo(po, SPO_SETTINGS).rate > 0 ? poRateInfo(po, SPO_SETTINGS).rate : ''}" placeholder="Rate recognised for this PO"><div class="muted-text" style="font-size:11px; margin-top:4px;">Saved on this PO only — later changes in Settings do not affect it.${po.exchangeRateSource ? ' Source: ' + escapeHtml(po.exchangeRateSource) + '.' : ''}</div></div>` : ''}
         <div class="field"><label>Payment Terms</label><input id="f_paymentTerms" value="${escapeHtml(po.paymentTerms || '')}"></div>
         <div class="field"><label>Incoterms</label><input id="f_incoterms" value="${escapeHtml(po.incoterms || '')}"></div>
         <div class="field"><label>Shipping Terms</label><input id="f_shippingTerms" value="${escapeHtml(po.shippingTerms || '')}"></div>
@@ -472,7 +497,7 @@ async function renderSPOHeaderEdit(po) {
     if (!editLines.every(l => l.description && Number(l.qty) > 0)) { toast('Every line needs a description and quantity greater than 0.', 'err'); return; }
     const settings = await DB.getSettings();
     const rateEl = document.getElementById('f_exchangeRate');
-    if (rateEl) { const nr = Number(rateEl.value); if (!(nr > 0)) { toast('Enter the exchange rate for this PO (PHP per 1 ' + po.currency + ').', 'err'); return; } if (nr !== Number(po.exchangeRate)) { po.exchangeRate = nr; po.exchangeRateSource = 'Entered on ' + todayISO(); } }
+    if (rateEl) { const nr = Number(rateEl.value); if (!(nr > 0)) { toast('Enter the exchange rate for this PO (PHP per 1 ' + po.currency + ').', 'err'); return; } if (nr !== Number(po.exchangeRate)) { const fromSettings = !(Number(po.exchangeRate) > 0) && nr === poRateInfo(po, SPO_SETTINGS).rate; po.exchangeRate = nr; po.exchangeRateSource = (fromSettings ? 'Settings rate, saved on this PO on ' : 'Entered on ') + todayISO(); } }
     Object.assign(po, {
       supplierQuoteRef: document.getElementById('f_supplierQuoteRef').value,
       supplierInvoiceNo: document.getElementById('f_supplierInvoiceNo').value.trim(),
@@ -577,5 +602,5 @@ function renderReceiveStockForm(po, id) {
   };
 }
 
-window.SupplierPOs = { spoPaymentPHP, createFromSalesOrder, spoAmountPaid, spoBalanceDue, spoPaymentStatus };
+window.SupplierPOs = { fillMissingRates, spoPaymentPHP, createFromSalesOrder, spoAmountPaid, spoBalanceDue, spoPaymentStatus };
 window.SPO_STATUSES = SPO_STATUSES;
