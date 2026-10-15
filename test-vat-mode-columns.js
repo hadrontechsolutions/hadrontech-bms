@@ -12,7 +12,7 @@ let f = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ? '' : (x || ''
   const mkSO = (no, mode, v) => DB.dbAdd('salesOrders', { soNo: no, customerId: cust, status: 'Confirmed', orderDate: t, currency: 'PHP', vatMode: mode, freight: 0, lines: [line(v)], subtotal: 100, vatTotal: v, grandTotal: 100 + v, createdAt: now, updatedAt: now, statusHistory: [] });
   const non = await mkSO('SO-NON', 'NonVat', 0), std = await mkSO('SO-STD', 'Standard12', 12), old = await mkSO('SO-OLD', undefined, 12), oldZero = await mkSO('SO-OLD0', undefined, 0);
   const visible = () => [...doc.querySelectorAll('#content th.vat-col')].some(th => !th.closest('.no-vat-cols'));
-  await go('#/sales-orders/' + non); ok('Non-VAT SO: column hidden and VAT Mode shown as Non-VAT (Percentage Tax)', !visible() && !!doc.querySelector('.no-vat-cols') && /VAT Mode/.test(doc.getElementById('content').textContent) && /Non-VAT \(Percentage Tax\)/.test(doc.getElementById('content').textContent));
+  await go('#/sales-orders/' + non); ok('Non-VAT SO: column hidden and VAT Mode shown as Non-VAT (3% Percentage Tax)', !visible() && !!doc.querySelector('.no-vat-cols') && /VAT Mode/.test(doc.getElementById('content').textContent) && /Non-VAT \(3% Percentage Tax\)/.test(doc.getElementById('content').textContent));
   await go('#/sales-orders/' + std); ok('Standard 12% SO: column shown, VAT Mode shows Standard 12%', visible() && /Standard 12%/.test(doc.getElementById('content').textContent));
   await go('#/sales-orders/' + old); ok('older SO with no VAT mode but VAT on a line: column kept', visible());
   await go('#/sales-orders/' + oldZero); ok('older SO with no VAT mode and no VAT: column hidden', !visible());

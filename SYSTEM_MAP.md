@@ -226,3 +226,8 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Totals VAT line (screen and print): "VAT (Non-VAT — not charged)", "VAT (Zero-Rated, 0%)", "VAT (VAT Exempt — not charged)"; Standard 12% stays plain "VAT". Printed statement under the totals: Non-VAT "This business is not VAT-registered (Percentage Taxpayer). Prices quoted are not subject to VAT."; Zero-Rated / VAT Exempt have their own one-line statements; Standard 12% none.
 - Sales labels follow the order's mode: Sales (Non-VAT) / Sales (before VAT) / Sales (Zero-Rated) / Sales (VAT Exempt); lists mixing modes: "Sales (excluding VAT, if any)". Used by Order Profit (page, list, Excel tab) and the Sales Order Additional Costs card. Order Profit rows carry `vatMode`.
 - Tests: test-vat-wording.js, test-nonvat-mode.js.
+
+## Business tax registration (Settings → Company → "Business tax registration"; `settings.taxType`, helpers in js/utils.js)
+- Choices: Non-VAT — 3% percentage tax (default, also used when nothing is saved), Non-VAT — 8% income tax option, VAT-registered. Hadrontech = 3% percentage tax.
+- It decides: the TIN label on every printout and the Bookkeeper Pack/Business Performance Report headers ("NON-VAT Reg. TIN: …" or "VAT Reg. TIN: …", `companyTinText`), the name of the Non-VAT VAT Mode ("Non-VAT (3% Percentage Tax)" / "Non-VAT (8% Income Tax Option)", `vatModeName`), the default VAT Mode of a new quotation (VAT-registered → Standard 12%), and the registration line on the Bookkeeper Pack. `setBusinessTax` loads the choice at start-up and on Settings save.
+- Printed Non-VAT statement is the plain "This business is not VAT-registered. Prices quoted are not subject to VAT." (no tax regime shown to customers). Test: test-business-tax-type.js.

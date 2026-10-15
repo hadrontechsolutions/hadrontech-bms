@@ -26,8 +26,19 @@ function vatColsClass(rec) {
   return 'no-vat-cols';
 }
 /* ---- One set of VAT wording for the whole system, driven by the VAT Mode chosen on the Quotation ---- */
-var VAT_MODE_NAMES = { NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' };
-function vatModeName(mode) { return VAT_MODE_NAMES[mode] || (mode ? String(mode) : '—'); }
+/* Business tax registration, chosen once in Settings (taxType): 'NonVat3' = Non-VAT with 3% percentage tax (default), 'NonVat8' = Non-VAT with the 8% income-tax option, 'Vat12' = VAT-registered. */
+var BUSINESS_TAX_TYPES = {
+  NonVat3: { label: 'Non-VAT — 3% percentage tax', tinLabel: 'NON-VAT Reg. TIN', mode: 'Non-VAT (3% Percentage Tax)', registration: 'Non-VAT registered (3% percentage tax)' },
+  NonVat8: { label: 'Non-VAT — 8% income tax option', tinLabel: 'NON-VAT Reg. TIN', mode: 'Non-VAT (8% Income Tax Option)', registration: 'Non-VAT registered (8% income tax option)' },
+  Vat12: { label: 'VAT-registered', tinLabel: 'VAT Reg. TIN', mode: 'Non-VAT', registration: 'VAT registered' }
+};
+var BUSINESS_TAX = { type: 'NonVat3' };
+function businessTaxType(settings) { const t = settings && settings.taxType; return BUSINESS_TAX_TYPES[t] ? t : 'NonVat3'; }
+function setBusinessTax(settings) { BUSINESS_TAX.type = businessTaxType(settings); }
+/** "NON-VAT Reg. TIN: 243-…" or "VAT Reg. TIN: …" depending on the business's registration; '' when no TIN is set. */
+function companyTinText(settings) { return settings && settings.tin ? `${BUSINESS_TAX_TYPES[businessTaxType(settings)].tinLabel}: ${settings.tin}` : ''; }
+var VAT_MODE_NAMES = { NonVat: 'Non-VAT (3% Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' };
+function vatModeName(mode) { if (mode === 'NonVat') return BUSINESS_TAX_TYPES[BUSINESS_TAX.type].mode; return VAT_MODE_NAMES[mode] || (mode ? String(mode) : '—'); }
 /** Label for the VAT line in a totals block. */
 function vatLineLabel(mode) {
   return { NonVat: 'VAT (Non-VAT — not charged)', ZeroRated: 'VAT (Zero-Rated, 0%)', Exempt: 'VAT (VAT Exempt — not charged)' }[mode] || 'VAT';
@@ -35,7 +46,7 @@ function vatLineLabel(mode) {
 /** Printed statement under the totals; Standard 12% needs none. Returns '' or plain text. */
 function vatStatement(mode) {
   return {
-    NonVat: 'This business is not VAT-registered (Percentage Taxpayer). Prices quoted are not subject to VAT.',
+    NonVat: 'This business is not VAT-registered. Prices quoted are not subject to VAT.',
     ZeroRated: 'This sale is Zero-Rated: VAT is charged at 0%.',
     Exempt: 'This sale is VAT Exempt: no VAT is charged.'
   }[mode] || '';

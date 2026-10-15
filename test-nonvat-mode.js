@@ -22,7 +22,7 @@ async function main() {
   win.location.hash = '#/quotations/new';
   await win.Router.resolveRoute();
   await wait(50);
-  console.log('STEP 1: VAT Mode dropdown includes the new "Non-VAT (Percentage Tax)" option:', [...doc.getElementById('f_vatMode').options].some(o => o.value === 'NonVat' && o.textContent === 'Non-VAT (Percentage Tax)'));
+  console.log('STEP 1: VAT Mode dropdown includes the new "Non-VAT (3% Percentage Tax)" option:', [...doc.getElementById('f_vatMode').options].some(o => o.value === 'NonVat' && o.textContent === 'Non-VAT (3% Percentage Tax)'));
   console.log('STEP 2: THE CORE FIX: a brand new quotation now defaults to Non-VAT, not Standard 12%, matching Hadrontech\'s actual BIR registration:', doc.getElementById('f_vatMode').value === 'NonVat');
   console.log('STEP 3: The first auto-created line correctly defaults to 0% VAT to match the Non-VAT header:', doc.querySelector('.ln-vat').value === '0');
 
@@ -61,14 +61,14 @@ async function main() {
   win.location.hash = '#/quotations/' + savedQ.id;
   await win.Router.resolveRoute();
   await wait(50);
-  console.log('STEP 8: Detail page correctly shows "Non-VAT (Percentage Tax)" as the VAT Mode label:', doc.getElementById('content').textContent.includes('Non-VAT (Percentage Tax)'));
+  console.log('STEP 8: Detail page correctly shows "Non-VAT (3% Percentage Tax)" as the VAT Mode label:', doc.getElementById('content').textContent.includes('Non-VAT (3% Percentage Tax)'));
 
   let printedQ = '';
   win.open = () => ({ document: { write: (h) => { printedQ = h; }, close: () => {} } });
   doc.getElementById('btnPrint').click();
   await wait(30);
   console.log('STEP 9: THE PRINT FIX: printed Quotation shows the unambiguous "VAT (Non-VAT — not charged)" label, not just plain "VAT":', printedQ.includes('VAT (Non-VAT — not charged)'));
-  console.log('STEP 10: Printed Quotation includes the explicit Non-VAT disclosure statement:', printedQ.includes('This business is not VAT-registered (Percentage Taxpayer)'));
+  console.log('STEP 10: Printed Quotation includes the explicit Non-VAT disclosure statement:', printedQ.includes('This business is not VAT-registered. Prices quoted are not subject to VAT.'));
 
   /* ============ Sales Order print also shows the disclosure (inherits vatMode) ============ */
   savedQ.status = 'Won';

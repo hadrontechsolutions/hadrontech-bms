@@ -45,7 +45,7 @@ function signatureBlockHTML(settings, label) {
 }
 
 function coBlock(settings) {
-  const meta = [settings.address, settings.tin ? 'TIN: ' + settings.tin : '', [settings.telephone, settings.email].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
+  const meta = [settings.address, companyTinText(settings), [settings.telephone, settings.email].filter(Boolean).join(' · ')].filter(Boolean).join('\n');
   const logo = settings.logoDataUrl ? `<img src="${settings.logoDataUrl}" alt="Logo" style="max-height:52px;max-width:220px;object-fit:contain;margin-bottom:8px;display:block;">` : '';
   return `<div>${logo}<div class="p-co-name">${escapeHtml(settings.companyName)}</div><div class="p-co-meta">${escapeHtml(meta)}</div></div>`;
 }

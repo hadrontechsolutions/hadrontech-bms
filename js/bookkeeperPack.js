@@ -300,7 +300,7 @@
     const S = [];
     S.push([{ v: 'BOOKKEEPER PACK', s: 'title' }]);
     S.push([{ v: co.name, s: 'bold' }]);
-    S.push([{ v: [co.address, co.tin ? 'TIN: ' + co.tin : '', 'Sole proprietorship · Non-VAT registered'].filter(Boolean).join('  ·  '), s: 'sub' }]);
+    S.push([{ v: [co.address, co.tinText, 'Sole proprietorship · ' + co.registration].filter(Boolean).join('  ·  '), s: 'sub' }]);
     S.push([{ v: period + `   ·   Prepared ${todayStr()} from the Hadrontech BMS (unaudited management records)`, s: 'sub' }]);
     S.push([{ v: 'How dates are counted: sales by INVOICE date · collections by date RECEIVED · purchases by supplier PO date · payments by date PAID · expenses by expense date · balances (receivables, payables, inventory, reserve) as of the period end.', s: 'sub' }]);
     S.push([]);
@@ -308,7 +308,7 @@
     const line = (label, val, note, bold) => S.push([{ v: label, s: bold ? 'bold' : 'txt' }, { v: r2(val), s: bold ? 'totMoney' : 'money' }, { v: note || '', s: 'sub' }]);
     sec('1. Income statement items for the period (management basis, PHP)');
     line('Sales invoiced (net of VAT, if any)', t.salesNet, 'Sales Book — recognised on invoice date');
-    line('Output VAT charged', t.salesVat, 'Business is Non-VAT, so normally 0');
+    line('Output VAT charged', t.salesVat, co.taxType === 'Vat12' ? 'VAT charged on sales invoiced' : 'Business is not VAT-registered, so normally 0');
     line('Total invoiced (gross sales)', t.salesTotal, 'Base for the quarterly percentage-tax / income-tax returns', true);
     line('Purchases of goods (Supplier POs ordered in the period)', t.purchases, 'Purchases Book — Draft and Cancelled POs excluded');
     line('Gross margin on a purchases basis', t.marginPurchasesBasis, 'Sales (net) less purchases. Inventory movement is NOT adjusted — see Inventory sheet', true);
@@ -471,7 +471,7 @@
     const block = (title, rows) => `<div class="bp-sec">${escapeHtml(title)}</div><table class="p-items">${rows.join('')}</table>`;
     const warn = pack.warnings.length ? `<div class="bp-sec">Please note</div><ul style="font-size:11px; line-height:1.6; margin:6px 0 0 18px;">${pack.warnings.map(w => `<li style="color:${w.level === 'warn' ? '#b3261e' : '#555'}">${escapeHtml(w.text)}</li>`).join('')}</ul>` : '';
     return `<style>.bp-sec{margin:18px 0 4px; font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#a85f04;} table.p-items td:first-child{width:70%;}</style>
-      <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml([co.address, co.tin ? 'TIN: ' + co.tin : '', 'Sole proprietorship · Non-VAT registered'].filter(Boolean).join('\n'))}</div></div>
+      <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml([co.address, co.tinText, 'Sole proprietorship · ' + co.registration].filter(Boolean).join('\n'))}</div></div>
       <div><div class="p-doc-title">Bookkeeper Pack — Summary</div><div class="p-doc-no">${pack.from} → ${pack.to}</div><div class="p-dates">Prepared ${todayStr()}<br>Unaudited management records</div></div></div>
       ${block('Income statement items (PHP, management basis)', [row('Sales invoiced (net of VAT)', f(t.salesNet)), row('Output VAT', f(t.salesVat)), row('Total invoiced (gross sales)', f(t.salesTotal), true), row('Purchases of goods', f(t.purchases)), row('Gross margin (purchases basis)', f(t.marginPurchasesBasis), true), row('Operating expenses', f(t.expenses)), row('Result before foreign exchange', f(t.resultBeforeDraws), true), row('Realised FX loss / (gain) on supplier payments', f(t.fxLoss)), row('Result after foreign exchange', f(t.resultAfterFx), true)])}
       ${block('Cash movements', [row('Received from customers', f(t.collections)), row('Paid to suppliers', f(t.supplierPaid)), row('Operating expenses paid', f(t.expenses)), row('Owner draws paid', f(t.ownerDrawsPaid)), row('Employee compensation paid', f(t.employeePaid)), row('Total disbursements', f(t.disbursements), true)])}
@@ -493,7 +493,7 @@
     const proformaInvoices = window.ProformaInvoices && ProformaInvoices.ensurePISnapshot ? await Promise.all(pisRaw.map(pi => ProformaInvoices.ensurePISnapshot(pi))) : pisRaw;
     return { customers, suppliers, salesOrders, proformaInvoices, supplierPOs, expenses, distributions, products, stockMovements, settings };
   }
-  const company = (settings) => ({ name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '', address: (settings.address || '').replace(/\s*\n\s*/g, ', ') });
+  const company = (settings) => ({ name: settings.companyName || 'Hadrontech Industrial Solutions', tin: settings.tin || '', tinText: companyTinText(settings), registration: BUSINESS_TAX_TYPES[businessTaxType(settings)].registration, taxType: businessTaxType(settings), address: (settings.address || '').replace(/\s*\n\s*/g, ', ') });
 
   async function render(host) {
     const content = host || document.getElementById('content');

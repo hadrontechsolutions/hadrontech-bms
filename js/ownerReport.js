@@ -228,7 +228,7 @@
     const chg = (k) => ` <span style="font-weight:400;color:#777;">(${k.change == null ? 'before: ' + f(k.prev) : (k.change > 0 ? '+' : '') + k.change + '% vs ' + f(k.prev)})</span>`;
     const top = rep.customers.slice(0, 5);
     return `<style>.bp-sec{margin:16px 0 4px; font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#a85f04;} table.p-items td:first-child{width:62%;}</style>
-      <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml(co.tin ? 'TIN: ' + co.tin : '')}</div></div>
+      <div class="p-head"><div><div class="p-co-name">${escapeHtml(co.name)}</div><div class="p-co-meta">${escapeHtml(co.tinText)}</div></div>
       <div><div class="p-doc-title">Business Performance Report</div><div class="p-doc-no">${escapeHtml(rep.periodText)}</div><div class="p-dates">Compared with ${escapeHtml(rep.prevText)} (${escapeHtml(rep.prevKind)})<br>Prepared ${todayStr()}</div></div></div>
       ${block('How we did', rep.kpis.map(k => row(`${k.label} — ${k.basis}`, f(k.value) + chg(k))))}
       ${block('Position at period end', [row('Receivables — customers owe us', f(t.arClosing)), row('Payables — we owe suppliers', f(t.apClosing)), row('Inventory on hand', f(t.inventory)), row('Business Reserve', f(t.reserveEnd))])}

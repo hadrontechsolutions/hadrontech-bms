@@ -11,7 +11,7 @@ let f = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ? '' : (x || ''
   const cust = await DB.dbAdd('customers', { customerNo: 'C1', companyName: 'KEYEC', status: 'Active' });
   const cu = { companyName: 'KEYEC' }, txt = () => doc.getElementById('content').textContent;
   // helpers
-  ok('names', win.vatModeName('NonVat') === 'Non-VAT (Percentage Tax)' && win.vatModeName('Standard12') === 'Standard 12%' && win.vatModeName('ZeroRated') === 'Zero-Rated' && win.vatModeName('Exempt') === 'VAT Exempt');
+  ok('names', win.vatModeName('NonVat') === 'Non-VAT (3% Percentage Tax)' && win.vatModeName('Standard12') === 'Standard 12%' && win.vatModeName('ZeroRated') === 'Zero-Rated' && win.vatModeName('Exempt') === 'VAT Exempt');
   ok('sales labels', win.vatSalesLabel('NonVat') === 'Sales (Non-VAT)' && win.vatSalesLabel('Standard12') === 'Sales (before VAT)' && win.vatSalesLabel('ZeroRated') === 'Sales (Zero-Rated)' && win.vatSalesLabel('Exempt') === 'Sales (VAT Exempt)' && win.vatSalesLabel(['NonVat', 'NonVat'], 'Order sales') === 'Order sales (Non-VAT)' && win.vatSalesLabel(['NonVat', 'Standard12']) === 'Sales (excluding VAT, if any)' && win.vatSalesLabel('') === 'Sales (before VAT, if any)');
   const modes = ['NonVat', 'Standard12', 'ZeroRated', 'Exempt']; const rec = {};
   for (const m of modes) {
@@ -25,7 +25,7 @@ let f = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ? '' : (x || ''
     rec[m] = { q, so, pi };
   }
   const expectLabel = { NonVat: 'VAT (Non-VAT — not charged)', ZeroRated: 'VAT (Zero-Rated, 0%)', Exempt: 'VAT (VAT Exempt — not charged)' };
-  const expectStmt = { NonVat: 'This business is not VAT-registered (Percentage Taxpayer). Prices quoted are not subject to VAT.', ZeroRated: 'This sale is Zero-Rated: VAT is charged at 0%.', Exempt: 'This sale is VAT Exempt: no VAT is charged.' };
+  const expectStmt = { NonVat: 'This business is not VAT-registered. Prices quoted are not subject to VAT.', ZeroRated: 'This sale is Zero-Rated: VAT is charged at 0%.', Exempt: 'This sale is VAT Exempt: no VAT is charged.' };
   for (const m of modes) {
     const { q, so, pi } = rec[m];
     const checks = [];

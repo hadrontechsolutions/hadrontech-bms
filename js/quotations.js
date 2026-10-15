@@ -384,7 +384,7 @@ async function renderQuoteForm(id) {
     date: todayISO(), validUntil: addDaysISO(todayISO(), settings.defaultQuotationValidityDays),
     salesperson: settings.userName, currency: 'PHP',
     paymentTerms: settings.defaultPaymentTerms, incoterms: settings.defaultIncoterms,
-    deliveryLeadTime: '', warranty: settings.defaultWarranty, vatMode: 'NonVat',
+    deliveryLeadTime: '', warranty: settings.defaultWarranty, vatMode: businessTaxType(settings) === 'Vat12' ? 'Standard12' : 'NonVat',
     overallDiscountPercent: 0, freightCharge: 0, otherCharges: 0,
     internalNotes: '', customerNotes: '', lines: [emptyLine(0)]
   };
@@ -429,7 +429,7 @@ async function renderQuoteForm(id) {
         <div class="field"><label>Warranty</label><input id="f_warranty" value="${escapeHtml(q.warranty || '')}"></div>
         <div class="field"><label>VAT Mode</label>
           <select id="f_vatMode">
-            <option value="NonVat" ${q.vatMode === 'NonVat' ? 'selected' : ''}>Non-VAT (Percentage Tax)</option>
+            <option value="NonVat" ${q.vatMode === 'NonVat' ? 'selected' : ''}>${vatModeName('NonVat')}</option>
             <option value="Standard12" ${q.vatMode === 'Standard12' ? 'selected' : ''}>Standard 12%</option>
             <option value="ZeroRated" ${q.vatMode === 'ZeroRated' ? 'selected' : ''}>Zero-Rated</option>
             <option value="Exempt" ${q.vatMode === 'Exempt' ? 'selected' : ''}>VAT Exempt</option>

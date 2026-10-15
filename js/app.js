@@ -53,6 +53,7 @@ async function boot() {
     await DB.ensureCounters();
     const settings = await DB.getSettings();
     await seedIfEmpty();
+    setBusinessTax(await DB.getSettings());
     if (window.SupplierPOs && SupplierPOs.fillMissingRates) await SupplierPOs.fillMissingRates();
     applyBrandHeader(settings);
     if (window.BackupReminder) await BackupReminder.refreshBackupBanner();

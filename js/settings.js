@@ -52,6 +52,8 @@ Router.route('/settings', async () => {
         <div class="field"><label>Telephone</label><input id="s_telephone" value="${escapeHtml(settings.telephone)}"></div>
         <div class="field"><label>Website</label><input id="s_website" value="${escapeHtml(settings.website)}"></div>
         <div class="field"><label>Tax Identification Number</label><input id="s_tin" value="${escapeHtml(settings.tin)}"></div>
+        <div class="field"><label>Business tax registration</label><select id="s_taxType">${Object.keys(BUSINESS_TAX_TYPES).map(k => `<option value="${k}" ${businessTaxType(settings) === k ? 'selected' : ''}>${BUSINESS_TAX_TYPES[k].label}</option>`).join('')}</select>
+          <div class="muted-text" style="font-size:11px; margin-top:4px;">Decides how your TIN is labelled on printed documents (“NON-VAT Reg. TIN” or “VAT Reg. TIN”), the default VAT Mode of new quotations, and the wording on the Bookkeeper Pack. Ask your bookkeeper if unsure.</div></div>
         <div class="field"><label>Authorized Signatory</label><input id="s_authorizedSignatory" value="${escapeHtml(settings.authorizedSignatory)}"></div>
         <div class="field field-wide">
           <label>Signature Image (appears on printed Quotations, Sales Orders, and Supplier POs)</label>
@@ -260,6 +262,7 @@ Router.route('/settings', async () => {
       telephone: document.getElementById('s_telephone').value,
       website: document.getElementById('s_website').value,
       tin: document.getElementById('s_tin').value,
+      taxType: document.getElementById('s_taxType').value,
       authorizedSignatory: document.getElementById('s_authorizedSignatory').value,
       bankName: document.getElementById('s_bankName').value,
       bankAccountName: document.getElementById('s_bankAccountName').value,
@@ -282,6 +285,7 @@ Router.route('/settings', async () => {
       footerTerms: document.getElementById('s_footerTerms').value
     });
     await DB.dbPut('settings', updated);
+    setBusinessTax(updated);
 
     for (const row of content.querySelectorAll('.cnt-prefix')) {
       const name = row.dataset.name;
