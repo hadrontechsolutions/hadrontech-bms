@@ -25,6 +25,28 @@ function vatColsClass(rec) {
   if (!m && ((rec && rec.lines) || []).some(l => Number(l.vatRate) > 0)) return '';
   return 'no-vat-cols';
 }
+/* ---- One set of VAT wording for the whole system, driven by the VAT Mode chosen on the Quotation ---- */
+var VAT_MODE_NAMES = { NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' };
+function vatModeName(mode) { return VAT_MODE_NAMES[mode] || (mode ? String(mode) : '—'); }
+/** Label for the VAT line in a totals block. */
+function vatLineLabel(mode) {
+  return { NonVat: 'VAT (Non-VAT — not charged)', ZeroRated: 'VAT (Zero-Rated, 0%)', Exempt: 'VAT (VAT Exempt — not charged)' }[mode] || 'VAT';
+}
+/** Printed statement under the totals; Standard 12% needs none. Returns '' or plain text. */
+function vatStatement(mode) {
+  return {
+    NonVat: 'This business is not VAT-registered (Percentage Taxpayer). Prices quoted are not subject to VAT.',
+    ZeroRated: 'This sale is Zero-Rated: VAT is charged at 0%.',
+    Exempt: 'This sale is VAT Exempt: no VAT is charged.'
+  }[mode] || '';
+}
+/** "Sales (…)" style label that says what the figure is for the order's VAT mode. `modes` is one mode or a list of modes (a mixed list gets the general wording). */
+function vatSalesLabel(modes, prefix) {
+  const p = prefix || 'Sales';
+  const list = [...new Set((Array.isArray(modes) ? modes : [modes]).map(m => m || ''))];
+  if (list.length !== 1) return `${p} (excluding VAT, if any)`;
+  return { NonVat: `${p} (Non-VAT)`, Standard12: `${p} (before VAT)`, ZeroRated: `${p} (Zero-Rated)`, Exempt: `${p} (VAT Exempt)` }[list[0]] || `${p} (before VAT, if any)`;
+}
 function poRateInfo(po, settings) {
   const cur = (po && po.currency) || 'PHP';
   if (cur === 'PHP') return { rate: 1, source: 'po' };

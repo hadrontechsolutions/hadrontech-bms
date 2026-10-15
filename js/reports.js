@@ -415,8 +415,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
       const rows = salesOrders.filter(o => inRange(o.orderDate)
         && textMatches(custMap[o.customerId]?.companyName, customerFilter)
         && (statusFilter ? o.status === statusFilter : !['Cancelled', 'Draft'].includes(o.status)));
-      const vatLabel = { Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt', NonVat: 'Non-VAT (not VAT-registered)' };
-      const netOf = r => r2((r.grandTotal || 0) - (r.vatTotal || 0));
+            const netOf = r => r2((r.grandTotal || 0) - (r.vatTotal || 0));
       const vatableOf = r => (r.vatMode || 'Standard12') === 'Standard12' ? netOf(r) : 0;
       const zeroRatedOf = r => r.vatMode === 'ZeroRated' ? netOf(r) : 0;
       const exemptOf = r => r.vatMode === 'Exempt' ? netOf(r) : 0;
@@ -425,7 +424,7 @@ async function buildReport(key, from, to, endUserFilter, customerFilter, supplie
         { label: 'Date', value: r => formatDate(r.orderDate) },
         { label: 'SO No', value: 'soNo' },
         { label: 'Customer', value: r => custMap[r.customerId]?.companyName || '' },
-        { label: 'VAT Classification', value: r => vatLabel[r.vatMode || 'Standard12'] || r.vatMode },
+        { label: 'VAT Classification', value: r => vatModeName(r.vatMode || 'Standard12') },
         { label: 'VATable Sales', value: r => formatMoney(vatableOf(r)) },
         { label: 'Zero-Rated Sales', value: r => formatMoney(zeroRatedOf(r)) },
         { label: 'VAT-Exempt Sales', value: r => formatMoney(exemptOf(r)) },

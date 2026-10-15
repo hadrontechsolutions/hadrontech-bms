@@ -95,7 +95,7 @@
 
       rows.push({
         id: so.id, soNo: so.soNo, orderDate: d10(so.orderDate), status: so.status, customer: (custMap[so.customerId] || {}).companyName || '', customerId: so.customerId,
-        sales: soSales, quotedCost, freightAssumed, quotedProfit, quotedPct: soSales ? r2(quotedProfit / soSales * 100) : 0,
+        vatMode: so.vatMode || '', sales: soSales, quotedCost, freightAssumed, quotedProfit, quotedPct: soSales ? r2(quotedProfit / soSales * 100) : 0,
         invoiced, customerPaid, balance, paidInFull, payState, actualSales,
         suppliersCost, suppliersComputed, computedCost, costConfirmed, additional, actualCost, supplierLines, additionalLines: (costLines[so.id] || []).slice().sort((a, b) => d10(a.date).localeCompare(d10(b.date))),
         unpaidSuppliers, actualProfit, difference, diffPct, note, warnings, profitNote: so.profitNote || '', counted: actualProfit != null
@@ -158,7 +158,7 @@
       if (!rows.length) { q('opWrap').innerHTML = '<div class="empty-inline">No orders to show yet. Orders appear here once they are delivered, or once a customer payment or a supplier payment has been recorded.</div>'; return; }
       q('opWrap').innerHTML = `
         <div style="overflow-x:auto;"><table class="data-table compact">
-          <thead><tr><th>Sales Order</th><th>Customer</th><th>Order date</th><th>Sales (before VAT)</th><th>Quoted cost</th><th>Gross profit as ordered</th><th>Cost at PO rates (computed)</th><th>Actual cost</th><th>Actual profit</th><th>Difference (actual − ordered)</th><th>Customer payment</th></tr></thead>
+          <thead><tr><th>Sales Order</th><th>Customer</th><th>Order date</th><th>${escapeHtml(vatSalesLabel(rows.map(r => r.vatMode)))}</th><th>Quoted cost</th><th>Gross profit as ordered</th><th>Cost at PO rates (computed)</th><th>Actual cost</th><th>Actual profit</th><th>Difference (actual − ordered)</th><th>Customer payment</th></tr></thead>
           <tbody>${rows.map(r => `<tr class="clickable-row" data-hash="/order-profit/${r.id}">
             <td style="white-space:nowrap;"><a href="#/order-profit/${r.id}">${escapeHtml(r.soNo)}</a></td><td>${escapeHtml(r.customer || '—')}</td><td style="white-space:nowrap;">${formatDate(r.orderDate)}</td>
             <td>${money(r.sales)}</td><td>${money(r.quotedCost)}</td><td>${money(r.quotedProfit)} <span class="muted-text">(${pctTxt(r.quotedPct)})</span></td>
@@ -195,7 +195,7 @@
       <div class="card">
         <h3 class="section-title">Gross profit as ordered vs actual profit (PHP)</h3>
         <table class="data-table compact"><thead><tr><th></th><th>As ordered (quoted)</th><th>Actual</th><th>Difference</th></tr></thead><tbody>
-          <tr><td>Sales (before VAT)</td><td>${money(r.sales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales - r.sales)}</td></tr>
+          <tr><td>${escapeHtml(vatSalesLabel(r.vatMode))}</td><td>${money(r.sales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales)}</td><td>${r.actualSales == null ? '—' : money(r.actualSales - r.sales)}</td></tr>
           <tr><td>Supplier costs (incl. their freight &amp; taxes)</td><td rowspan="2">${money(r.quotedCost)}<div class="muted-text small">${r.freightAssumed > 0 ? `quoted item cost ${money(r.quotedCost - r.freightAssumed)} + freight ${money(r.freightAssumed)} (expected to be passed straight through, same as the freight billed to the customer)` : 'quoted cost of the lines'}</div></td><td>${money(r.suppliersCost)}</td><td rowspan="2" class="${costTone}">${signed(costDiff)}</td></tr>
           <tr><td>Additional costs (unexpected)</td><td class="${r.additional ? 'cost-red' : ''}">${money(r.additional)}</td></tr>
           <tr style="font-weight:700;"><td>Total cost</td><td>${money(r.quotedCost)}</td><td>${money(r.actualCost)}</td><td class="${costTone}">${signed(costDiff)}</td></tr>
@@ -217,7 +217,7 @@
       </div>
       <div class="card"><h3 class="section-title">Customer payment</h3>
         <div class="detail-grid">
-          <div class="detail-item"><div class="detail-label">Customer invoice (before VAT)</div><div class="detail-value">${pi ? money(r.invoiced) : '—'}</div></div>
+          <div class="detail-item"><div class="detail-label">${escapeHtml(vatSalesLabel(r.vatMode, 'Customer invoice'))}</div><div class="detail-value">${pi ? money(r.invoiced) : '—'}</div></div>
           <div class="detail-item"><div class="detail-label">Received so far</div><div class="detail-value">${money(r.customerPaid)}</div></div>
           <div class="detail-item"><div class="detail-label">Status</div><div class="detail-value">${escapeHtml(r.payState)}${!r.paidInFull && r.balance > 0 ? ` — ${money(r.balance)} outstanding` : ''}</div></div>
           <div class="detail-item"><div class="detail-label">Invoice</div><div class="detail-value">${pi ? `<a href="#/proforma-invoices/${pi.id}">${escapeHtml(pi.officialInvoiceNo || pi.piNo)}</a>` : '—'}</div></div>

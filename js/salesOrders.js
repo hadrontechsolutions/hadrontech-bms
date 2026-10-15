@@ -207,7 +207,7 @@ function soCostsCardHTML(so, supplierPOs, addCosts) {
       </div>
       <h4 style="margin:16px 0 6px;">Profit on this order (PHP) — same basis as the Gross Profit report and Distributions</h4>
       <div class="detail-grid">
-        <div class="detail-item"><div class="detail-label">Order sales (before VAT)</div><div class="detail-value">${money(f.sales)}</div></div>
+        <div class="detail-item"><div class="detail-label">${escapeHtml(vatSalesLabel(so.vatMode, 'Order sales'))}</div><div class="detail-value">${money(f.sales)}</div></div>
         <div class="detail-item"><div class="detail-label">Gross profit as ordered (sales less quoted cost)</div><div class="detail-value">${f.reason ? '—' : money(f.gp)}</div></div>
         <div class="detail-item"><div class="detail-label">Additional costs paid (unexpected)</div><div class="detail-value ${f.addTotal > 0 ? 'cost-red' : ''}">${money(f.addTotal)}</div></div>
         <div class="detail-item"><div class="detail-label">Profit after additional costs</div><div class="detail-value ${f.margin != null && f.sales > 0 && f.margin / f.sales < 0.10 ? 'cost-red' : ''}">${f.margin == null ? '—' : `<b>${money(f.margin)}</b>${f.sales > 0 ? ` <span class="muted-text">(${(f.margin / f.sales * 100).toFixed(1)}% of sales)</span>` : ''}`}</div></div>
@@ -327,7 +327,7 @@ async function renderSODetail(id) {
         <div class="detail-item"><div class="detail-label">Required Delivery Date</div><div class="detail-value">${formatDate(so.requiredDeliveryDate) || '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Payment Terms</div><div class="detail-value">${escapeHtml(so.paymentTerms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Incoterms</div><div class="detail-value">${escapeHtml(so.incoterms || '—')}</div></div>
-        <div class="detail-item"><div class="detail-label">VAT Mode</div><div class="detail-value">${escapeHtml(({ NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' })[so.vatMode] || (so.vatMode || '—'))}</div></div>
+        <div class="detail-item"><div class="detail-label">VAT Mode</div><div class="detail-value">${escapeHtml(vatModeName(so.vatMode))}</div></div>
         <div class="detail-item"><div class="detail-label">Freight / Shipping Charge</div><div class="detail-value">${formatMoney(so.freight || 0, so.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Total</div><div class="detail-value">${formatMoney(so.grandTotal, so.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Shipping Address</div><div class="detail-value">${escapeHtml(so.shippingAddress || '—')}</div></div>

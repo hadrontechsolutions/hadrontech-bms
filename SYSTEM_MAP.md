@@ -220,3 +220,9 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - The internal "Amount w/ VAT" column is shown only when the mode is Standard 12% (older records with no mode: only if a line has VAT). Quotation view/form (switches live with the VAT Mode box), Sales Order view and edit. Printouts never had it.
 - The Sales Order page shows its VAT Mode; a Non-VAT / Zero-Rated / Exempt Sales Order cannot be saved with a line VAT% above 0. Customer PO lines still default to 12% VAT (left as is: that screen records what the customer's PO says). Test: test-vat-mode-columns.js.
 - Delivery Receipt: "Received by (customer's name)" and "Date received" are under Edit details (same fields `receivedBy` / `receivedDate` the "Mark signed copy received" form uses, so there is one source). They print under the customer's signature line and do not change the receipt's status. Test: test-delivery-receipts.js.
+
+## VAT wording (helpers in js/utils.js: `vatModeName`, `vatLineLabel`, `vatStatement`, `vatSalesLabel`; all driven by the VAT Mode chosen on the Quotation)
+- Mode names everywhere: Non-VAT (Percentage Tax) · Standard 12% · Zero-Rated · VAT Exempt.
+- Totals VAT line (screen and print): "VAT (Non-VAT — not charged)", "VAT (Zero-Rated, 0%)", "VAT (VAT Exempt — not charged)"; Standard 12% stays plain "VAT". Printed statement under the totals: Non-VAT "This business is not VAT-registered (Percentage Taxpayer). Prices quoted are not subject to VAT."; Zero-Rated / VAT Exempt have their own one-line statements; Standard 12% none.
+- Sales labels follow the order's mode: Sales (Non-VAT) / Sales (before VAT) / Sales (Zero-Rated) / Sales (VAT Exempt); lists mixing modes: "Sales (excluding VAT, if any)". Used by Order Profit (page, list, Excel tab) and the Sales Order Additional Costs card. Order Profit rows carry `vatMode`.
+- Tests: test-vat-wording.js, test-nonvat-mode.js.

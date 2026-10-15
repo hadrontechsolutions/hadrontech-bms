@@ -67,8 +67,8 @@ async function main() {
   win.open = () => ({ document: { write: (h) => { printedQ = h; }, close: () => {} } });
   doc.getElementById('btnPrint').click();
   await wait(30);
-  console.log('STEP 9: THE PRINT FIX: printed Quotation shows the unambiguous "VAT (Non-VAT Registered)" label, not just plain "VAT":', printedQ.includes('VAT (Non-VAT Registered)'));
-  console.log('STEP 10: Printed Quotation includes the explicit Non-VAT disclosure statement:', printedQ.includes('This is a Non-VAT Registered business (Percentage Taxpayer)'));
+  console.log('STEP 9: THE PRINT FIX: printed Quotation shows the unambiguous "VAT (Non-VAT — not charged)" label, not just plain "VAT":', printedQ.includes('VAT (Non-VAT — not charged)'));
+  console.log('STEP 10: Printed Quotation includes the explicit Non-VAT disclosure statement:', printedQ.includes('This business is not VAT-registered (Percentage Taxpayer)'));
 
   /* ============ Sales Order print also shows the disclosure (inherits vatMode) ============ */
   savedQ.status = 'Won';
@@ -100,7 +100,7 @@ async function main() {
   let printedSO = '';
   win.open = () => ({ document: { write: (h) => { printedSO = h; }, close: () => {} } });
   await win.Print.printSalesOrder(so, { companyName: 'Key Electrochem Limited Co./KEYEC' }, null, savedQ);
-  console.log('STEP 12: Printed Sales Order also shows the unambiguous label and disclosure:', printedSO.includes('VAT (Non-VAT Registered)') && printedSO.includes('This is a Non-VAT Registered business'));
+  console.log('STEP 12: Printed Sales Order also shows the unambiguous label and disclosure:', printedSO.includes('VAT (Non-VAT — not charged)') && printedSO.includes('This business is not VAT-registered'));
 
   /* ============ Proforma Invoice: vatMode correctly flows through the snapshot ============ */
   const piId = await win.DB.dbAdd('proformaInvoices', {
@@ -112,7 +112,7 @@ async function main() {
   let printedPI = '';
   win.open = () => ({ document: { write: (h) => { printedPI = h; }, close: () => {} } });
   await win.Print.printProformaInvoice(pi, so, { companyName: 'Key Electrochem Limited Co./KEYEC' });
-  console.log('STEP 13: Printed Proforma Invoice also shows the unambiguous label and disclosure:', printedPI.includes('VAT (Non-VAT Registered)') && printedPI.includes('This is a Non-VAT Registered business'));
+  console.log('STEP 13: Printed Proforma Invoice also shows the unambiguous label and disclosure:', printedPI.includes('VAT (Non-VAT — not charged)') && printedPI.includes('This business is not VAT-registered'));
 
   /* ============ LEGACY MIGRATION: a pre-existing PI without a snapshot correctly picks up vatMode too ============ */
   const legacyPiId = await win.DB.dbAdd('proformaInvoices', { piNo: 'HT-PI-2026-LEGACY', salesOrderId: so.id, date: win.todayISO(), createdAt: now });
@@ -129,8 +129,8 @@ async function main() {
   let printedStdQ = '';
   win.open = () => ({ document: { write: (h) => { printedStdQ = h; }, close: () => {} } });
   await win.Print.printQuotation(stdQ, { companyName: 'Test Customer' });
-  console.log('STEP 15: REGRESSION: a Standard 12% quotation still prints plain "VAT" (no "(Non-VAT Registered)" suffix):', printedStdQ.includes('>VAT<') && !printedStdQ.includes('VAT (Non-VAT Registered)'));
-  console.log('STEP 16: REGRESSION: a Standard 12% quotation does NOT show the Non-VAT disclosure statement:', !printedStdQ.includes('This is a Non-VAT Registered business'));
+  console.log('STEP 15: REGRESSION: a Standard 12% quotation still prints plain "VAT" (no "(Non-VAT Registered)" suffix):', printedStdQ.includes('>VAT<') && !printedStdQ.includes('VAT (Non-VAT — not charged)'));
+  console.log('STEP 16: REGRESSION: a Standard 12% quotation does NOT show the Non-VAT disclosure statement:', !printedStdQ.includes('This business is not VAT-registered'));
 
   console.log('\n=== NON-VAT QUOTATION MODE FULLY VERIFIED ===');
 }

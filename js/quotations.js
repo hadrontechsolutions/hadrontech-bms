@@ -968,7 +968,7 @@ async function renderQuoteForm(id) {
       document.getElementById('totalsBox').innerHTML = `
         <div class="line"><span>Subtotal</span><span>${formatMoney(t.subtotal, cur)}</span></div>
         <div class="line"><span>Overall Discount</span><span>-${formatMoney(t.overallDiscAmt, cur)}</span></div>
-        <div class="line"><span>VAT</span><span>${formatMoney(t.vatTotal, cur)}</span></div>
+        <div class="line"><span>${vatLineLabel(document.getElementById('f_vatMode').value)}</span><span>${formatMoney(t.vatTotal, cur)}</span></div>
         <div class="line"><span>Freight</span><span>${formatMoney(t.freight, cur)}</span></div>
         <div class="line"><span>Other Charges</span><span>${formatMoney(t.other, cur)}</span></div>
         <div class="line grand"><span>Grand Total</span><span>${formatMoney(t.grandTotal, cur)}</span></div>
@@ -983,7 +983,7 @@ async function renderQuoteForm(id) {
           <div style="font-weight:700; margin-bottom:6px;">${escapeHtml(o.label)}</div>
           <div class="line"><span>Subtotal</span><span>${formatMoney(o.subtotal, cur)}</span></div>
           <div class="line"><span>Overall Discount</span><span>-${formatMoney(o.overallDiscAmt, cur)}</span></div>
-          <div class="line"><span>VAT</span><span>${formatMoney(o.vatTotal, cur)}</span></div>
+          <div class="line"><span>${vatLineLabel(document.getElementById('f_vatMode').value)}</span><span>${formatMoney(o.vatTotal, cur)}</span></div>
           <div class="line"><span>Freight</span><span>${formatMoney(o.freight, cur)}</span></div>
           <div class="line"><span>Other Charges</span><span>${formatMoney(o.other, cur)}</span></div>
           <div class="line grand"><span>${escapeHtml(o.label)} Total</span><span>${formatMoney(o.grandTotal, cur)}</span></div>
@@ -1204,7 +1204,7 @@ async function renderQuoteDetail(id) {
   // The linked RFQ may have been moved to the Trash or deleted for good (closed RFQs are cleaned up automatically).
   const rfqRec = q.rfqNoteId ? await DB.dbGet('notes', Number(q.rfqNoteId)) : null;
   const rfqGone = !!q.rfqNoteId && !rfqRec; const rfqInTrash = !!(rfqRec && rfqRec.trashedAt);
-  const vatModeLabel = { NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' }[q.vatMode] || (q.vatMode || '—');
+  const vatModeLabel = vatModeName(q.vatMode);
 
   Router.setBreadcrumb([{ label: 'Quotations', hash: '/quotations' }, { label: `${q.quotationNo} (Rev ${padRev(q.revision)})` }]);
 
@@ -1286,7 +1286,7 @@ async function renderQuoteDetail(id) {
       ${label ? `<div style="font-weight:700; margin-bottom:6px;">${escapeHtml(label)}</div>` : ''}
       <div class="line"><span>Subtotal</span><span>${formatMoney(t.subtotal, q.currency)}</span></div>
       <div class="line"><span>Overall Discount (${q.overallDiscountPercent || 0}%)</span><span>−${formatMoney(t.overallDiscAmt, q.currency)}</span></div>
-      <div class="line"><span>VAT</span><span>${formatMoney(t.vatTotal, q.currency)}</span></div>
+      <div class="line"><span>${vatLineLabel(q.vatMode)}</span><span>${formatMoney(t.vatTotal, q.currency)}</span></div>
       <div class="line"><span>Freight</span><span>${formatMoney(t.freight, q.currency)}</span></div>
       <div class="line"><span>Other</span><span>${formatMoney(t.other, q.currency)}</span></div>
       <div class="line grand"><span>${label ? escapeHtml(label) + ' Total' : 'Grand Total'}</span><span>${formatMoney(t.grandTotal, q.currency)}</span></div>
