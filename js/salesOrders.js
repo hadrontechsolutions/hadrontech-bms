@@ -69,7 +69,7 @@ async function createFromCustomerPO(po, quotation) {
     soNo, customerId: po.customerId, customerPOId: po.id, quotationId: quotation ? quotation.id : null,
     orderDate: todayISO(), requiredDeliveryDate: '', currency: po.currency || 'PHP',
     shippingAddress: po.shippingAddress || '', internalNotes: '', status: 'Draft', chosenOptionLabel,
-    vatMode: quotation?.vatMode || 'Standard12', paymentTerms: quotation?.paymentTerms || '', incoterms: quotation?.incoterms || '',
+    vatMode: quotation?.vatMode || (lines.some(l => Number(l.vatRate) > 0) ? 'Standard12' : 'NonVat'), paymentTerms: quotation?.paymentTerms || '', incoterms: quotation?.incoterms || '',
     statusHistory: [{ status: 'Draft', date: now }],
     createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName,
     lines
@@ -327,6 +327,7 @@ async function renderSODetail(id) {
         <div class="detail-item"><div class="detail-label">Required Delivery Date</div><div class="detail-value">${formatDate(so.requiredDeliveryDate) || '—'}</div></div>
         <div class="detail-item"><div class="detail-label">Payment Terms</div><div class="detail-value">${escapeHtml(so.paymentTerms || '—')}</div></div>
         <div class="detail-item"><div class="detail-label">Incoterms</div><div class="detail-value">${escapeHtml(so.incoterms || '—')}</div></div>
+        <div class="detail-item"><div class="detail-label">VAT Mode</div><div class="detail-value">${escapeHtml(({ NonVat: 'Non-VAT (Percentage Tax)', Standard12: 'Standard 12%', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' })[so.vatMode] || (so.vatMode || '—'))}</div></div>
         <div class="detail-item"><div class="detail-label">Freight / Shipping Charge</div><div class="detail-value">${formatMoney(so.freight || 0, so.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Total</div><div class="detail-value">${formatMoney(so.grandTotal, so.currency)}</div></div>
         <div class="detail-item"><div class="detail-label">Shipping Address</div><div class="detail-value">${escapeHtml(so.shippingAddress || '—')}</div></div>
@@ -337,8 +338,8 @@ async function renderSODetail(id) {
     <div class="card">
       <h3 class="section-title">Order Items</h3>
       <div style="overflow-x:auto; max-width:100%;">
-      <table class="data-table compact">
-        <thead><tr><th>Description</th><th>Qty</th><th>Received</th><th>Delivered</th><th>Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th>Sourcing</th></tr></thead>
+      <table class="data-table compact ${vatColsClass(so)}">
+        <thead><tr><th>Description</th><th>Qty</th><th>Received</th><th>Delivered</th><th>Supplier</th><th>Amount</th><th class="internal-only-col vat-col">Amount w/ VAT</th><th>Sourcing</th></tr></thead>
         <tbody>
           ${(so.lines || []).map(l => {
             const lineCalc = QuoteCalc.computeLine(l);
@@ -373,7 +374,7 @@ async function renderSODetail(id) {
             const receivedCell = !recv.sourcedIds.has(l.lineId) ? '<span class="muted-text">—</span>'
               : (gotQty >= l.qty ? `<span class="cell-ok">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>` : `<span class="cell-needs-input">${gotQty} of ${l.qty} ${escapeHtml(l.uom)}</span>`);
             const descCell = descClip(l.description);
-            return `<tr><td class="desc-col">${descCell}</td><td class="nowrap">${l.qty} ${escapeHtml(l.uom)}</td><td class="nowrap">${receivedCell}</td><td class="nowrap deliv-col">${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
+            return `<tr><td class="desc-col">${descCell}</td><td class="nowrap">${l.qty} ${escapeHtml(l.uom)}</td><td class="nowrap">${receivedCell}</td><td class="nowrap deliv-col">${deliveredCell}</td><td>${supplierCell}</td><td>${amt}</td><td class="internal-only-col vat-col">${amtWithVat}</td><td>${sourcingCell}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -619,8 +620,8 @@ async function renderSOHeaderEdit(so) {
       <h3 class="section-title" style="margin-top:16px;">Items</h3>
       <p class="muted-text">Correct quantities, prices, or descriptions if what the customer actually ordered differs slightly from the original quotation.</p>
       <div style="overflow-x:auto; max-width:100%;">
-      <table class="data-table compact">
-        <thead><tr><th>Description</th><th style="width:55px;">Qty</th><th style="width:45px;">UOM</th><th style="width:80px;">Unit Price</th><th class="internal-only-col" style="width:75px;">Unit Cost</th><th style="width:50px;">VAT%</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th></th></tr></thead>
+      <table class="data-table compact ${vatColsClass(so)}">
+        <thead><tr><th>Description</th><th style="width:55px;">Qty</th><th style="width:45px;">UOM</th><th style="width:80px;">Unit Price</th><th class="internal-only-col" style="width:75px;">Unit Cost</th><th style="width:50px;">VAT%</th><th>Amount</th><th class="internal-only-col vat-col">Amount w/ VAT</th><th></th></tr></thead>
         <tbody id="soLinesBody"></tbody>
       </table>
       </div>
@@ -647,7 +648,7 @@ async function renderSOHeaderEdit(so) {
         <td class="internal-only-col"><input class="so-cost" type="number" min="0" step="0.01" value="${l.unitCost || 0}" style="width:75px;"></td>
         <td><input class="so-vat" type="number" min="0" step="0.01" value="${l.vatRate ?? 12}" style="width:50px;"></td>
         <td class="so-amount" style="text-align:right; font-family:var(--mono);">${formatMoney(c.net, so.currency)}</td>
-        <td class="internal-only-col so-amount-vat" style="text-align:right; font-family:var(--mono);">${formatMoney(c.lineTotal, so.currency)}</td>
+        <td class="internal-only-col vat-col so-amount-vat" style="text-align:right; font-family:var(--mono);">${formatMoney(c.lineTotal, so.currency)}</td>
         <td class="row-del" data-sodel="${i}">✕</td>
       </tr>`;
     }).join('');
@@ -681,6 +682,7 @@ async function renderSOHeaderEdit(so) {
   document.getElementById('soForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!editLines.every(l => l.description && Number(l.qty) > 0)) { toast('Every line needs a description and quantity greater than 0.', 'err'); return; }
+    if (so.vatMode && so.vatMode !== 'Standard12' && editLines.some(l => Number(l.vatRate) > 0)) { toast(`This order is ${({ NonVat: 'Non-VAT', ZeroRated: 'Zero-Rated', Exempt: 'VAT Exempt' })[so.vatMode] || so.vatMode}, so every line's VAT% must be 0.`, 'err'); return; }
     const settings = await DB.getSettings();
     let subtotal = 0, vatTotal = 0;
     editLines.forEach(l => { const c = QuoteCalc.computeLine(l); subtotal = r2(subtotal + c.net); vatTotal = r2(vatTotal + c.vatAmt); });

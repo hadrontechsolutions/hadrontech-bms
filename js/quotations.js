@@ -441,12 +441,12 @@ async function renderQuoteForm(id) {
       <h3 class="section-title">Line Items</h3>
       <div id="pkgNote" style="margin-bottom:6px;"></div>
       <div style="overflow-x:auto; max-width:100%;">
-      <table class="data-table items-table" id="linesTable">
+      <table class="data-table items-table ${vatColsClass(q)}" id="linesTable">
         <thead><tr>
           <th style="width:26px;">#</th><th>Catalog</th><th>Brand</th><th>Model/Part No.</th><th>Description *</th>
           <th>Option</th>
           <th>Qty</th><th>UOM</th><th class="internal-only-col">Lead Time</th><th class="internal-only-col">Total Freight for This Line</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Cost Ccy</th><th class="internal-only-col">Rate→<span id="rateArrowCcy"></span></th><th class="internal-only-col">Markup %</th><th>Unit Price</th><th>Disc %</th><th>VAT %</th>
-          <th class="internal-only-col">Supplier</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th><th></th>
+          <th class="internal-only-col">Supplier</th><th>Amount</th><th class="internal-only-col vat-col">Amount w/ VAT</th><th></th>
         </tr></thead>
         <tbody id="linesBody"></tbody>
       </table>
@@ -778,7 +778,7 @@ async function renderQuoteForm(id) {
         <td><input class="ln-vat" type="number" step="0.01" value="${l.vatRate}" style="width:50px;"></td>
         <td class="internal-only-col"><select class="ln-supplier" style="min-width:100px;">${supplierOptions(l.supplierId)}</select></td>
         <td class="ln-amount" style="text-align:right;font-family:var(--mono);white-space:nowrap;">${formatMoney(c.net, qCur)}</td>
-        <td class="internal-only-col ln-amount-vat" style="text-align:right;font-family:var(--mono);white-space:nowrap;">${formatMoney(c.lineTotal, qCur)}</td>
+        <td class="internal-only-col vat-col ln-amount-vat" style="text-align:right;font-family:var(--mono);white-space:nowrap;">${formatMoney(c.lineTotal, qCur)}</td>
         <td class="row-del" data-del="${l.lineId}">✕</td>
       </tr>`;
     }).join('');
@@ -1084,6 +1084,8 @@ async function renderQuoteForm(id) {
   const updateVatHint = () => { vatModeHintEl.textContent = VAT_MODE_EXPLANATIONS[document.getElementById('f_vatMode').value] || ''; };
   updateVatHint();
   document.getElementById('f_vatMode').addEventListener('change', updateVatHint);
+  const syncVatCols = () => document.getElementById('linesTable').classList.toggle('no-vat-cols', document.getElementById('f_vatMode').value !== 'Standard12');
+  document.getElementById('f_vatMode').addEventListener('change', syncVatCols); syncVatCols();
 
   const incotermsHintEl = document.getElementById('incotermsHint');
   const updateIncotermsHint = () => {
@@ -1275,10 +1277,10 @@ async function renderQuoteDetail(id) {
       <td>${l.vatRate || 0}%</td>
       <td class="internal-only-col">${lineMarginPct}%</td>
       <td>${formatMoney(c.net, q.currency)}</td>
-      <td class="internal-only-col">${formatMoney(c.lineTotal, q.currency)}</td>
+      <td class="internal-only-col vat-col">${formatMoney(c.lineTotal, q.currency)}</td>
     </tr>`;
   };
-  const lineItemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th class="internal-only-col">Lead Time</th><th class="internal-only-col">Total Freight for This Line</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Supplier</th><th>Unit Price</th><th>Disc%</th><th>VAT%</th><th class="internal-only-col">Margin%</th><th>Amount</th><th class="internal-only-col">Amount w/ VAT</th></tr></thead>`;
+  const lineItemsHead = `<thead><tr><th>#</th><th>Description</th><th>Qty</th><th class="internal-only-col">Lead Time</th><th class="internal-only-col">Total Freight for This Line</th><th class="internal-only-col">Unit Cost</th><th class="internal-only-col">Supplier</th><th>Unit Price</th><th>Disc%</th><th>VAT%</th><th class="internal-only-col">Margin%</th><th>Amount</th><th class="internal-only-col vat-col">Amount w/ VAT</th></tr></thead>`;
   const totalsBlockHTML = (t, label) => `
     <div class="totals">
       ${label ? `<div style="font-weight:700; margin-bottom:6px;">${escapeHtml(label)}</div>` : ''}
@@ -1299,18 +1301,18 @@ async function renderQuoteDetail(id) {
       <div class="callout-info callout">This quotation presents ${q.optionTotals.length} alternative Options for the customer to choose from — each is priced and totaled separately below, not combined.</div>
       ${commonLines.length > 0 ? `
         <h3 class="section-title" style="margin-top:14px;">Common Items (included with every option)</h3>
-        <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact">${lineItemsHead}<tbody>${commonLines.map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>` : ''}
+        <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact ${vatColsClass(q)}">${lineItemsHead}<tbody>${commonLines.map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>` : ''}
       ${q.optionTotals.map(o => {
         const groupLines = (q.lines || []).filter(l => (o.lineIds || []).includes(l.lineId));
         return `
         <h3 class="section-title" style="margin-top:14px;">${escapeHtml(o.label)}</h3>
-        <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact">${lineItemsHead}<tbody>${groupLines.map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>
+        <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact ${vatColsClass(q)}">${lineItemsHead}<tbody>${groupLines.map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>
         ${totalsBlockHTML(o, o.label)}`;
       }).join('')}
     `;
   } else {
     lineItemsAndTotalsHTML = `
-      <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact">${lineItemsHead}<tbody>${(q.lines || []).map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>
+      <div style="overflow-x:auto; max-width:100%;"><table class="data-table compact ${vatColsClass(q)}">${lineItemsHead}<tbody>${(q.lines || []).map((l, i) => lineRowHTML(l, i)).join('')}</tbody></table></div>
       ${totalsBlockHTML(q, null)}
     `;
   }

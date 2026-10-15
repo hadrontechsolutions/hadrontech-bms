@@ -17,6 +17,14 @@ function currencyList(settings) {
 /** THE rule for a Supplier PO's exchange rate (PHP per 1 unit of the PO's currency), used by every screen and report:
  *  1) the rate saved on the PO  2) otherwise the Settings rate for that currency  3) otherwise none (a warning is shown).
  *  Returns { rate, source: 'po' | 'settings' | 'none' }. PHP is always 1. */
+/** 'no-vat-cols' when the document is not charging VAT (Non-VAT, Zero-Rated, Exempt): the "Amount w/ VAT" column would only repeat Amount.
+ *  Older records with no VAT mode keep the column when any line carries VAT. */
+function vatColsClass(rec) {
+  const m = rec && rec.vatMode;
+  if (m === 'Standard12') return '';
+  if (!m && ((rec && rec.lines) || []).some(l => Number(l.vatRate) > 0)) return '';
+  return 'no-vat-cols';
+}
 function poRateInfo(po, settings) {
   const cur = (po && po.currency) || 'PHP';
   if (cur === 'PHP') return { rate: 1, source: 'po' };
