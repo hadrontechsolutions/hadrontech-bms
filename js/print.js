@@ -361,7 +361,7 @@ async function printDeliveryReceipt(dr) {
     <div class="p-terms" style="margin-top:18px;">Received the above items in good order and condition.</div>
     <div class="p-sign">
       <div>${settings.signatureDataUrl ? `<img class="p-sign-img" src="${settings.signatureDataUrl}" alt="Signature">` : ''}<div class="box">Delivered by: ${escapeHtml(dr.deliveredBy || '')}<br>Signature over printed name</div></div>
-      <div><div class="box">Received by (customer): Signature over printed name<br>Date received: ____________________</div></div>
+      <div><div class="box">Received by (customer): ${dr.receivedBy ? `<b style="color:#1c2430;">${escapeHtml(dr.receivedBy)}</b><br>Signature over printed name` : 'Signature over printed name'}<br>Date received: ${dr.receivedDate ? `<b style="color:#1c2430;">${formatDate(dr.receivedDate)}</b>` : '____________________'}</div></div>
     </div>
     <div class="p-foot">${escapeHtml(settings.companyName)} · Delivery Receipt — proof of delivery only. The official invoice is issued separately.</div>
   `);

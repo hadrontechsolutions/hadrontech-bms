@@ -91,6 +91,7 @@ async function renderDRDetail(id) {
       <div class="detail-item"><div class="detail-label">Vehicle / Courier / Waybill</div><div class="detail-value">${escapeHtml(dr.vehicle || '—')}</div></div>
       <div class="detail-item"><div class="detail-label">Official Invoice No. (BIR)</div><div class="detail-value">${escapeHtml(dr.invoiceNo || '—')}</div></div>
       <div class="detail-item"><div class="detail-label">Signed Copy</div><div class="detail-value">${signed ? `Received ${formatDate(dr.receivedDate)} — signed by ${escapeHtml(dr.receivedBy || '—')}` : voided ? '—' : 'Not yet received back'}</div></div>
+      ${!signed && !voided && (dr.receivedBy || dr.receivedDate) ? `<div class="detail-item"><div class="detail-label">Received By (customer) / Date Received</div><div class="detail-value">${escapeHtml(dr.receivedBy || '—')}${dr.receivedDate ? ' · ' + formatDate(dr.receivedDate) : ''}</div></div>` : ''}
       <div class="detail-item field-wide"><div class="detail-label">Delivered To</div><div class="detail-value" style="white-space:pre-line;">${escapeHtml(dr.shippingAddress || '—')}</div></div>
       ${dr.remarks ? `<div class="detail-item field-wide"><div class="detail-label">Remarks</div><div class="detail-value" style="white-space:pre-line;">${escapeHtml(dr.remarks)}</div></div>` : ''}
     </div></div>
@@ -125,13 +126,15 @@ async function renderDRDetail(id) {
       <div class="field"><label>Delivered by</label><input id="dr_by" value="${escapeHtml(dr.deliveredBy || '')}"></div>
       <div class="field"><label>Vehicle / courier / waybill</label><input id="dr_vehicle" value="${escapeHtml(dr.vehicle || '')}"></div>
       <div class="field"><label>Official invoice no. (BIR)</label><input id="dr_inv" value="${escapeHtml(dr.invoiceNo || '')}"></div>
+      <div class="field"><label>Received by (customer’s name)</label><input id="dr_recBy" value="${escapeHtml(dr.receivedBy || '')}" placeholder="Prints under the customer’s signature line"></div>
+      <div class="field"><label>Date received</label><input type="date" id="dr_recDate" value="${dr.receivedDate || ''}"></div>
       <div class="field field-wide"><label>Delivered to (address)</label><textarea id="dr_addr">${escapeHtml(dr.shippingAddress || '')}</textarea></div>
       <div class="field field-wide"><label>Remarks</label><textarea id="dr_remarks">${escapeHtml(dr.remarks || '')}</textarea></div></div>
       <div class="btn-row" style="margin-top:10px;"><button class="btn-amber btn-sm" id="drSaveEdit">Save</button><button class="btn-line btn-sm" id="drCancel">Cancel</button></div></div>`;
     document.getElementById('drCancel').onclick = () => { host.innerHTML = ''; };
     document.getElementById('drSaveEdit').onclick = async () => {
       dr.date = document.getElementById('dr_date').value || dr.date; dr.deliveredBy = document.getElementById('dr_by').value.trim(); dr.vehicle = document.getElementById('dr_vehicle').value.trim();
-      dr.invoiceNo = document.getElementById('dr_inv').value.trim(); dr.shippingAddress = document.getElementById('dr_addr').value; dr.remarks = document.getElementById('dr_remarks').value;
+      dr.receivedBy = document.getElementById('dr_recBy').value.trim(); dr.receivedDate = document.getElementById('dr_recDate').value; dr.invoiceNo = document.getElementById('dr_inv').value.trim(); dr.shippingAddress = document.getElementById('dr_addr').value; dr.remarks = document.getElementById('dr_remarks').value;
       await save(`Updated delivery receipt ${dr.drNo}`);
     };
   };

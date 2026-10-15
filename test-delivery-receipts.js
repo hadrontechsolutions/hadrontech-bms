@@ -37,6 +37,15 @@ let fails = 0, pass = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ?
   ok('10b no signature uploaded: no signature image on the printout', !/p-sign-img/.test(printed.replace(/\.p-sign-img\{[^}]*\}/, '')));
   { const st = await DB.getSettings(); st.signatureDataUrl = 'data:image/png;base64,iVBORw0KGgo='; await DB.dbPut('settings', st); printed = ''; doc.getElementById('btnPrintDR').click(); await wait(200);
     ok('10c signature uploaded in Settings: it prints above the Delivered by line, not above the customer line', /<img class="p-sign-img" src="data:image\/png;base64,iVBORw0KGgo="[^>]*><div class="box">Delivered by/.test(printed) && (printed.match(/<img class="p-sign-img"/g) || []).length === 1); st.signatureDataUrl = ''; await DB.dbPut('settings', st); }
+  { doc.getElementById('btnEditDR').click(); await wait(100);
+    ok('10d Edit details has Received by (customer) and Date received boxes', !!doc.getElementById('dr_recBy') && !!doc.getElementById('dr_recDate'));
+    doc.getElementById('dr_recBy').value = 'Willie Sicat'; doc.getElementById('dr_recDate').value = '2026-10-16'; doc.getElementById('drSaveEdit').click(); await wait(300);
+    const d2 = (await DB.dbGetAll('deliveryReceipts')).find(x => x.id === dr.id);
+    ok('10e saved on the receipt without changing its status', d2.receivedBy === 'Willie Sicat' && d2.receivedDate === '2026-10-16' && d2.status === dr.status, JSON.stringify([d2.receivedBy, d2.receivedDate, d2.status]));
+    printed = ''; doc.getElementById('btnPrintDR').click(); await wait(200);
+    ok('10f the print shows the customer name and date received under the customer line', /Received by \(customer\):[^<]*<b[^>]*>Willie Sicat<\/b>/.test(printed) && /Date received: <b[^>]*>Oct 16, 2026<\/b>/.test(printed), (printed.match(/Received by[\s\S]{0,260}/) || [''])[0]);
+    ok('10g the receipt page shows the receiver while the signed copy is still outstanding', /Willie Sicat/.test(doc.getElementById('content').textContent) && /Not yet received back/.test(doc.getElementById('content').textContent)); 
+    { const r = await DB.dbGet('deliveryReceipts', dr.id); r.receivedBy = ''; r.receivedDate = ''; await DB.dbPut('deliveryReceipts', r); await win.Router.resolveRoute(); await wait(200); } }
   // signed copy
   doc.getElementById('btnSigned').click(); await wait(50); doc.getElementById('drSaveSigned').click(); await wait(100);
   ok('12 signed copy needs the name', (await DB.dbGet('deliveryReceipts', dr.id)).status === 'Issued');
