@@ -34,6 +34,9 @@ let fails = 0, pass = 0; const ok = (n, c, x) => { console.log(n + ':', !!c, c ?
   doc.getElementById('btnPrintDR').click(); await wait(200);
   ok('9 print says Delivery Receipt with number, PO #, invoice #, customer, qty; NO prices', /Delivery Receipt/.test(printed) && printed.includes(dr.drNo) && printed.includes('KEY-PO-77') && printed.includes('SI-0099') && printed.includes('KEYEC') && printed.includes('Warehouse 5') && !/500\.00|₱|Unit Price|Amount/.test(printed.replace(/<style[\s\S]*?<\/style>/, '')), printed.slice(0, 50));
   ok('10 print has the "good order and condition" line and a customer signature box', /good order and condition/.test(printed) && /Received by \(customer\)/.test(printed));
+  ok('10b no signature uploaded: no signature image on the printout', !/p-sign-img/.test(printed.replace(/\.p-sign-img\{[^}]*\}/, '')));
+  { const st = await DB.getSettings(); st.signatureDataUrl = 'data:image/png;base64,iVBORw0KGgo='; await DB.dbPut('settings', st); printed = ''; doc.getElementById('btnPrintDR').click(); await wait(200);
+    ok('10c signature uploaded in Settings: it prints above the Delivered by line, not above the customer line', /<img class="p-sign-img" src="data:image\/png;base64,iVBORw0KGgo="[^>]*><div class="box">Delivered by/.test(printed) && (printed.match(/<img class="p-sign-img"/g) || []).length === 1); st.signatureDataUrl = ''; await DB.dbPut('settings', st); }
   // signed copy
   doc.getElementById('btnSigned').click(); await wait(50); doc.getElementById('drSaveSigned').click(); await wait(100);
   ok('12 signed copy needs the name', (await DB.dbGet('deliveryReceipts', dr.id)).status === 'Issued');
