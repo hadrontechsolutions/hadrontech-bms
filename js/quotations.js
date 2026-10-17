@@ -937,7 +937,7 @@ async function renderQuoteForm(id) {
             // relationship once an item is actually on a quotation line.
             line.unitPrice = computeMarkupPrice(line, currentCurrency());
             const headerVat = document.getElementById('f_vatMode').value;
-            if (p.vatClass === 'Zero-Rated' || p.vatClass === 'VAT Exempt' || headerVat !== 'Standard12') line.vatRate = 0;
+            if (headerVat !== 'Standard12') line.vatRate = 0;
             else line.vatRate = 12;
             drawLines(); refreshTotals(); markDirty();
           }

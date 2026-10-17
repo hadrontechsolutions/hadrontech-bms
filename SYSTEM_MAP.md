@@ -231,3 +231,7 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - Choices: Non-VAT — 3% percentage tax (default, also used when nothing is saved), Non-VAT — 8% income tax option, VAT-registered. Hadrontech = 3% percentage tax.
 - It decides: the TIN label on every printout and the Bookkeeper Pack/Business Performance Report headers ("NON-VAT Reg. TIN: …" or "VAT Reg. TIN: …", `companyTinText`), the name of the Non-VAT VAT Mode ("Non-VAT (3% Percentage Tax)" / "Non-VAT (8% Income Tax Option)", `vatModeName`), the default VAT Mode of a new quotation (VAT-registered → Standard 12%), and the registration line on the Bookkeeper Pack. `setBusinessTax` loads the choice at start-up and on Settings save.
 - Printed Non-VAT statement is the plain "This business is not VAT-registered. Prices quoted are not subject to VAT." (no tax regime shown to customers). Test: test-business-tax-type.js.
+
+## Product VAT Classification removed
+- Products no longer have a VAT Classification field. The quotation's VAT Mode is the only thing that sets line VAT%: Standard 12% gives 12%, every other mode gives 0%.
+- Old products may still hold a `vatClass` value in the database; nothing reads it.

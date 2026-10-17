@@ -21,7 +21,7 @@ async function main() {
   const productId = await win.DB.dbAdd('products', {
     itemNo: 'P0001', type: 'Product', description: 'Fleck 3150EM Valve', brand: 'Pentair', modelNo: '3150EM',
     uom: 'pc', defaultSupplierId: supId, standardCost: 2300, standardPrice: 3000, currency: 'USD',
-    markupPercent: 25, vatClass: 'VATable', leadTime: '6-8 weeks', status: 'Active', createdAt: now
+    markupPercent: 25, leadTime: '6-8 weeks', status: 'Active', createdAt: now
   });
 
   /* ============ BUG FIX 1 & 2: markupPercent and leadTime now correctly carry through ============ */

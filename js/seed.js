@@ -55,7 +55,7 @@ async function seedIfEmpty() {
     description: 'Vertical multistage centrifugal pump, CR 15-4, cast iron', uom: 'pc',
     defaultSupplierId: sup1Id, supplierPartNo: 'CR15-4-A-FGJ-A-E-HQQE',
     standardCost: 850, standardPrice: 1150, currency: 'USD', markupPercent: 35,
-    vatClass: 'VATable', countryOfOrigin: 'Denmark', leadTime: '6-8 weeks',
+    countryOfOrigin: 'Denmark', leadTime: '6-8 weeks',
     warranty: '1 year from delivery', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
@@ -65,7 +65,7 @@ async function seedIfEmpty() {
     description: 'Butterfly valve, 6 inch, ductile iron body', uom: 'pc',
     defaultSupplierId: sup2Id, supplierPartNo: '761-6IN',
     standardCost: 180, standardPrice: 260, currency: 'USD', markupPercent: 44,
-    vatClass: 'VATable', countryOfOrigin: 'USA', leadTime: '4-6 weeks',
+    countryOfOrigin: 'USA', leadTime: '4-6 weeks',
     warranty: '1 year from delivery', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
@@ -73,7 +73,7 @@ async function seedIfEmpty() {
     itemNo: await DB.nextDocNumber('product'), type: 'Service', category: 'Installation',
     manufacturer: '', brand: '', modelNo: '', description: 'On-site installation and commissioning service',
     uom: 'lot', defaultSupplierId: '', supplierPartNo: '', standardCost: 0, standardPrice: 25000,
-    currency: 'PHP', markupPercent: 0, vatClass: 'VATable', countryOfOrigin: 'Philippines',
+    currency: 'PHP', markupPercent: 0, countryOfOrigin: 'Philippines',
     leadTime: '', warranty: '', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 

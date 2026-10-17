@@ -38,7 +38,7 @@ function pkgComponentsPanelHTML(record) {
 function setupProjectPackageForm(form, record) {
   const typeSel = form.querySelector('#f_type');
   if (!typeSel) return;
-  const HIDE = ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'vatClass', 'countryOfOrigin'];
+  const HIDE = ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'countryOfOrigin'];
   const hideEls = HIDE.map(n => form.querySelector('#f_' + n)).filter(Boolean).map(el => el.closest('.field'));
   const descLabel = form.querySelector('#f_description') && form.querySelector('#f_description').closest('.field').querySelector('label');
   const comps = (record && record.components || []).map(c => Object.assign({}, c));
@@ -133,7 +133,6 @@ Entities.defineEntity({
     { name: 'currency', label: 'Currency', type: 'currency-select', default: 'USD' },
     { name: 'standardPrice', label: 'Standard Selling Price (₱ PHP)', type: 'money' },
     { name: 'markupPercent', label: 'Default Markup %', type: 'number' },
-    { name: 'vatClass', label: 'VAT Classification', type: 'select', options: ['VATable', 'Zero-Rated', 'VAT Exempt'] },
     { name: 'countryOfOrigin', label: 'Country of Origin', type: 'text' },
     { name: 'leadTime', label: 'Typical Lead Time', type: 'text' },
     { name: 'warranty', label: 'Warranty', type: 'text' },
@@ -143,7 +142,7 @@ Entities.defineEntity({
   counterFor: (obj) => obj.type === 'Project Package' ? 'projectPackage' : 'product',
   afterNumber: (obj) => { if (obj.type === 'Project Package') pkgAssignComponentNumbers(obj); },
   // A project package carries its cost/price on its components, so the single-item fields are not shown on its page.
-  detailHiddenFields: (r) => r.type === 'Project Package' ? ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'vatClass', 'countryOfOrigin'] : [],
+  detailHiddenFields: (r) => r.type === 'Project Package' ? ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'countryOfOrigin'] : [],
   beforeSave: (obj, form, orig) => {
     if (orig) obj.type = orig.type; // a record's type is fixed once created (it decides its numbering)
     if (obj.type !== 'Project Package') return null;
