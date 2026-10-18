@@ -241,3 +241,7 @@ quotations, or you want access from outside the office), the natural next step i
 
 This isn't needed to use Version 1 today — it's here so the next step is planned for,
 not a surprise rebuild.
+
+## Estimated import charges (quotation stage)
+
+Quotations carry an internal tick box, **Include estimated import charges in cost & profit** (on for new quotations; older quotations stay off until ticked). It counts only the **item cost** (no freight) of lines whose **cost currency is not PHP**, at the exchange rate on the line, adds the foreign lines together as one shipment, and estimates: customs processing charge, government fees, courier brokerage and its VAT (plus duty and import VAT when goods are above ₱10,000). The amount is spread over the foreign lines as `importCharge`, so Sales Orders, Order Profit, Gross Profit and Distributions include it automatically. Untick the box to compare margins with and without. Amounts are editable in **Settings > Import Charges** (duty % defaults to 0 — set it from the product's HS code). Internal only; never printed for the customer. Code: `js/importCharges.js`; test: `test-import-estimate.js`.

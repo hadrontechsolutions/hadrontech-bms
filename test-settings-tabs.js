@@ -21,7 +21,7 @@ async function main() {
   await win.Router.resolveRoute();
   await wait(10);
   const tabBtns = doc.querySelectorAll('.settings-tab-btn');
-  console.log('STEP 1: All 5 tabs present:', tabBtns.length === 5);
+  console.log('STEP 1: All 6 tabs present:', tabBtns.length === 6);
   console.log('STEP 2: "Company Profile" tab is active by default:', doc.querySelector('.settings-tab-btn[data-tab="profile"]').classList.contains('active'));
   console.log('STEP 3: Only the Profile panel is visible initially:', doc.querySelector('.settings-tab-panel[data-tab="profile"]').classList.contains('active') && !doc.querySelector('.settings-tab-panel[data-tab="bank"]').classList.contains('active'));
   console.log('STEP 4: Bank fields exist in the DOM even while hidden (still part of one form):', !!doc.getElementById('s_bankName'));

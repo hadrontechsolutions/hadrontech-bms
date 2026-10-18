@@ -213,7 +213,10 @@ function computeLine(l, quoteCurrency) {
     const freightInQuoteCurrency = needsConversion ? r2(freight * rate) : freight;
     costTotal = r2(qty * (costInQuoteCurrency + freightInQuoteCurrency));
   }
-  return { base, discAmt, net, vatAmt, costTotal, lineTotal: r2(net + vatAmt) };
+  // Estimated import charges (customs, brokerage...) spread onto this row by the quotation; 0 when switched off.
+  const importCharge = Number(l.importCharge) || 0;
+  costTotal = r2(costTotal + importCharge);
+  return { base, discAmt, net, vatAmt, costTotal, importCharge, lineTotal: r2(net + vatAmt) };
 }
 
 /* ============================================================
@@ -235,12 +238,13 @@ function computeQuotationTotals(q) {
   const isMultiOption = optionValues.length >= 2;
 
   function computeForLineSet(lineSet) {
-    let subtotal = 0, vatTotal = 0, costTotal = 0;
+    let subtotal = 0, vatTotal = 0, costTotal = 0, importEstimate = 0;
     lineSet.forEach(l => {
       const c = computeLine(l, q.currency);
       subtotal = r2(subtotal + c.net);
       vatTotal = r2(vatTotal + c.vatAmt);
       costTotal = r2(costTotal + c.costTotal);
+      importEstimate = r2(importEstimate + c.importCharge);
     });
     const overallDiscAmt = r2(subtotal * (Number(q.overallDiscountPercent) || 0) / 100);
     const netSubtotal = r2(subtotal - overallDiscAmt);
@@ -249,7 +253,7 @@ function computeQuotationTotals(q) {
     const grandTotal = r2(netSubtotal + vatTotal + freight + other);
     const grossProfit = r2(netSubtotal - costTotal);
     const grossMarginPercent = netSubtotal ? r2((grossProfit / netSubtotal) * 100) : 0;
-    return { subtotal, overallDiscAmt, netSubtotal, vatTotal, freight, other, grandTotal, costTotal, grossProfit, grossMarginPercent };
+    return { subtotal, overallDiscAmt, netSubtotal, vatTotal, freight, other, grandTotal, costTotal, importEstimate, grossProfit, grossMarginPercent };
   }
 
   if (!isMultiOption) {
@@ -385,7 +389,7 @@ async function renderQuoteForm(id) {
     salesperson: settings.userName, currency: 'PHP',
     paymentTerms: settings.defaultPaymentTerms, incoterms: settings.defaultIncoterms,
     deliveryLeadTime: '', warranty: settings.defaultWarranty, vatMode: businessTaxType(settings) === 'Vat12' ? 'Standard12' : 'NonVat',
-    overallDiscountPercent: 0, freightCharge: 0, otherCharges: 0,
+    overallDiscountPercent: 0, freightCharge: 0, otherCharges: 0, includeImportEstimate: true,
     internalNotes: '', customerNotes: '', lines: [emptyLine(0)]
   };
   // Coming from "Convert to Quotation" on an RFQ: carry the customer, reference and end-user over once.
@@ -459,6 +463,10 @@ async function renderQuoteForm(id) {
         <div class="field"><label>Overall Discount %</label><input type="number" step="0.01" id="f_overallDiscountPercent" value="${q.overallDiscountPercent || 0}"></div>
         <div class="field"><label>Freight / Shipping Charge</label><input type="number" step="0.01" id="f_freightCharge" value="${q.freightCharge || 0}"><div id="freightInfo" style="font-size:11px; margin-top:3px;"></div></div>
         <div class="field"><label>Other Charges</label><input type="number" step="0.01" id="f_otherCharges" value="${q.otherCharges || 0}"></div>
+      </div>
+      <div class="callout internal-only" id="importEstBox" style="margin:8px 0; border-left:4px solid #b45309; background:#fffbeb; padding:8px 12px; font-size:13px;">
+        <label style="display:flex; gap:8px; align-items:center; font-weight:700; cursor:pointer;"><input type="checkbox" id="f_includeImportEstimate" ${q.includeImportEstimate === true ? 'checked' : ''}> Include estimated import charges in cost &amp; profit (internal)</label>
+        <div id="importEstText" style="margin-top:4px;"></div>
       </div>
 
       <div class="totals" id="totalsBox"></div>
@@ -957,13 +965,27 @@ async function renderQuoteForm(id) {
       overallDiscountPercent: Number(document.getElementById('f_overallDiscountPercent').value) || 0,
       freightCharge: Number(document.getElementById('f_freightCharge').value) || 0,
       otherCharges: Number(document.getElementById('f_otherCharges').value) || 0,
+      includeImportEstimate: document.getElementById('f_includeImportEstimate').checked,
       lines
     };
   }
 
+  /** Shows what the import-charge estimate is (or would be) and why. Item cost only, foreign-cost lines only. */
+  function drawImportEstimate(est, cur) {
+    const box = document.getElementById('importEstText');
+    if (!est.goodsPHP) { box.innerHTML = '<span class="muted-text">No foreign-currency item cost on this quotation, so no import charges are expected.</span>'; return; }
+    const php = n => formatMoney(n, 'PHP');
+    box.innerHTML = `Goods value for customs (item cost of foreign-currency lines only, freight not counted): <b>${php(est.goodsPHP)}</b>.<br>
+      Estimated import charges: <b>${php(est.totalPHP)}</b>${cur !== 'PHP' ? ` (${formatMoney(est.inQuoteCurrency, cur)})` : ''} — ${est.on ? 'included in the Total Cost and Est. Gross Profit below.' : '<b>not included</b> in the profit below (box unticked).'}
+      <details style="margin-top:3px;"><summary class="muted-text" style="cursor:pointer;">How this is worked out</summary><ul style="margin:4px 0 0 18px;">${est.parts.map(p => `<li>${escapeHtml(p.label)}: ${php(p.amount)}</li>`).join('')}</ul>
+      <div class="muted-text">${est.mode === 'small' ? `Goods are within the ${php(est.cfg.deMinimis)} limit, so no duty or import VAT.` : `Goods are above the ${php(est.cfg.deMinimis)} limit, so duty and import VAT apply (duty ${est.cfg.dutyPct}% — change in Settings &gt; Import Charges).`} This is only an estimate; amounts can be changed in Settings &gt; Import Charges.</div></details>`;
+  }
+
   function refreshTotals() {
     const cur = currentCurrency();
-    const t = computeQuotationTotals(currentHeaderValues());
+    const hv = currentHeaderValues();
+    drawImportEstimate(applyImportEstimate(hv, settings), cur);
+    const t = computeQuotationTotals(hv);
     if (!t.isMultiOption) {
       document.getElementById('totalsBox').innerHTML = `
         <div class="line"><span>Subtotal</span><span>${formatMoney(t.subtotal, cur)}</span></div>
@@ -972,6 +994,7 @@ async function renderQuoteForm(id) {
         <div class="line"><span>Freight</span><span>${formatMoney(t.freight, cur)}</span></div>
         <div class="line"><span>Other Charges</span><span>${formatMoney(t.other, cur)}</span></div>
         <div class="line grand"><span>Grand Total</span><span>${formatMoney(t.grandTotal, cur)}</span></div>
+        ${t.importEstimate ? `<div class="line internal-only"><span>Total Cost includes estimated import charges of</span><span>${formatMoney(t.importEstimate, cur)}</span></div>` : ''}
         <div class="line internal-only"><span>Est. Gross Profit (internal)</span><span>${formatMoney(t.grossProfit, cur)} (${t.grossMarginPercent}%)</span></div>
       `;
       return;
@@ -994,6 +1017,7 @@ async function renderQuoteForm(id) {
   }
 
   drawLines(); refreshTotals();
+  document.getElementById('f_includeImportEstimate').addEventListener('change', () => { refreshTotals(); markDirty(); });
   document.getElementById('f_freightCharge').addEventListener('input', refreshFreightNote);
 
   /** One supplier freight total covering several different items -> split across the chosen rows
@@ -1155,10 +1179,12 @@ async function renderQuoteForm(id) {
       overallDiscountPercent: Number(document.getElementById('f_overallDiscountPercent').value) || 0,
       freightCharge: Number(document.getElementById('f_freightCharge').value) || 0,
       otherCharges: Number(document.getElementById('f_otherCharges').value) || 0,
+      includeImportEstimate: document.getElementById('f_includeImportEstimate').checked,
       internalNotes: document.getElementById('f_internalNotes').value,
       customerNotes: document.getElementById('f_customerNotes').value,
       lines
     };
+    applyImportEstimate(header, settings);
     const totals = computeQuotationTotals(header);
     Object.assign(header, totals);
 
@@ -1300,7 +1326,7 @@ async function renderQuoteDetail(id) {
       <div class="line"><span>Freight</span><span>${formatMoney(t.freight, q.currency)}</span></div>
       <div class="line"><span>Other</span><span>${formatMoney(t.other, q.currency)}</span></div>
       <div class="line grand"><span>${label ? escapeHtml(label) + ' Total' : 'Grand Total'}</span><span>${formatMoney(t.grandTotal, q.currency)}</span></div>
-      <div class="line internal-only"><span>Total Cost (internal)</span><span>${formatMoney(t.costTotal, q.currency)}</span></div>
+      <div class="line internal-only"><span>Total Cost (internal)${q.includeImportEstimate === true && t.importEstimate ? ' — includes estimated import charges of ' + formatMoney(t.importEstimate, q.currency) : ''}</span><span>${formatMoney(t.costTotal, q.currency)}</span></div>
       <div class="line internal-only"><span>Est. Gross Profit (internal)</span><span>${formatMoney(t.grossProfit, q.currency)} (${t.grossMarginPercent}%)</span></div>
     </div>`;
 

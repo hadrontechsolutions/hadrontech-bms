@@ -14,7 +14,7 @@ async function main() {
   const near = (a, b) => Math.abs(a - b) < 0.005;
   await win.DB.openDB(); await win.DB.ensureCounters();
   const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'KEYEC', status: 'Active', createdAt: new Date().toISOString() });
-  const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); };
+  const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } };
 
   // ---- 10 pumps ----
   await go('#/quotations/new');
@@ -28,7 +28,7 @@ async function main() {
   row = doc.querySelector('#linesBody tr');
   console.log('1 margin shown is 20.0% (25% markup):', /Margin 20\.0%/.test(row.querySelector('.ln-margin').textContent), row.querySelector('.ln-margin').textContent);
   fire(doc.getElementById('f_customerId'), String(custId), 'change');
-  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+   { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   let all = await win.DB.dbGetAll('quotations');
   const orig = all[0];
   console.log('2 original saved: grand total 86,400, cost 69,120:', near(orig.grandTotal, 86400) && near(win.QuoteCalc.computeQuotationTotals(orig).costTotal, 69120), orig.grandTotal);
@@ -48,7 +48,7 @@ async function main() {
   console.log('5 price 9,600, freight still 80:', near(+row.querySelector('.ln-price').value, 9600) && +row.querySelector('.ln-freight').value === 80);
   console.log('6 reminder shown:', /reconfirm supplier pricing and total freight/.test(row.querySelector('.ln-freight-info').innerHTML));
   console.log('7 margin still 20.0%:', /Margin 20\.0%/.test(row.querySelector('.ln-margin').textContent));
-  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+   { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   all = await win.DB.dbGetAll('quotations');
   const rev2 = all.find(q => q.id === rev.id), orig2 = all.find(q => q.id === orig.id);
   const rt = win.QuoteCalc.computeQuotationTotals(rev2);
@@ -76,7 +76,7 @@ async function main() {
   fire(doc.querySelector('#linesBody tr .ln-qty'), '5'); await wait(30);
   row = doc.querySelector('#linesBody tr');
   console.log('11 manual price kept in revision after qty change + flagged:', +row.querySelector('.ln-price').value === 9000 && /Manual price/.test(row.querySelector('.ln-price-info').textContent));
-  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+   { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   const saved3 = await win.DB.dbGet('quotations', rev3.id);
   console.log('12 manual price + override flag saved; reopening still flags it:', saved3.lines[0].unitPrice === 9000 && saved3.lines[0].priceOverridden === true);
   await go('#/quotations/' + rev3.id + '/edit');

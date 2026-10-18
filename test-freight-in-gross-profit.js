@@ -66,7 +66,7 @@ async function main() {
 
   /* ============ Gross Profit on the quotation totals now correctly reflects freight too ============ */
   doc.getElementById('f_customerId').value = String(custId);
-  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
+   { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(100);
   const saved = (await win.DB.dbGetAll('quotations'))[0];
   // Revenue 4,000; true cost 3,840 (3,200 item + 640 freight) -> Gross Profit should be 160, not 800

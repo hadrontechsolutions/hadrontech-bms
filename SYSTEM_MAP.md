@@ -249,3 +249,6 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## "Browser may clear this app's data" warning (`test-persistent-storage.js`)
 - Shown only when the browser declined persistent storage **and** there is no recent backup (none saved yet, or older than the reminder period in Settings > Backup & Restore). It says how many days since the last backup and has a Back Up Now button.
 - Not shown for a sample-only BMS (that has its own "restore first" banner) and removed as soon as a backup is saved.
+
+## Estimated import charges
+`js/importCharges.js` (`estimateImportCharges`, `applyImportEstimate`) -> writes `line.importCharge` (PHP) -> `QuoteCalc.computeLine` adds it to `costTotal` -> quotation totals (`importEstimate`), Sales Order lines (copied), `soGrossProfit`, Order Profit "as ordered" cost, Distributions. Flag: `quotation.includeImportEstimate` (undefined = off for old records). Settings: `settings.importCharges`.

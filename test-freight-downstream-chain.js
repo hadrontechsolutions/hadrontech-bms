@@ -12,7 +12,7 @@ async function main() {
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   const fire = (el, v, ev = 'input') => { if (v !== undefined) el.value = v; el.dispatchEvent(new win.Event(ev)); };
   const near = (a, b) => Math.abs(a - b) < 0.005;
-  const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); };
+  const go = async (h, ms = 100) => { win.location.hash = h; await win.Router.resolveRoute(); await wait(ms); { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } };
   await win.DB.openDB(); await win.DB.ensureCounters();
   const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'KEYEC', status: 'Active', createdAt: new Date().toISOString() });
   const supId = await win.DB.dbAdd('suppliers', { supplierNo: 'S1', companyName: 'HK Supplier', status: 'Active', createdAt: new Date().toISOString() });
@@ -26,7 +26,7 @@ async function main() {
   fire(row.querySelector('.ln-rate'), '64'); fire(row.querySelector('.ln-cost'), '100'); fire(row.querySelector('.ln-markup'), '25'); fire(row.querySelector('.ln-freight'), '80');
   fire(row.querySelector('.ln-supplier'), String(supId), 'change'); await wait(30);
   fire(doc.getElementById('f_customerId'), String(custId), 'change');
-  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
+   { const c = doc.getElementById('f_includeImportEstimate'); if (c && c.checked) { c.checked = false; c.dispatchEvent(new win.Event('change', { bubbles: true })); } } doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   const q = (await win.DB.dbGetAll('quotations'))[0];
   const qt = win.QuoteCalc.computeQuotationTotals(q);
   console.log('1 Quotation: total 86,400, cost 69,120, GP 17,280:', near(q.grandTotal, 86400) && near(qt.costTotal, 69120) && near(qt.grossProfit, 17280));

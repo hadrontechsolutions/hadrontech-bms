@@ -12,6 +12,7 @@ const COUNTER_NAMES = [
 Router.route('/settings', async () => {
   Router.setBreadcrumb([{ label: 'Company Settings' }]);
   const settings = await DB.getSettings();
+  const ic = importChargeSettings(settings);
   const counters = await Promise.all(COUNTER_NAMES.map(c => DB.dbGet('counters', c.name)));
 
   const content = document.getElementById('content');
@@ -26,6 +27,7 @@ Router.route('/settings', async () => {
         <button type="button" class="settings-tab-btn" data-tab="bank">Bank Details</button>
         <button type="button" class="settings-tab-btn" data-tab="defaults">Defaults &amp; Terms</button>
         <button type="button" class="settings-tab-btn" data-tab="currencies">Currencies &amp; Exchange Rates</button>
+        <button type="button" class="settings-tab-btn" data-tab="imports">Import Charges</button>
         <button type="button" class="settings-tab-btn" data-tab="numbering">Document Numbering</button>
       </div>
 
@@ -116,6 +118,22 @@ Router.route('/settings', async () => {
         <input type="text" id="newCcyCode" placeholder="e.g. SGD" maxlength="6" style="width:100px; text-transform:uppercase;">
         <input type="number" id="newCcyRate" placeholder="Rate to PHP" min="0" step="0.0001" style="width:130px;">
         <button type="button" class="btn-line btn-sm" id="btnAddCurrency">+ Add Currency</button>
+      </div>
+      </div>
+
+      <div class="settings-tab-panel" data-tab="imports">
+      <p class="muted-text">Used by the <b>estimated import charges</b> on Quotations (internal only — never shown to the customer). It counts only the
+        <b>item cost</b> of lines whose cost currency is <b>not PHP</b>, at the exchange rate on the line, and adds the extra charges that arrive after we buy
+        from abroad. Based on the UPS bill for HT-SO-2026-0005 (₱482.95 on about ₱8,700 of goods). Change any amount if customs or the courier change their fees.</p>
+      <div class="form-grid">
+        <div class="field"><label>Goods limit with no duty / import VAT (₱)</label><input type="number" min="0" step="1" id="s_ic_deMinimis" value="${ic.deMinimis}"></div>
+        <div class="field"><label>Processing charge on goods within the limit (% of goods)</label><input type="number" min="0" step="0.01" id="s_ic_smallPct" value="${ic.smallPct}"></div>
+        <div class="field"><label>Smallest processing charge (₱)</label><input type="number" min="0" step="0.01" id="s_ic_smallMin" value="${ic.smallMin}"></div>
+        <div class="field"><label>Government fees per shipment (₱) — stamps &amp; legal research fund</label><input type="number" min="0" step="0.01" id="s_ic_govFees" value="${ic.govFees}"></div>
+        <div class="field"><label>Courier brokerage per shipment (₱)</label><input type="number" min="0" step="0.01" id="s_ic_brokerage" value="${ic.brokerage}"></div>
+        <div class="field"><label>VAT on the brokerage (%)</label><input type="number" min="0" step="0.01" id="s_ic_brokerageVatPct" value="${ic.brokerageVatPct}"></div>
+        <div class="field"><label>Import duty above the limit (% of goods)</label><input type="number" min="0" step="0.01" id="s_ic_dutyPct" value="${ic.dutyPct}"><div class="muted-text small">Depends on the product's HS code. 0 is typical for lamps; ask your broker for other items.</div></div>
+        <div class="field"><label>Import VAT above the limit (%)</label><input type="number" min="0" step="0.01" id="s_ic_importVatPct" value="${ic.importVatPct}"></div>
       </div>
       </div>
 
@@ -282,7 +300,9 @@ Router.route('/settings', async () => {
       defaultQuotationValidityDays: Number(document.getElementById('s_defaultQuotationValidityDays').value) || 30,
       defaultWarranty: document.getElementById('s_defaultWarranty').value,
       defaultIncoterms: document.getElementById('s_defaultIncoterms').value,
-      footerTerms: document.getElementById('s_footerTerms').value
+      footerTerms: document.getElementById('s_footerTerms').value,
+      importCharges: Object.fromEntries(['deMinimis', 'smallPct', 'smallMin', 'govFees', 'brokerage', 'brokerageVatPct', 'dutyPct', 'importVatPct']
+        .map(k => { const v = Number(document.getElementById('s_ic_' + k).value); return [k, v >= 0 ? v : IMPORT_CHARGE_DEFAULTS[k]]; }))
     });
     await DB.dbPut('settings', updated);
     setBusinessTax(updated);
