@@ -203,6 +203,7 @@ async function renderForm(cfg, id) {
     const obj = record ? Object.assign({}, record) : {};
     for (const f of cfg.fields) {
       if (f.type === 'checkbox') obj[f.name] = e.target.querySelector(`#f_${f.name}`).checked;
+      else if (f.type === 'number' && f.allowBlank && String(fd.get(f.name)).trim() === '') obj[f.name] = '';
       else if (f.type === 'number' || f.type === 'money') obj[f.name] = Number(fd.get(f.name)) || 0;
       else obj[f.name] = fd.get(f.name) || '';
     }

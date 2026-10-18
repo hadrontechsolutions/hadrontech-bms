@@ -132,7 +132,8 @@ Router.route('/settings', async () => {
         <div class="field"><label>Government fees per shipment (₱) — stamps &amp; legal research fund</label><input type="number" min="0" step="0.01" id="s_ic_govFees" value="${ic.govFees}"></div>
         <div class="field"><label>Courier brokerage per shipment (₱)</label><input type="number" min="0" step="0.01" id="s_ic_brokerage" value="${ic.brokerage}"></div>
         <div class="field"><label>VAT on the brokerage (%)</label><input type="number" min="0" step="0.01" id="s_ic_brokerageVatPct" value="${ic.brokerageVatPct}"></div>
-        <div class="field"><label>Import duty above the limit (% of goods)</label><input type="number" min="0" step="0.01" id="s_ic_dutyPct" value="${ic.dutyPct}"><div class="muted-text small">Depends on the product's HS code. 0 is typical for lamps; ask your broker for other items.</div></div>
+        <div class="field"><label>Default estimated customs duty (%) — <span style="color:#b45309;">Unverified estimate</span></label><input type="number" min="0" step="0.01" id="s_ic_dutyPct" value="${ic.dutyPct}"><div class="muted-text small">A budgeting figure only — not the official rate. The real rate depends on the HS code and country of origin; enter it on each Product (Customs Duty %) to override this. Applies only to goods above the limit, on goods + freight.</div>
+          <label style="display:flex; gap:6px; align-items:center; margin-top:4px;"><input type="checkbox" id="s_ic_dutyVerified" ${ic.dutyVerified ? 'checked' : ''}> This default rate has been confirmed (removes the warning)</label></div>
         <div class="field"><label>Import VAT above the limit (%)</label><input type="number" min="0" step="0.01" id="s_ic_importVatPct" value="${ic.importVatPct}"></div>
       </div>
       </div>
@@ -302,7 +303,7 @@ Router.route('/settings', async () => {
       defaultIncoterms: document.getElementById('s_defaultIncoterms').value,
       footerTerms: document.getElementById('s_footerTerms').value,
       importCharges: Object.fromEntries(['deMinimis', 'smallPct', 'smallMin', 'govFees', 'brokerage', 'brokerageVatPct', 'dutyPct', 'importVatPct']
-        .map(k => { const v = Number(document.getElementById('s_ic_' + k).value); return [k, v >= 0 ? v : IMPORT_CHARGE_DEFAULTS[k]]; }))
+        .map(k => { const v = Number(document.getElementById('s_ic_' + k).value); return [k, v >= 0 ? v : IMPORT_CHARGE_DEFAULTS[k]]; }).concat([['dutyVerified', document.getElementById('s_ic_dutyVerified').checked]]))
     });
     await DB.dbPut('settings', updated);
     setBusinessTax(updated);

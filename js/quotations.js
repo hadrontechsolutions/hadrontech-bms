@@ -923,6 +923,7 @@ async function renderQuoteForm(id) {
             // dropped, always left at the line's own blank/zero default instead.
             line.markupPercent = p.markupPercent || 0;
             line.leadTime = p.leadTime || '';
+            line.dutyPct = (p.dutyPct === '' || p.dutyPct == null) ? '' : Number(p.dutyPct);
             // Catalog freight is for a quantity (amount / 'covers qty' = per unit); the line stores TOTAL freight for the row.
             line.freightMode = 'total';
             line.priceOverridden = false;
@@ -975,10 +976,11 @@ async function renderQuoteForm(id) {
     const box = document.getElementById('importEstText');
     if (!est.goodsPHP) { box.innerHTML = '<span class="muted-text">No foreign-currency item cost on this quotation, so no import charges are expected.</span>'; return; }
     const php = n => formatMoney(n, 'PHP');
-    box.innerHTML = `Goods value for customs (item cost of foreign-currency lines only, freight not counted): <b>${php(est.goodsPHP)}</b>.<br>
+    const warn = est.unverified ? `<div style="margin:4px 0; padding:4px 8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px;">⚠ <b>Unverified estimate:</b> ${est.defaultDutyLines} line(s) use the default duty of ${est.cfg.dutyPct}%, which is a budgeting figure, not the official rate. Enter the real Customs Duty % on the product once you know its HS code.</div>` : '';
+    box.innerHTML = `${warn}Goods value for the ₱10,000 limit (item cost of foreign-currency lines only; freight and insurance not counted): <b>${php(est.goodsPHP)}</b>.${est.mode === 'large' ? `<br>Customs value for duty and import VAT (goods + freight ${php(est.freightPHP)}): <b>${php(est.customsValuePHP)}</b>.` : ''}<br>
       Estimated import charges: <b>${php(est.totalPHP)}</b>${cur !== 'PHP' ? ` (${formatMoney(est.inQuoteCurrency, cur)})` : ''} — ${est.on ? 'included in the Total Cost and Est. Gross Profit below.' : '<b>not included</b> in the profit below (box unticked).'}
       <details style="margin-top:3px;"><summary class="muted-text" style="cursor:pointer;">How this is worked out</summary><ul style="margin:4px 0 0 18px;">${est.parts.map(p => `<li>${escapeHtml(p.label)}: ${php(p.amount)}</li>`).join('')}</ul>
-      <div class="muted-text">${est.mode === 'small' ? `Goods are within the ${php(est.cfg.deMinimis)} limit, so no duty or import VAT.` : `Goods are above the ${php(est.cfg.deMinimis)} limit, so duty and import VAT apply (duty ${est.cfg.dutyPct}% — change in Settings &gt; Import Charges).`} This is only an estimate; amounts can be changed in Settings &gt; Import Charges.</div></details>`;
+      <div class="muted-text">${est.mode === 'small' ? `Goods are within the ${php(est.cfg.deMinimis)} limit, so no duty or import VAT.` : `Goods are above the ${php(est.cfg.deMinimis)} limit, so duty and import VAT apply. Duty uses each product's own Customs Duty %, or the default of ${est.cfg.dutyPct}% (change in Settings &gt; Import Charges).`} This is only an estimate; amounts can be changed in Settings &gt; Import Charges.</div></details>`;
   }
 
   function refreshTotals() {
@@ -1265,6 +1267,13 @@ async function renderQuoteDetail(id) {
     : '';
 
   const expiryInfo = getExpiryInfo(q);
+  const dutySettings = await DB.getSettings();
+  const importEst = q.includeImportEstimate === true ? estimateImportCharges(q.lines || [], q.currency || 'PHP', dutySettings) : null;
+  const dutyWarningHTML = importEst && importEst.unverified ? `
+    <div class="card warning-card internal-only">
+      ⚠ <b>Unverified customs duty rate.</b> This quotation's estimated import charges use the default duty of ${importEst.cfg.dutyPct}% on ${importEst.defaultDutyLines} line(s),
+      which is a budgeting figure, not a confirmed rate. Confirm the rate from the HS code (then enter it on the product) before this quotation is finalised.
+    </div>` : '';
   const expiredWarningHTML = expiryInfo.state === 'expired' ? `
     <div class="card warning-card">
       ⚠ <b>This quotation has expired</b> (${escapeHtml(expiryInfo.text)}). Please verify supplier pricing, availability,
@@ -1370,6 +1379,7 @@ async function renderQuoteDetail(id) {
 
     ${!canEditInPlace && q.isLatest ? `<div class="card muted-text" style="padding:12px 20px;">This quotation has moved past Draft, so it's locked from direct editing to keep the sent/quoted version intact. Use <b>New Revision</b> to make changes.</div>` : ''}
     ${orphanWarning}
+    ${dutyWarningHTML}
     ${expiredWarningHTML}
     ${expiringSoonHTML}
     <div id="extendValidityHost"></div>
@@ -1489,6 +1499,9 @@ async function renderQuoteDetail(id) {
         if (!confirm(`Mark ${q.quotationNo} as ${newStatus}?${extra}`)) return;
       } else if (movingAwayWithPO) {
         if (!confirm(`Change status to ${newStatus}? Note: a Customer PO was already recorded against this quotation — that PO record will NOT be changed or removed.`)) return;
+      }
+      if (['Sent', 'Won'].includes(newStatus) && importEst && importEst.unverified) {
+        if (!confirm(`Heads-up: this quotation's estimated import charges use an UNVERIFIED default customs duty of ${importEst.cfg.dutyPct}%. The profit shown may be off until the real duty rate is entered on the product.\n\nMark it as ${newStatus} anyway?`)) return;
       }
       q.status = newStatus;
       q.statusHistory = (q.statusHistory || []).concat([{ status: newStatus, date: new Date().toISOString() }]);

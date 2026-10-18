@@ -7,6 +7,9 @@
    Rules (agreed with the owner):
    - Only lines whose COST currency is foreign (not PHP) are counted.
    - Only the ITEM cost (unit cost x qty) counts as the declared goods value. Freight is left out.
+   - The ₱10,000 limit is tested on goods value only (FOB/FCA: no freight, no insurance). Above it, duty and
+     import VAT are worked out on the CUSTOMS VALUE = goods + international freight (the BMS has no insurance field),
+     duty at each product's own rate (or the unverified default), VAT on customs value + duty + processing charge.
    - Item cost is converted with the rate already on the quotation line (the BMS rate, which is
      deliberately set higher as a safety allowance).
    - All foreign lines on ONE quotation are added together (parcels are combined at customs).
@@ -22,7 +25,8 @@ var IMPORT_CHARGE_DEFAULTS = {
   govFees: 140,            // Customs Documentary Stamp 100 + BIR DST 30 + Legal Research Fund 10
   brokerage: 112.5,        // courier brokerage / disbursement fee per shipment
   brokerageVatPct: 12,     // VAT on the brokerage (service charge)
-  dutyPct: 0,              // import duty % on goods over the limit (set per your HS code)
+  dutyPct: 5,              // DEFAULT estimated customs duty % (unverified budgeting figure; a product's own Customs Duty % overrides it)
+  dutyVerified: false,     // tick in Settings only once the default rate has been confirmed
   importVatPct: 12,        // import VAT on landed value over the limit
   // processing charge for goods above the limit: [up to goods value (PHP), charge (PHP)]
   ipcBrackets: [[25000, 250], [50000, 500], [100000, 750], [250000, 1000], [500000, 1500], [Infinity, 2000]]
@@ -32,6 +36,7 @@ function importChargeSettings(settings) {
   const s = Object.assign({}, IMPORT_CHARGE_DEFAULTS, (settings && settings.importCharges) || {});
   ['deMinimis', 'smallPct', 'smallMin', 'govFees', 'brokerage', 'brokerageVatPct', 'dutyPct', 'importVatPct']
     .forEach(k => { s[k] = Number(s[k]) >= 0 ? Number(s[k]) : IMPORT_CHARGE_DEFAULTS[k]; });
+  s.dutyVerified = s.dutyVerified === true;
   s.ipcBrackets = IMPORT_CHARGE_DEFAULTS.ipcBrackets;
   return s;
 }
@@ -51,6 +56,21 @@ function importGoodsPHP(l, quoteCurrency, settings) {
   return item * rate;
 }
 
+/** Freight of one line in PHP (same cost currency and rate as the item). Only used above the limit. */
+function importFreightPHP(l, quoteCurrency, settings) {
+  if (l.lotRole === 'header' || importGoodsPHP(l, quoteCurrency, settings) <= 0) return 0;
+  const perUnit = typeof lineFreightPerUnit === 'function' ? lineFreightPerUnit(l) : (Number(l.estimatedFreightCost) || 0);
+  const ccy = l.costCurrency || quoteCurrency || 'PHP';
+  const rate = (quoteCurrency === 'PHP' ? Number(l.costExchangeRate) : 0) || referenceRate(ccy, 'PHP', settings) || 1;
+  return perUnit * (Number(l.qty) || 0) * rate;
+}
+/** Duty % that applies to a line: the product's own rate if it has one, otherwise the default estimate. */
+function importDutyRate(l, cfg) {
+  const own = l.dutyPct;
+  if (own !== '' && own != null && Number(own) >= 0) return { pct: Number(own), own: true };
+  return { pct: cfg.dutyPct, own: false };
+}
+
 /** Estimate for a set of lines. Returns { goodsPHP, totalPHP, parts:[{label,amount}], perLinePHP:{lineId:amount}, mode }. */
 function estimateImportCharges(lines, quoteCurrency, settings) {
   const cfg = importChargeSettings(settings);
@@ -59,7 +79,7 @@ function estimateImportCharges(lines, quoteCurrency, settings) {
   let goods = 0;
   (lines || []).forEach(l => { const g = importGoodsPHP(l, quoteCurrency, settings); if (g > 0) { goodsByLine[l.lineId] = g; goods += g; } });
   goods = r(goods);
-  const res = { goodsPHP: goods, totalPHP: 0, parts: [], perLinePHP: {}, mode: 'none', cfg };
+  const res = { goodsPHP: goods, freightPHP: 0, customsValuePHP: 0, totalPHP: 0, parts: [], perLinePHP: {}, mode: 'none', cfg, unverified: false, defaultDutyLines: 0 };
   if (goods <= 0) return res;
   const parts = [];
   let total = 0;
@@ -74,11 +94,21 @@ function estimateImportCharges(lines, quoteCurrency, settings) {
     res.mode = 'large';
     const br = cfg.ipcBrackets.find(b => goods <= b[0]);
     const ipc = br ? br[1] : 2000;
-    const duty = goods * cfg.dutyPct / 100;
+    let customsValue = 0, duty = 0, usedDefault = 0;
+    (lines || []).forEach(l => {
+      if (!goodsByLine[l.lineId]) return;
+      const cv = goodsByLine[l.lineId] + importFreightPHP(l, quoteCurrency, settings);
+      const d = importDutyRate(l, cfg);
+      if (!d.own) usedDefault += 1;
+      customsValue += cv; duty += cv * d.pct / 100;
+    });
+    res.freightPHP = r(customsValue - goods); res.customsValuePHP = r(customsValue);
+    res.defaultDutyLines = usedDefault;
+    res.unverified = usedDefault > 0 && !cfg.dutyVerified;
     add('Customs processing charge', ipc);
     add('Government fees (documentary stamp, BIR stamp, legal research fund)', cfg.govFees);
-    add(`Import duty (${cfg.dutyPct}% of goods)`, duty);
-    add(`Import VAT (${cfg.importVatPct}% of goods + duty + processing charge)`, (goods + duty + ipc) * cfg.importVatPct / 100);
+    add(`Import duty on customs value ${'₱' + r(customsValue).toLocaleString('en-US', { minimumFractionDigits: 2 })} (goods + freight)${res.unverified ? ' — UNVERIFIED rate' : ''}`, duty);
+    add(`Import VAT (${cfg.importVatPct}% of customs value + duty + processing charge)`, (customsValue + duty + ipc) * cfg.importVatPct / 100);
     add('Courier brokerage', cfg.brokerage);
     add(`VAT on brokerage (${cfg.brokerageVatPct}%)`, cfg.brokerage * cfg.brokerageVatPct / 100);
   }
