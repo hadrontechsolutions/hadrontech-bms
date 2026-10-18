@@ -29,6 +29,25 @@ async function refreshBackupBanner() {
   window.__backupOverdueHard = days === null ? false : days >= limit * 2; // only nag hard once it's well overdue
 
   let host = document.getElementById('backupBanner');
+
+  // A BMS that holds only the built-in sample records is almost certainly a new browser, a new
+  // Windows account or a different file location -- not a business with no data. Say so, and point
+  // to Restore, instead of nagging to "back up" (which would save an empty backup).
+  if (window.isCleanBMS && !_bannerDismissedThisSession && await window.isCleanBMS()) {
+    window.__backupOverdueHard = false;
+    if (!host) return;
+    host.className = 'backup-banner';
+    host.innerHTML = `
+      <span>⚠ This BMS has no data of its own yet — only the built-in sample records. If you already have a backup, restore it first (Backup &amp; Restore → Restore) and do not save a backup until then, so you don't overwrite your good one.</span>
+      <span class="backup-banner-actions">
+        <button id="bannerGoRestore">Go to Restore</button>
+        <button id="bannerDismiss" class="banner-dismiss" title="Dismiss for this session">✕</button>
+      </span>`;
+    document.getElementById('bannerGoRestore').onclick = () => Router.navigate('/settings/backup');
+    document.getElementById('bannerDismiss').onclick = () => { _bannerDismissedThisSession = true; host.innerHTML = ''; host.className = ''; };
+    return;
+  }
+
   if (!overdue || _bannerDismissedThisSession) {
     if (host) host.innerHTML = '';
     return;
@@ -71,6 +90,7 @@ async function maybeShowBackupPrompt() {
   if (_backupPromptShownThisSession) return; // don't nag repeatedly in one sitting
   if (!window.__unbackedActivity) return;
   if (document.getElementById('backupPromptOverlay')) return; // already showing
+  if (window.isCleanBMS && await window.isCleanBMS()) return; // clean BMS: the banner points to Restore instead
   const settings = await DB.getSettings();
   // Give the person a little room to work before interrupting them — not the very first save
   // of the session, but not a full day either, since that was the actual gap that caused the

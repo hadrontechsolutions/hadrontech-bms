@@ -86,6 +86,18 @@ computer is lost, reformatted, or the browser's storage is cleared, your data go
 it unless you have a recent backup file saved elsewhere. Treat exporting backups as a
 routine task, the same way you'd back up an Excel file.
 
+### Protection against saving an empty backup
+
+- **Warning before an empty or much smaller backup:** if the BMS only has the built-in sample
+  records (for example it was opened in a different browser, Windows account or folder), or the
+  new backup is less than half the size of the one already saved, it stops and asks first.
+  The safe choice, **Cancel — don't save**, is the default. Use **Restore** instead.
+- **Previous backups folder:** when your backup folder is set, the file being replaced is first
+  kept in a `Previous backups` subfolder — one copy per day, the last 7 days.
+- **"No data of its own yet" banner:** if the BMS opens with only sample records, a banner points
+  you to Restore instead of asking you to back up.
+- After saving, the message shows how many records were saved.
+
 ### Built-in backup reminder
 
 You don't have to remember this on your own — the app tracks the date of your last

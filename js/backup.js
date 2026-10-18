@@ -179,6 +179,108 @@ async function forgetBackupFolder() {
   renderBackupPage();
 }
 
+/* ------------------------------------------------------------
+   Backup safeguards -- so a backup of an EMPTY BMS can never silently replace a backup of real data.
+   1. Empty-backup guard: before saving, compare what is about to be saved with the last backup
+      (this browser's record of it, and the actual file in the backup folder) and stop to ask when
+      it is far smaller or holds only the sample records.
+   2. Previous backups: before the main backup file is replaced, the old one is kept in a
+      "Previous backups" subfolder -- one copy per day, the fullest one of that day, newest 7 days.
+   3. "Clean BMS" banner (backupReminder.js uses isCleanBMS below).
+   ------------------------------------------------------------ */
+var BACKUP_NON_BUSINESS = ['counters', 'settings', 'activity'];
+var PREVIOUS_BACKUPS_FOLDER = 'Previous backups';
+var PREVIOUS_BACKUPS_KEEP_DAYS = 7;
+
+/** Counts business records in a backup's data object. `total` = every business record; `real` = those
+    that are not the built-in sample records (sample records are created by "Sample Data"). */
+function backupCounts(data) {
+  let total = 0, real = 0;
+  for (const store of BACKUP_STORES) {
+    if (BACKUP_NON_BUSINESS.includes(store)) continue;
+    const rows = (data && data[store]) || [];
+    total += rows.length;
+    if (store === 'stockMovements') continue;
+    real += rows.filter(r => !(r && r.createdBy === 'Sample Data')).length;
+  }
+  return { total, real };
+}
+window.backupCounts = backupCounts;
+
+/** True when this BMS holds nothing but the built-in sample records -- i.e. a clean/new install
+    (or a browser that has none of the real data). */
+async function isCleanBMS() {
+  const data = {};
+  for (const store of BACKUP_STORES) { if (!BACKUP_NON_BUSINESS.includes(store)) data[store] = await DB.dbGetAll(store); }
+  return backupCounts(data).real === 0;
+}
+window.isCleanBMS = isCleanBMS;
+
+function localDateKey(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Asks before saving a backup that looks wrong. Resolves true only if the person chooses "Save anyway".
+    Cancel is the default (focused) button. */
+function confirmBackupGuard(info) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.id = 'backupGuardOverlay';
+    overlay.className = 'confirm-modal-overlay';
+    const lines = [];
+    if (info.real === 0) lines.push(`This BMS only has the built-in sample records — none of your real data (${info.total} record${info.total === 1 ? '' : 's'} in total).`);
+    else lines.push(`This backup would contain only ${info.total} record${info.total === 1 ? '' : 's'}.`);
+    if (info.refTotal > 0) lines.push(`${info.refWhere} has ${info.refTotal} records.`);
+    overlay.innerHTML = `
+      <div class="confirm-modal-box">
+        <h3>⚠ Your data may not be loaded</h3>
+        <p>${lines.map(escapeHtml).join('<br>')}</p>
+        <p>Saving now could replace a good backup with an almost empty one. If you have a backup of your real data, cancel and use <b>Restore</b> on the Backup &amp; Restore page instead.</p>
+        <div class="confirm-modal-actions">
+          <button class="btn-amber" id="backupGuardCancel">Cancel — don't save</button>
+          <button class="btn-line" id="backupGuardSave">Save anyway</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const done = (v) => { overlay.remove(); resolve(v); };
+    document.getElementById('backupGuardCancel').onclick = () => done(false);
+    document.getElementById('backupGuardSave').onclick = () => done(true);
+    document.getElementById('backupGuardCancel').focus();
+  });
+}
+
+/** Keeps the old backup file before it is replaced: one copy per day (the fullest one), newest 7 days.
+    Never throws -- a problem here must never stop the real backup from being saved. Returns true if a
+    copy of the old file now exists in the Previous backups folder. */
+async function keepPreviousBackup(folder, oldText, oldModifiedMs) {
+  try {
+    const oldPayload = JSON.parse(oldText);
+    const oldTotal = backupCounts(oldPayload.data || {}).total;
+    const dir = await folder.getDirectoryHandle(PREVIOUS_BACKUPS_FOLDER, { create: true });
+    const name = `Hadrontech_Backup_${localDateKey(oldModifiedMs)}.json`;
+    let write = true;
+    try {
+      const existing = await (await dir.getFileHandle(name)).getFile();
+      const existingTotal = backupCounts((JSON.parse(await existing.text()).data) || {}).total;
+      if (existingTotal > oldTotal) write = false;   // that day already has a fuller copy -- keep it
+    } catch (e) { /* no copy for that day yet */ }
+    if (write) {
+      const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+      await w.write(oldText); await w.close();
+    }
+    // Keep only the newest N days
+    const names = [];
+    for await (const [entryName] of dir.entries()) { if (/^Hadrontech_Backup_\d{4}-\d{2}-\d{2}\.json$/.test(entryName)) names.push(entryName); }
+    names.sort().reverse();
+    for (const old of names.slice(PREVIOUS_BACKUPS_KEEP_DAYS)) { try { await dir.removeEntry(old); } catch (e) { /* ignore */ } }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function exportFullBackup() {
   const data = {};
   for (const s of BACKUP_STORES) data[s] = await DB.dbGetAll(s);
@@ -186,15 +288,38 @@ async function exportFullBackup() {
   const json = JSON.stringify(payload, null, 2);
   const settings = await DB.getSettings();
   const filename = backupFilename(settings);
+  const counts = backupCounts(data);
+
+  // Safeguard: look at what is already there (the file in the backup folder, and this browser's record of its
+  // last backup) and stop to ask if what we are about to save looks far smaller or holds only sample data.
+  const rememberedFolder = await getVerifiedBackupFolderHandle();
+  let refTotal = Number(settings.lastBackupTotal) || 0;
+  let refWhere = 'Your last backup from this browser';
+  let existingText = null, existingModified = 0;
+  if (rememberedFolder) {
+    try {
+      const existingFile = await (await rememberedFolder.getFileHandle(filename)).getFile();
+      const text = await existingFile.text();
+      const existingTotal = backupCounts((JSON.parse(text).data) || {}).total;
+      existingText = text; existingModified = existingFile.lastModified || Date.now();
+      if (existingTotal > refTotal) { refTotal = existingTotal; refWhere = `The existing backup file "${filename}" in your backup folder`; }
+    } catch (e) { /* no existing file, unreadable, or not a backup -- nothing to compare with */ }
+  }
+  const looksWrong = counts.real === 0 || (refTotal >= 10 && counts.total < refTotal * 0.5);
+  if (looksWrong && !(await confirmBackupGuard({ total: counts.total, real: counts.real, refTotal, refWhere }))) {
+    toast('Backup not saved.');
+    return;
+  }
 
   // If a folder has been explicitly chosen and remembered (Settings > Backup Folder), write
   // straight there with no dialog at all -- the whole point of remembering it. Otherwise fall
   // back to the save-location picker (Chrome/Edge), which at least remembers the last-used
   // folder on its own; and if neither is supported, the plain Downloads-folder behavior.
   let saved = false;
-  const rememberedFolder = await getVerifiedBackupFolderHandle();
+  let keptPrevious = false;
   if (rememberedFolder) {
     try {
+      if (existingText) keptPrevious = await keepPreviousBackup(rememberedFolder, existingText, existingModified);
       const fileHandle = await rememberedFolder.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(json);
@@ -226,9 +351,10 @@ async function exportFullBackup() {
   if (!saved) downloadFile(filename, json, 'application/json');
 
   settings.lastBackupExport = new Date().toISOString();
+  settings.lastBackupTotal = counts.total;
   await DB.dbPut('settings', settings);
   await DB.logActivity('Exported full JSON backup');
-  toast('Backup saved.');
+  toast(`Backup saved: ${counts.total} record${counts.total === 1 ? '' : 's'}.` + (keptPrevious ? ` The previous file was kept in "${PREVIOUS_BACKUPS_FOLDER}".` : ''));
   if (window.BackupReminder) await BackupReminder.refreshBackupBanner();
   window.__unbackedActivity = false;
   if (window.BackupReminder && window.BackupReminder.resetBackupPromptThrottle) window.BackupReminder.resetBackupPromptThrottle();

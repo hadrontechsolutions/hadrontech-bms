@@ -239,3 +239,9 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## VAT Mode switch on the quotation form
 - Changing the VAT Mode re-rates every line at once: any mode other than Standard 12% sets all lines to 0%; switching to Standard 12% gives 12% to lines that were at 0%.
 - Saving in any mode other than Standard 12% always stores 0% VAT on every line, so totals, wording and the saved record cannot disagree (`test-vat-mode-switch.js`).
+
+## Backup safeguards (`test-backup-safeguards.js`)
+- **Empty-backup guard:** before saving, the BMS compares what it is about to save with this browser's last backup size (`settings.lastBackupTotal`) and with the existing file in the backup folder. It stops and asks (Cancel is the default) when the data is only the built-in sample records, or has less than half the records of what is already there (reference of 10+ records).
+- **Previous backups:** when a backup replaces the existing file in the backup folder, the old file is first kept in a `Previous backups` subfolder: one copy per day (named by the day the old file was last saved, `Hadrontech_Backup_YYYY-MM-DD.json`), the fuller one if a day already has a copy, and only the newest 7 days are kept. A problem here never blocks the real backup.
+- **Clean BMS banner:** when the BMS holds only sample records (`createdBy: 'Sample Data'`), a banner points to Backup & Restore → Restore instead of nagging to back up, and the "Save a backup?" prompt stays quiet. `window.isCleanBMS()` / `window.backupCounts()` in backup.js.
+- The saved message shows the number of records, e.g. "Backup saved: 412 records."

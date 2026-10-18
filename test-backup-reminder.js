@@ -23,6 +23,7 @@ async function main() {
 
   await win.DB.openDB();
   await win.DB.ensureCounters();
+  await win.DB.dbAdd('customers', { customerNo: 'CUST-REAL', companyName: 'Real Customer Co.', status: 'Active', createdBy: 'Tester', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); // a real (non-sample) record, so this is not a clean BMS
   await win.seedIfEmpty();
 
   // 1. Fresh install, never backed up -> banner should show "never backed up"
