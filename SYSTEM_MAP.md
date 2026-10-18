@@ -245,3 +245,7 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 - **Previous backups:** when a backup replaces the existing file in the backup folder, the old file is first kept in a `Previous backups` subfolder: one copy per day (named by the day the old file was last saved, `Hadrontech_Backup_YYYY-MM-DD.json`), the fuller one if a day already has a copy, and only the newest 7 days are kept. A problem here never blocks the real backup.
 - **Clean BMS banner:** when the BMS holds only sample records (`createdBy: 'Sample Data'`), a banner points to Backup & Restore → Restore instead of nagging to back up, and the "Save a backup?" prompt stays quiet. `window.isCleanBMS()` / `window.backupCounts()` in backup.js.
 - The saved message shows the number of records, e.g. "Backup saved: 412 records."
+
+## "Browser may clear this app's data" warning (`test-persistent-storage.js`)
+- Shown only when the browser declined persistent storage **and** there is no recent backup (none saved yet, or older than the reminder period in Settings > Backup & Restore). It says how many days since the last backup and has a Back Up Now button.
+- Not shown for a sample-only BMS (that has its own "restore first" banner) and removed as soon as a backup is saved.

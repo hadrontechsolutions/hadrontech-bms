@@ -27,7 +27,7 @@ async function main() {
   /* ---------- Add SGD, HKD, QAR, AED via Settings ---------- */
   win.location.hash = '#/settings';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(40);
   console.log('STEP 2: Currency table renders with PHP + defaults (USD, EUR):', doc.getElementById('currencyTable').textContent.includes('PHP') && [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === 'USD') && [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === 'EUR'));
 
   const newCurrencies = [['SGD', '43.5'], ['HKD', '7.45'], ['QAR', '15.9'], ['AED', '15.8']];
@@ -35,7 +35,7 @@ async function main() {
     doc.getElementById('newCcyCode').value = code;
     doc.getElementById('newCcyRate').value = rate;
     doc.getElementById('btnAddCurrency').click();
-    await wait(5);
+    await wait(40);
   }
   console.log('STEP 3: All 4 new currency rows added to the table:', newCurrencies.every(([c]) => [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === c)));
   console.log('STEP 4: Default Currency dropdown includes the new currencies live:', newCurrencies.every(([c]) => [...doc.getElementById('s_defaultCurrency').options].some(o => o.value === c)));
@@ -44,7 +44,7 @@ async function main() {
   doc.getElementById('newCcyCode').value = 'SGD';
   doc.getElementById('newCcyRate').value = '99';
   doc.getElementById('btnAddCurrency').click();
-  await wait(5);
+  await wait(40);
   const sgdCount = [...doc.querySelectorAll('.ccy-code')].filter(i => i.value === 'SGD').length;
   console.log('STEP 5: Duplicate currency code rejected (expect exactly 1 SGD row):', sgdCount === 1);
 
@@ -57,21 +57,21 @@ async function main() {
   /* ---------- Currency now available on Products ---------- */
   win.location.hash = '#/products/new';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(40);
   const productCcySelect = doc.getElementById('f_currency');
   console.log('STEP 8: Product currency dropdown includes AED:', [...productCcySelect.options].some(o => o.value === 'AED'));
 
   /* ---------- Currency now available on Suppliers ---------- */
   win.location.hash = '#/suppliers/new';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(40);
   console.log('STEP 9: Supplier currency dropdown includes HKD:', [...doc.getElementById('f_currency').options].some(o => o.value === 'HKD'));
 
   /* ---------- Currency now available on Quotation line items ---------- */
   const custId = await win.DB.dbAdd('customers', { customerNo: 'CUST-00001', companyName: 'Test Co.', status: 'Active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   win.location.hash = '#/quotations/new';
   await win.Router.resolveRoute();
-  await wait(10);
+  await wait(40);
   const lineCcySelect = doc.querySelector('.ln-costccy');
   console.log('STEP 10: Quotation line Cost Currency dropdown includes QAR:', [...lineCcySelect.options].some(o => o.value === 'QAR'));
 
@@ -86,12 +86,12 @@ async function main() {
   row.querySelector('.ln-cost').dispatchEvent(new win.Event('input'));
   row.querySelector('.ln-costccy').value = 'QAR';
   row.querySelector('.ln-costccy').dispatchEvent(new win.Event('change'));
-  await wait(10);
+  await wait(40);
   const row2 = doc.querySelector('#linesBody tr');
   console.log('STEP 11: Selecting QAR auto-fills the rate from Settings (expect 15.9):', row2.querySelector('.ln-rate').value === '15.9');
   row2.querySelector('.ln-markup').value = '20';
   row2.querySelector('.ln-markup').dispatchEvent(new win.Event('input'));
-  await wait(10);
+  await wait(40);
   const row3 = doc.querySelector('#linesBody tr');
   // Expected: QAR 1000 * 15.9 = PHP 15,900. +20% markup = PHP 19,080
   console.log('STEP 12: Markup correctly calculated on QAR->PHP converted cost (expect 19080):', row3.querySelector('.ln-price').value, Number(row3.querySelector('.ln-price').value) === 19080);

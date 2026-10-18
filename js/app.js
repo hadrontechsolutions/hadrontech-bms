@@ -25,23 +25,33 @@ window.applyBrandHeader = applyBrandHeader;
 async function requestPersistentStorage() {
   const host = document.getElementById('storageRiskBanner');
   if (!host) return;
-  if (!navigator.storage || !navigator.storage.persist) {
-    // Older/unsupported browser -- can't even ask. Warn, since this is a real risk factor here.
+  /* The browser's refusal only matters if there is no recent backup to fall back on, so the warning is
+     shown only while the last backup is older than the reminder period (Settings > Backup & Restore),
+     or none has been saved yet. A BMS holding only sample records is skipped: its own banner already
+     says to restore first. */
+  const showRisk = async () => {
+    const settings = await DB.getSettings();
+    if (window.isCleanBMS && await window.isCleanBMS()) return;
+    if (window.BackupReminder && !BackupReminder.isBackupOverdue(settings)) return;
+    const days = window.BackupReminder ? BackupReminder.daysSinceBackup(settings) : null;
+    const since = days === null ? `You haven't saved a backup yet` : `Your last backup was ${days} day${days === 1 ? '' : 's'} ago`;
     host.className = 'backup-banner';
-    host.innerHTML = `<span>⚠ Your browser doesn't support protecting this app's local data from being cleared automatically. Please export backups often, and avoid clearing your browser's site data.</span>`;
-    return;
-  }
+    host.innerHTML = `
+      <span>⚠ Your browser may clear this app's data if the computer runs low on disk space. ${since} — please save a backup.</span>
+      <span class="backup-banner-actions">
+        <button id="storageRiskBackupNow">Back Up Now</button>
+        <button id="storageRiskDismiss" class="banner-dismiss" title="Dismiss for this session">✕</button>
+      </span>`;
+    document.getElementById('storageRiskDismiss').onclick = () => { host.innerHTML = ''; host.className = ''; };
+    document.getElementById('storageRiskBackupNow').onclick = async () => {
+      if (window.exportFullBackup) await exportFullBackup(); else Router.navigate('/settings/backup');
+    };
+  };
+  if (!navigator.storage || !navigator.storage.persist) { await showRisk(); return; }  // older browser: cannot even ask
   try {
     const alreadyPersisted = await navigator.storage.persisted();
     const granted = alreadyPersisted || await navigator.storage.persist();
-    if (!granted) {
-      host.className = 'backup-banner';
-      host.innerHTML = `
-        <span>⚠ Your browser did not guarantee protected storage for this app -- it could clear your data automatically to free up space, or if your browser is set to clear site data when closed, or if used in a private/incognito window. Please export backups regularly.</span>
-        <span class="backup-banner-actions"><button id="storageRiskDismiss" class="banner-dismiss" title="Dismiss for this session">✕</button></span>`;
-      const dismissBtn = document.getElementById('storageRiskDismiss');
-      if (dismissBtn) dismissBtn.onclick = () => { host.innerHTML = ''; host.className = ''; };
-    }
+    if (!granted) await showRisk();
   } catch (e) {
     // If the permission check itself fails for some reason, fail quietly rather than blocking boot.
   }

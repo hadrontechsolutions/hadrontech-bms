@@ -354,6 +354,8 @@ async function exportFullBackup() {
   settings.lastBackupTotal = counts.total;
   await DB.dbPut('settings', settings);
   await DB.logActivity('Exported full JSON backup');
+  const storageBanner = document.getElementById('storageRiskBanner'); // the 'browser may clear data' warning is no longer needed once a backup exists
+  if (storageBanner) { storageBanner.innerHTML = ''; storageBanner.className = ''; }
   toast(`Backup saved: ${counts.total} record${counts.total === 1 ? '' : 's'}.` + (keptPrevious ? ` The previous file was kept in "${PREVIOUS_BACKUPS_FOLDER}".` : ''));
   if (window.BackupReminder) await BackupReminder.refreshBackupBanner();
   window.__unbackedActivity = false;

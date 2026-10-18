@@ -1,64 +1,92 @@
+/* The "browser may clear this app's data" warning: shown only when the browser declined persistent storage
+   AND there is no recent backup (none yet, or older than the reminder period). */
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 require('fake-indexeddb/auto');
+const { IDBFactory } = require('fake-indexeddb');
 const APP = __dirname;
 
-async function loadApp(storageMock) {
+/* opts.daysSinceBackup: undefined = never backed up; a number = last backup that many days ago.
+   opts.clean: leave the BMS with only the built-in sample records (no real data). */
+async function loadApp(storageMock, opts) {
+  opts = opts || {};
   const html = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
   const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
   const { window } = dom;
-  window.indexedDB = global.indexedDB; window.IDBKeyRange = global.IDBKeyRange;
+  window.indexedDB = new IDBFactory(); window.IDBKeyRange = global.IDBKeyRange;   // a fresh, empty database for each scenario
   if (storageMock !== undefined) {
     Object.defineProperty(window.navigator, 'storage', { value: storageMock, configurable: true });
   }
   const scripts = [...dom.window.document.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js');
   for (const src of scripts) dom.window.eval(fs.readFileSync(path.join(APP, src), 'utf8'));
   dom.window.eval(fs.readFileSync(path.join(APP, 'js/app.js'), 'utf8'));
-  return dom.window;
+  await window.DB.openDB(); await window.DB.ensureCounters();
+  if (!opts.clean) await window.DB.dbAdd('customers', { customerNo: 'CUST-REAL', companyName: 'Real Customer Co.', status: 'Active', createdBy: 'Tester', createdAt: 'x', updatedAt: 'x' });
+  if (opts.daysSinceBackup !== undefined) {
+    const s = await window.DB.getSettings();
+    s.lastBackupExport = new Date(Date.now() - opts.daysSinceBackup * 86400000).toISOString();
+    await window.DB.dbPut('settings', s);
+  }
+  return window;
 }
+const banner = (w) => w.document.getElementById('storageRiskBanner');
+const DECLINE = { persisted: async () => false, persist: async () => false };
 
 async function main() {
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
-  /* ============ Scenario 1: browser GRANTS persistence -- no warning shown ============ */
+  /* ===== Browser GRANTS persistence: no warning, even with no backup ===== */
   const win1 = await loadApp({ persisted: async () => false, persist: async () => true });
-  await win1.boot();
-  await wait(30);
-  console.log('STEP 1: When the browser grants persistent storage, no warning banner is shown:', win1.document.getElementById('storageRiskBanner').innerHTML.trim() === '');
+  await win1.boot(); await wait(30);
+  console.log('STEP 1: When the browser grants persistent storage, no warning banner is shown:', banner(win1).innerHTML.trim() === '');
 
-  /* ============ Scenario 2: already persisted from a prior session -- no warning, and persist() isn't even called again ============ */
   let persistCalled = false;
   const win2 = await loadApp({ persisted: async () => true, persist: async () => { persistCalled = true; return true; } });
-  await win2.boot();
-  await wait(30);
-  console.log('STEP 2: If already persisted from before, no warning shown:', win2.document.getElementById('storageRiskBanner').innerHTML.trim() === '');
+  await win2.boot(); await wait(30);
+  console.log('STEP 2: If already persisted from before, no warning shown:', banner(win2).innerHTML.trim() === '');
   console.log('STEP 3: And it correctly avoids re-requesting when already persisted:', persistCalled === false);
 
-  /* ============ Scenario 3: browser DECLINES persistence -- THE ACTUAL FIX, warning must show ============ */
-  const win3 = await loadApp({ persisted: async () => false, persist: async () => false });
-  await win3.boot();
-  await wait(30);
-  const banner3 = win3.document.getElementById('storageRiskBanner');
-  console.log('STEP 4: THE FIX: when the browser declines persistent storage, a clear warning banner is shown:', banner3.innerHTML.includes('did not guarantee protected storage'));
-  console.log('STEP 5: The warning explicitly mentions the real risk factors (auto-clearing, clear-on-close settings, incognito) so it\'s not vague:', banner3.innerHTML.includes('private/incognito') && banner3.innerHTML.includes('free up space'));
-  console.log('STEP 6: The warning tells the person what to actually do about it (back up regularly):', banner3.innerHTML.includes('export backups'));
+  /* ===== Browser DECLINES persistence, but a recent backup exists: nothing to warn about ===== */
+  const winA = await loadApp(DECLINE, { daysSinceBackup: 2 });
+  await winA.boot(); await wait(30);
+  console.log('STEP 4: Declined, but the last backup is only 2 days old: no warning (it would not matter):', banner(winA).innerHTML.trim() === '');
 
-  const dismissBtn = win3.document.getElementById('storageRiskDismiss');
-  console.log('STEP 7: A dismiss button exists so the warning doesn\'t block the page forever:', !!dismissBtn);
-  dismissBtn.click();
-  console.log('STEP 8: Dismissing correctly clears the banner:', banner3.innerHTML.trim() === '');
+  /* ===== Declined and the last backup is overdue: the warning shows, with the real number of days ===== */
+  const winB = await loadApp(DECLINE, { daysSinceBackup: 9 });
+  await winB.boot(); await wait(30);
+  const b = banner(winB);
+  console.log('STEP 5: Declined and the last backup is 9 days old (reminder period is 7): the warning shows and says so:', b.innerHTML.includes('computer runs low on disk space') && b.innerHTML.includes('Your last backup was 9 days ago'));
+  console.log('STEP 6: The warning has a Back Up Now button and tells the person to save a backup:', !!winB.document.getElementById('storageRiskBackupNow') && b.innerHTML.includes('please save a backup'));
+  winB.document.getElementById('storageRiskDismiss').click();
+  console.log('STEP 7: Dismissing clears the banner:', b.innerHTML.trim() === '');
 
-  /* ============ Scenario 4: navigator.storage API doesn't exist at all (older browser) ============ */
-  const win4 = await loadApp(undefined); // no storage API defined at all — leave navigator.storage as whatever jsdom's default is
-  Object.defineProperty(win4.navigator, 'storage', { value: undefined, configurable: true });
-  await win4.boot();
-  await wait(30);
-  console.log('STEP 9: If the browser doesn\'t support the storage API at all, a fallback warning still appears rather than silently doing nothing:', win4.document.getElementById('storageRiskBanner').innerHTML.includes("doesn't support protecting"));
+  /* ===== Declined and never backed up ===== */
+  const winC = await loadApp(DECLINE);
+  await winC.boot(); await wait(30);
+  console.log('STEP 8: Declined and no backup saved yet: the warning says so:', banner(winC).innerHTML.includes("You haven't saved a backup yet"));
 
-  /* ============ Regression: normal boot still works correctly regardless of storage outcome ============ */
-  console.log('STEP 10: Regression: the app still boots normally and renders the dashboard even when storage permission is declined:', win3.document.getElementById('content').textContent.length > 0);
+  /* ===== Declined, but this is a sample-only BMS: its own banner covers it, so no second warning ===== */
+  const winD = await loadApp(DECLINE, { clean: true });
+  await winD.boot(); await wait(30);
+  console.log('STEP 9: A sample-only BMS does not get this warning too (it has its own "restore first" banner):', banner(winD).innerHTML.trim() === '' && winD.document.getElementById('backupBanner').textContent.includes('no data of its own yet'));
 
-  console.log('\n=== PERSISTENT STORAGE PROTECTION FULLY VERIFIED ===');
+  /* ===== Browser without the storage API at all ===== */
+  const winE = await loadApp(undefined, { daysSinceBackup: 20 });
+  Object.defineProperty(winE.navigator, 'storage', { value: undefined, configurable: true });
+  await winE.boot(); await wait(30);
+  console.log('STEP 10: A browser with no storage support and an overdue backup still gets the warning:', banner(winE).innerHTML.includes('Your last backup was 20 days ago'));
+
+  /* ===== Saving a backup removes the warning ===== */
+  const winF = await loadApp(DECLINE, { daysSinceBackup: 9 });
+  await winF.boot(); await wait(30);
+  const hadWarning = banner(winF).innerHTML.includes('computer runs low');
+  winF.showDirectoryPicker = undefined; winF.showSaveFilePicker = undefined; winF.URL.createObjectURL = () => 'blob:x'; winF.document.createElement('a').click = () => {};
+  await winF.exportFullBackup(); await wait(30);
+  console.log('STEP 11: Saving a backup removes the warning straight away:', hadWarning && banner(winF).innerHTML.trim() === '');
+
+  console.log('STEP 12: Regression: the app still boots normally and renders the dashboard:', winB.document.getElementById('content').textContent.length > 0);
+  console.log('\n=== PERSISTENT STORAGE WARNING FULLY VERIFIED ===');
+  process.exit(0);
 }
 main().catch(err => { console.error('TEST FAILED:', err); process.exit(1); });
