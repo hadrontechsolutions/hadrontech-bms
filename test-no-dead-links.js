@@ -81,7 +81,6 @@ async function main() {
   const targets = new Set();
   for (const f of fs.readdirSync(path.join(APP, 'js'))) {
     const code = fs.readFileSync(path.join(APP, 'js', f), 'utf8');
-    if (f === 'enquiries.js') continue;   // dormant module, not loaded in index.html (see its header)
     for (const m of code.matchAll(/(?:navigate\(\s*|location\.hash\s*=\s*)(['"`])(#?\/[^'"`]*)\1/g)) targets.add(m[2].replace(/^#/, ''));
     for (const m of code.matchAll(/href="#(\/[^"]*)"/g)) targets.add(m[1]);
   }

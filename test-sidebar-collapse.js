@@ -8,8 +8,8 @@ async function main() {
   const rawHtml = fs.readFileSync(path.join(APP, 'index.html'), 'utf8');
 
   console.log('STEP 1: The flash-free inline script (applies saved state before anything else parses) exists in the HTML source:', rawHtml.includes("localStorage.getItem('hadrontechSidebarCollapsed')"));
-  console.log('STEP 2: Every nav-link has its label wrapped in a span (so CSS can hide just the text, keeping the icon), not the whole thing as one text blob:', (rawHtml.match(/<span class="nav-label">/g) || []).length === 12);
-  console.log('STEP 3: Every nav-link has a title attribute (so hovering still identifies it once collapsed to icon-only):', (rawHtml.match(/class="nav-link"[^>]*title="/g) || []).length === 12);
+  console.log('STEP 2: Every nav-link has its label wrapped in a span (so CSS can hide just the text, keeping the icon), not the whole thing as one text blob:', (rawHtml.match(/<span class="nav-label">/g) || []).length === (rawHtml.match(/class="nav-link"/g) || []).length);
+  console.log('STEP 3: Every nav-link has a title attribute (so hovering still identifies it once collapsed to icon-only):', (rawHtml.match(/class="nav-link"[^>]*title="/g) || []).length === (rawHtml.match(/class="nav-link"/g) || []).length);
 
   const css = fs.readFileSync(path.join(APP, 'css/styles.css'), 'utf8');
   console.log('STEP 4: CSS defines the collapsed-width rule for the sidebar:', css.includes('body.sidebar-collapsed .app-sidebar{width:58px;}'));

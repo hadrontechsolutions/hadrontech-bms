@@ -92,6 +92,7 @@ async function main() {
   console.log('STEP 15: Quotation edit form shows "Amount w/ VAT" live, correctly (1120.00):', qRow.querySelector('.ln-amount-vat').textContent.includes('1,120.00'));
   console.log('STEP 16: Quotation "Amount" (net) is unaffected, still shows 1000.00:', qRow.querySelector('.ln-amount').textContent.includes('1,000.00'));
 
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const q = (await win.DB.dbGetAll('quotations'))[0];

@@ -52,6 +52,7 @@ async function main() {
   row2.querySelector('.ln-supplier').value = String(supId);
   row2.querySelector('.ln-supplier').dispatchEvent(new win.Event('change'));
   await wait(10);
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   let q = (await win.DB.dbGetAll('quotations'))[0];
@@ -155,6 +156,7 @@ async function main() {
   rowN.querySelector('.ln-qty').dispatchEvent(new win.Event('input'));
   rowN.querySelector('.ln-price').value = '1000';
   rowN.querySelector('.ln-price').dispatchEvent(new win.Event('input'));
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const normalQ = (await win.DB.dbGetAll('quotations')).find(x => x.id !== q.id);

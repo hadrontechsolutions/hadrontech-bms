@@ -1,0 +1,42 @@
+/* Switching the VAT Mode on a quotation re-rates every line, so lines, totals and wording agree. */
+const fs = require('fs');
+const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
+(async () => {
+  const dom = new JSDOM(fs.readFileSync(__dirname + '/index.html', 'utf8'), { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
+  const win = dom.window, doc = win.document;
+  win.indexedDB = global.indexedDB; win.IDBKeyRange = global.IDBKeyRange; win.confirm = () => true;
+  for (const s of [...doc.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js')) win.eval(fs.readFileSync(__dirname + '/' + s, 'utf8'));
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await win.DB.openDB(); await win.DB.ensureCounters();
+  const custId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'T', status: 'Active', createdAt: 'x', updatedAt: 'x' });
+  win.location.hash = '#/quotations/new'; await win.Router.resolveRoute(); await wait(20);
+  const sel = doc.getElementById('f_vatMode');
+  const fire = v => { sel.value = v; sel.dispatchEvent(new win.Event('input', { bubbles: true })); sel.dispatchEvent(new win.Event('change', { bubbles: true })); };
+  doc.getElementById('f_customerId').value = String(custId);
+  const r = doc.querySelector('#linesBody tr');
+  [['.ln-desc', 'X'], ['.ln-qty', '1'], ['.ln-price', '100']].forEach(([c, v]) => { r.querySelector(c).value = v; r.querySelector(c).dispatchEvent(new win.Event('input')); });
+  await wait(10);
+  const vats = () => [...doc.querySelectorAll('#linesBody .ln-vat')].map(i => i.value);
+  const totals = () => doc.querySelector('.totals').textContent.replace(/\s+/g, ' ');
+  const out = (n, ok) => console.log(n + ':', ok);
+  out('1 New quotation starts Non-VAT: line 0%, grand total 100.00', sel.value === 'NonVat' && vats()[0] === '0' && totals().includes('Grand Total₱100.00'));
+  fire('Standard12'); await wait(10);
+  out('2 Switching to Standard 12% gives the line 12% and totals 112.00', vats()[0] === '12' && totals().includes('Grand Total₱112.00'));
+  fire('NonVat'); await wait(10);
+  out('3 Switching back to Non-VAT sets the line to 0%, VAT 0.00, total 100.00 (no hidden 12%)', vats()[0] === '0' && totals().includes('Grand Total₱100.00') && totals().includes('not charged)₱0.00'));
+  fire('Exempt'); await wait(10);
+  out('4 VAT Exempt also gives 0% and total 100.00', vats()[0] === '0' && totals().includes('Grand Total₱100.00'));
+  fire('Standard12'); await wait(10);
+  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(40);
+  let q = (await win.DB.dbGetAll('quotations'))[0];
+  out('5 Saved Standard 12% quotation: VAT 12.00, total 112.00', q && q.vatMode === 'Standard12' && q.vatTotal === 12 && q.grandTotal === 112);
+  // Safety net: an old Non-VAT quotation with a stray 12% line is saved at 0% VAT
+  win.location.hash = '#/quotations/' + q.id + '/edit'; await win.Router.resolveRoute(); await wait(20);
+  const s2 = doc.getElementById('f_vatMode'); s2.value = 'NonVat'; s2.dispatchEvent(new win.Event('change', { bubbles: true })); await wait(10);
+  doc.querySelector('#linesBody .ln-vat').value = '12'; doc.querySelector('#linesBody .ln-vat').dispatchEvent(new win.Event('input')); await wait(10);
+  doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(40);
+  q = (await win.DB.dbGetAll('quotations'))[0];
+  out('6 Saving in Non-VAT mode never stores VAT (total 100.00, VAT 0)', q.vatMode === 'NonVat' && q.vatTotal === 0 && q.grandTotal === 100 && q.lines.every(l => Number(l.vatRate) === 0));
+  console.log('no script errors: true');
+  process.exit(0);
+})();

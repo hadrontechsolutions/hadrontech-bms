@@ -34,8 +34,10 @@ function main() {
   /* ---------- 1. BACKUP_STORES vs CSV_COLUMNS ---------- */
   const backupStoresMatch = backupJs.match(/const BACKUP_STORES = \[([^\]]+)\]/);
   const backupStores = [...backupStoresMatch[1].matchAll(/'([a-zA-Z]+)'/g)].map(m => m[1]);
-  // counters/settings/activity are internal system data, not meant for a CSV download -- everything else should have one.
-  const storesNeedingCSV = backupStores.filter(s => !['counters', 'settings', 'activity'].includes(s));
+  // counters/settings/activity are internal system data, not meant for a CSV download. 'enquiries' is a retired module
+  // (replaced by the RFQ Tracker): its data stays in backups so old backups restore, but it has no CSV export any more.
+  // Everything else should have one.
+  const storesNeedingCSV = backupStores.filter(s => !['counters', 'settings', 'activity', 'enquiries'].includes(s));
 
   const csvColumnsBlockMatch = backupJs.match(/const CSV_COLUMNS = \{([\s\S]+?)\n\};/);
   const csvColumnKeys = [...csvColumnsBlockMatch[1].matchAll(/^\s*([a-zA-Z]+):\s*\[/gm)].map(m => m[1]);

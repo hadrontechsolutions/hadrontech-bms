@@ -45,9 +45,10 @@ async function main() {
   await wait(10);
   let confirmMessage = '';
   win.confirm = (msg) => { confirmMessage = msg; return false; };
+  win.alert = (msg) => { confirmMessage = msg; };
   doc.getElementById('btnDelete').click();
   await wait(20);
-  console.log('STEP 5: Deleting a product with real stock movement history now correctly warns about it (previously said 0 linked records):', confirmMessage.includes('1 linked transaction'));
+  console.log('STEP 5: Deleting a product with real stock movement history is blocked and says why:', confirmMessage.includes("can't be deleted") && confirmMessage.includes('1 existing transaction') && !!(await win.DB.dbGet('products', prodId)));
 
   const cleanProdId = await win.DB.dbAdd('products', { itemNo: 'ITEM-00002', description: 'Unused Product', uom: 'pc', type: 'Product', standardCost: 10, standardPrice: 20, currency: 'PHP', status: 'Active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   win.location.hash = '#/products/' + cleanProdId;

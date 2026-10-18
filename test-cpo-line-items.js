@@ -47,14 +47,14 @@ async function main() {
   row2.querySelector('.po-price').value = '346';
   row2.querySelector('.po-price').dispatchEvent(new win.Event('input'));
   await wait(10);
-  console.log('STEP 5: PO Amount auto-computed correctly from both lines (238 + 346 = 584):', Number(doc.getElementById('f_poAmount').value) === 584);
+  console.log('STEP 5: PO Amount auto-computed correctly from both lines (238 + 346 = 584, plus the default 12% VAT = 654.08):', Number(doc.getElementById('f_poAmount').value) === 654.08);
 
   doc.getElementById('cpoForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const cpo = (await win.DB.dbGetAll('customerPOs'))[0];
   console.log('STEP 6: Customer PO saved with 2 real line items:', cpo.lines.length === 2);
   console.log('STEP 7: First line correctly linked to the catalog product:', String(cpo.lines[0].itemId) === String(prodId));
-  console.log('STEP 8: PO Amount correctly saved as 584:', cpo.poAmount === 584);
+  console.log('STEP 8: PO Amount correctly saved as 654.08:', cpo.poAmount === 654.08);
 
   win.location.hash = '#/customer-pos/' + cpo.id;
   await win.Router.resolveRoute();
@@ -67,7 +67,7 @@ async function main() {
   const so = (await win.DB.dbGetAll('salesOrders'))[0];
   console.log('STEP 10: Sales Order has 2 real lines (not the generic "As per Customer PO..." catch-all):', so.lines.length === 2 && !so.lines.some(l => l.description.includes('As per Customer PO')));
   console.log('STEP 11: Sales Order line correctly preserves the catalog link (itemId):', String(so.lines[0].itemId) === String(prodId));
-  console.log('STEP 12: Sales Order total matches (584):', so.grandTotal === 584);
+  console.log('STEP 12: Sales Order total matches (654.08):', so.grandTotal === 654.08);
 
   const q = await win.DB.dbAdd('quotations', {
     quotationNo: 'HT-Q-2026-9001', customerId: custId, customerSnapshot: { companyName: 'Key Electrochem Limited Co./KEYEC' },

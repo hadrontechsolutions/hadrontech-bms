@@ -82,6 +82,7 @@ async function main() {
   row.querySelector('.ln-supplier').dispatchEvent(new win.Event('change'));
   await wait(10);
 
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const q = (await win.DB.dbGetAll('quotations'))[0];

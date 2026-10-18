@@ -1086,6 +1086,14 @@ async function renderQuoteForm(id) {
   document.getElementById('f_vatMode').addEventListener('change', updateVatHint);
   const syncVatCols = () => document.getElementById('linesTable').classList.toggle('no-vat-cols', document.getElementById('f_vatMode').value !== 'Standard12');
   document.getElementById('f_vatMode').addEventListener('change', syncVatCols); syncVatCols();
+  // Changing the VAT Mode re-rates the lines straight away, so the lines, the totals and the printed
+  // wording can never disagree: any mode other than Standard 12% means 0% on every line, and
+  // switching to Standard 12% gives 12% to lines that were at 0%.
+  document.getElementById('f_vatMode').addEventListener('change', () => {
+    const std = document.getElementById('f_vatMode').value === 'Standard12';
+    lines.forEach(l => { if (!std) l.vatRate = 0; else if (!Number(l.vatRate)) l.vatRate = 12; });
+    drawLines(); refreshTotals(); markDirty();
+  });
 
   const incotermsHintEl = document.getElementById('incotermsHint');
   const updateIncotermsHint = () => {
@@ -1125,6 +1133,8 @@ async function renderQuoteForm(id) {
     const customerId = Number(document.getElementById('f_customerId').value);
     if (!customerId) { toast('Please select a customer.', 'err'); return; }
     if (!lines.every(l => l.description && Number(l.qty) > 0)) { toast('Every line needs a description and quantity greater than 0.', 'err'); return; }
+    // Safety net: VAT is only ever charged in Standard 12% mode.
+    if (document.getElementById('f_vatMode').value !== 'Standard12') lines.forEach(l => { l.vatRate = 0; });
 
     const customer = customers.find(c => c.id === customerId);
     const header = {

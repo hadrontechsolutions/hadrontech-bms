@@ -61,6 +61,7 @@ async function main() {
   console.log('STEP 3: Option 1 total correctly includes its own VAT (94,459.87):', totalsText.includes('94,459.87'));
   console.log('STEP 4: Option 2 total correctly includes its own VAT (10,472.57):', totalsText.includes('10,472.57'));
 
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const q = (await win.DB.dbGetAll('quotations'))[0];
@@ -116,6 +117,7 @@ async function main() {
   console.log('STEP 19: Ordinary quotation shows a single classic Grand Total, no option blocks:', normalTotalsText.includes('Grand Total') && !normalTotalsText.includes('Option 1'));
   console.log('STEP 20: Ordinary quotation total math still correct (2,240.00):', normalTotalsText.includes('2,240.00'));
 
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const normalQ = (await win.DB.dbGetAll('quotations')).find(x => x.id !== q.id);

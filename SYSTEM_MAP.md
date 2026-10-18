@@ -21,7 +21,7 @@ This document should still be kept current by hand, since it explains *why* thin
 | `customerPOs` | customerPOs.js | ✅ | ✅ | ✅ | ✅ (POs Received) | — |
 | `salesOrders` | salesOrders.js | ✅ | ✅ | ✅ | ✅ | SO Register, Awaiting Delivery, Sales by Customer/Month, Sales Register (Bookkeeper) |
 | `supplierPOs` | supplierPOs.js | ✅ | ✅ (incl. payment fields) | ✅ | ✅ (incl. payment stats) | PO Register, Purchase Register (Bookkeeper), **Supplier Payments Aging** |
-| `enquiries` | enquiries.js | ✅ | ✅ | ⚠️ not searched | — | — |
+| `enquiries` | (retired — data kept for old backups) | ✅ | ✅ | ⚠️ not searched | — | — |
 | `stockMovements` | products.js (stock logic) | ✅ | ✅ | ⚠️ not searched | — | — |
 | `proformaInvoices` | proformaInvoices.js | ✅ | ✅ (incl. payment fields) | ✅ | ✅ (Payments) | **Payments Aging** |
 | `technicalOffers` | technicalOffers.js | ✅ | ✅ (incl. status) | ✅ | ✅ (incl. status breakdown) | **Technical Offers Log** |
@@ -104,7 +104,7 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 
 - **Supplier PO freight & listing link:** creating a Supplier PO from a Sales Order pre-fills `freight` with the selected lines' total freight (`suggestedPOFreight`; old per-unit lines = per-unit × qty; lines whose cost currency differs from the PO/supplier currency are NOT converted — counted in `freightSkippedLines` and noted). `freightEstimate` keeps the quotation figure so the PO shows "Quotation estimate: X" next to the real freight once it is edited. Item rows on the PO detail and edit pages show an "Open listing ↗" link (new tab, `noopener`, http/https only) read live from the product's Supplier Listing URL via `itemId`. Test: `test-supplier-po-freight-and-listing-link.js`.
 
-- **No dead links (`test-no-dead-links.js`):** crawls every page from the sidebar, follows every internal link/breadcrumb, and fails on "Page not found" / "not found" / error pages — with full data, then again after deleting the quotation, customer PO, supplier, product and customer. It also checks that every `navigate()` / `href="#/…"` target in the code matches a real route, that detail and edit pages for a missing record show a plain "X not found" message with a way back (never "Something went wrong"), and that every external link opens in a new tab with `noopener`. `enquiries.js` is dormant (not loaded) and is skipped. When adding a page or link, run this test.
+- **No dead links (`test-no-dead-links.js`):** crawls every page from the sidebar, follows every internal link/breadcrumb, and fails on "Page not found" / "not found" / error pages — with full data, then again after deleting the quotation, customer PO, supplier, product and customer. It also checks that every `navigate()` / `href="#/…"` target in the code matches a real route, that detail and edit pages for a missing record show a plain "X not found" message with a way back (never "Something went wrong"), and that every external link opens in a new tab with `noopener`. The retired `enquiries.js` module was removed. When adding a page or link, run this test.
 
 - **Project Package items are not stock items.** Lines with a package component number (`compNo`) ship straight through: receiving a Supplier PO or recording a Sales Order delivery posts NO stock movement for them (previously they piled receipts/deliveries on the package record, mixing pcs and metres, and could block a delivery with a false "only 0 in stock"). The panels label them "project item — not kept in stock". Supplier PO lines now carry `compNo`. Sales Order and Proforma Invoice prints leave Unit Price and Amount blank for blank-price lines, like the quotation. Test: `test-e2e-project-package-to-proforma.js` (package → quotation → customer PO → SO → Supplier PO → receive/pay → delivery → Proforma → payments, plus a mixed normal-item + package order with two suppliers).
 
@@ -235,3 +235,7 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## Product VAT Classification removed
 - Products no longer have a VAT Classification field. The quotation's VAT Mode is the only thing that sets line VAT%: Standard 12% gives 12%, every other mode gives 0%.
 - Old products may still hold a `vatClass` value in the database; nothing reads it.
+
+## VAT Mode switch on the quotation form
+- Changing the VAT Mode re-rates every line at once: any mode other than Standard 12% sets all lines to 0%; switching to Standard 12% gives 12% to lines that were at 0%.
+- Saving in any mode other than Standard 12% always stores 0% VAT on every line, so totals, wording and the saved record cannot disagree (`test-vat-mode-switch.js`).

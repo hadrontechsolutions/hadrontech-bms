@@ -44,7 +44,6 @@ function setupProjectPackageForm(form, record) {
   const comps = (record && record.components || []).map(c => Object.assign({}, c));
   form._pkgComps = comps;
   let ccyOptions = ['PHP', 'USD'];
-  DB.getSettings().then(st => { ccyOptions = currencyList(st); if (host.style.display !== 'none') draw(); });
 
   if (record) { typeSel.style.pointerEvents = 'none'; typeSel.style.opacity = '.6'; typeSel.tabIndex = -1; typeSel.title = 'The type cannot be changed after the item is created.'; }
 
@@ -52,6 +51,7 @@ function setupProjectPackageForm(form, record) {
   host.id = 'pkgEditor'; host.style.cssText = 'margin-top:18px; display:none;';
   const actions = form.querySelector('.form-actions');
   form.insertBefore(host, actions);
+  DB.getSettings().then(st => { ccyOptions = currencyList(st); if (host.style.display !== 'none') draw(); });
 
   function draw() {
     const numStyle = 'width:70px;';

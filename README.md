@@ -54,28 +54,12 @@ Customer → Quotation (with revisions) → Customer PO → Sales Order → Supp
 
 ---
 
-## 3. Enquiries — dormant feature (not currently active)
+## 3. Enquiries — retired
 
-**This module is not currently visible or usable in the app.** It was built, then removed
-from the sidebar and active navigation by request — but the code (`js/enquiries.js`) and
-its underlying data were deliberately left in place rather than deleted, so it can be
-restored later without losing anything. `js/enquiries.js` is **not** included in
-`index.html`'s script list right now, so none of the code below actually runs.
-
-What it did, for reference (all of this would work again if re-enabled):
-
-- **Board view**: a Kanban board, one column per stage (New Enquiry → Quotation
-  Sent → Won - Processing → In Delivery → Delivered → Payment Complete, plus Lost /
-  Cancelled). Drag a card to a different column to move its stage.
-- **Table view**: the same enquiries as a sortable list.
-- **Three progress tracks per enquiry**: Quotation Status (read live from the linked
-  Quotation), Delivery Status (a 7-step tracker with a dated milestone log), and Payment
-  Status (a running ledger with an automatic Overdue flag).
-- **Auto-linking** to the Customer PO / Sales Order chain as an order progresses.
-
-**To re-enable it:** add `<script src="js/enquiries.js"></script>` back into
-`index.html` (after `entities.js`, before `quotations.js`), and restore its entry in the
-sidebar navigation. No data migration needed — the `enquiries` store was never removed.
+The old Enquiries tracker (Kanban board and table) was replaced by the RFQ Tracker and its
+code (`js/enquiries.js`) has been removed. It is still in the git history if it is ever needed.
+The `enquiries` data store is deliberately kept in the database and in backups, so older
+backups that contain enquiries still restore without losing anything.
 
 ---
 
@@ -137,7 +121,6 @@ js/customerPOs.js          Customer PO module
 js/salesOrders.js          Sales Order module + "create Supplier PO" grouping logic
 js/supplierPOs.js          Supplier PO module
 js/proformaInvoices.js     Proforma Invoice generation (from a Sales Order)
-js/enquiries.js            Enquiry tracker — NOT currently loaded/active, see Section 3
 js/print.js                A4 printable documents (Quotation, Sales Order, Supplier PO, Proforma Invoice)
 js/dashboard.js            Summary cards, quick actions, activity feed, mini charts
 js/reports.js              10 filterable reports + CSV export
@@ -170,7 +153,7 @@ drove the app through the full sequences below with **zero errors**:
 **`test-routes.js`** — confirms every active page in the app renders without a
 JavaScript error: Dashboard, Customers, Suppliers, Products, Quotations, Customer POs,
 Sales Orders, Supplier POs, Proforma Invoices, Reports, Search, Settings, Backup &
-Restore. (Enquiries is excluded — see Section 3, it's not currently loaded.)
+Restore.
 
 **The full test suite is 40 files** covering the system end-to-end — the full
 Quotation → Customer PO → Sales Order → Supplier PO → Proforma Invoice chain, multi-

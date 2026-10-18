@@ -38,6 +38,7 @@ async function main() {
   console.log('STEP 3: VAT shown separately as 24.00:', totalsText.includes('24.00'));
   console.log('STEP 4: Grand Total still correctly includes VAT once (224.00) — math unchanged, only display fixed:', totalsText.includes('224.00'));
 
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const q = (await win.DB.dbGetAll('quotations'))[0];

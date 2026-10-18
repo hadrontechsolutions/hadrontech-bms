@@ -33,6 +33,7 @@ async function main() {
   row.querySelector('.ln-price').value = '238';
   row.querySelector('.ln-price').dispatchEvent(new win.Event('input'));
   await wait(10);
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   const q = (await win.DB.dbGetAll('quotations'))[0];
@@ -81,7 +82,7 @@ async function main() {
   deliveryRow.querySelector('.so-price').value = '346';
   deliveryRow.querySelector('.so-price').dispatchEvent(new win.Event('input'));
   await wait(10);
-  console.log('STEP 11: Before touching VAT%, the amount silently includes 12% VAT (346 * 1.12 = 387.52) — but now VISIBLE and fixable:', deliveryRow.querySelector('.so-amount').textContent.includes('387.52'));
+  console.log('STEP 11: Before touching VAT%, the amount silently includes 12% VAT (346 * 1.12 = 387.52) — but now VISIBLE and fixable:', deliveryRow.querySelector('.so-amount-vat').textContent.includes('387.52'));
 
   deliveryRow.querySelector('.so-vat').value = '0';
   deliveryRow.querySelector('.so-vat').dispatchEvent(new win.Event('input'));

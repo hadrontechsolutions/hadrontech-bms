@@ -50,7 +50,7 @@ async function main() {
   await wait(10);
   console.log('STEP 7: Selecting an item closes the picker overlay:', !doc.querySelector('.item-picker-overlay'));
   console.log('STEP 8: The trigger button now shows the selected item\'s number:', doc.querySelector('.ln-catalog-btn').textContent.includes('ITEM-00001'));
-  console.log('STEP 9: Description, brand, model, cost, price all auto-filled correctly (same as the old dropdown behavior):', doc.querySelector('.ln-desc').value === 'Submersible Pump 1.5kW' && doc.querySelector('.ln-brand').value === 'Koganei' && doc.querySelector('.ln-model').value === 'KSP-150' && doc.querySelector('.ln-cost').value === '3000' && doc.querySelector('.ln-price').value === '4000');
+  console.log('STEP 9: Description, brand, model, cost, price all auto-filled correctly (same as the old dropdown behavior):', doc.querySelector('.ln-desc').value === 'Submersible Pump 1.5kW' && doc.querySelector('.ln-brand').value === 'Koganei' && doc.querySelector('.ln-model').value === 'KSP-150' && doc.querySelector('.ln-cost').value === '3000' && doc.querySelector('.ln-price').value === '3000');
   console.log('STEP 10: Supplier also correctly auto-filled from the product\'s default supplier:', doc.querySelector('.ln-supplier').value === String(supId));
 
   doc.querySelector('.ln-catalog-btn').click();

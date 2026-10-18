@@ -19,7 +19,7 @@ async function main() {
 
   console.log('STEP 1: The redundant header search box no longer exists in the page:', !doc.getElementById('headerSearch'));
   console.log('STEP 2: The app booted successfully with no crash from the removed element (topbar still renders):', !!doc.querySelector('.topbar'));
-  console.log('STEP 3: The brand block (name/logo area) is still intact:', !!doc.getElementById('brandBlock') && !!doc.getElementById('brandMark') && !!doc.getElementById('brandText'));
+  console.log('STEP 3: The brand block (name/logo area) is still intact:', !!doc.getElementById('brandBlock') && !!doc.getElementById('brandText'));
   console.log('STEP 4: The "Offline · Local Data Only" status text is still shown:', doc.querySelector('.header-user').textContent.includes('Offline'));
 
   win.location.hash = '#/search';

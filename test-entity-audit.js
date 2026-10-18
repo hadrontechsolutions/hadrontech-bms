@@ -76,9 +76,10 @@ async function main() {
   await wait(10);
   let confirmMessageSeen = '';
   win.confirm = (msg) => { confirmMessageSeen = msg; return false; };
+  win.alert = (msg) => { confirmMessageSeen = msg; };
   doc.getElementById('btnDelete').click();
   await wait(10);
-  console.log('STEP 7: Deleting a Product referenced by a live quotation now shows a warning:', confirmMessageSeen.includes('1 linked transaction record'));
+  console.log('STEP 7: Deleting a Product referenced by a live quotation is blocked with a clear message (use Archive instead):', confirmMessageSeen.includes("can't be deleted") && confirmMessageSeen.includes('1 existing transaction record') && !!(await win.DB.dbGet('products', prodId)));
 
   const unusedProdId = await win.DB.dbAdd('products', { itemNo: 'ITEM-00002', description: 'Unused spare part', standardCost: 10, standardPrice: 15, currency: 'PHP', status: 'Active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   win.location.hash = '#/products/' + unusedProdId;

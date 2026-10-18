@@ -35,7 +35,7 @@ async function main() {
   const dropdownValue = row.querySelector('.ln-costccy').value;
 
   console.log('STEP 1: THE BUG, NOW FIXED: the Cost Ccy dropdown correctly shows the real stored value (USD) — not silently defaulting to PHP:', dropdownValue.startsWith('USD'));
-  console.log('STEP 2: Since USD isn\'t currently registered in Settings, the option is clearly flagged so it\'s not mistaken for a normal choice:', dropdownValue.includes('not in Settings'));
+  console.log('STEP 2: Since USD isn\'t currently registered in Settings, the option is clearly flagged so it\'s not mistaken for a normal choice:', row.querySelector('.ln-costccy').selectedOptions[0].textContent.includes('not in Settings'));
   console.log('STEP 3: The PHP conversion hint correctly reflects 850 x 58 = 49,300.00 the whole time (the math never had this bug, only the dropdown display did):', row.querySelector('.ln-cost-php').textContent.includes('49,300.00'));
 
   const settings2 = await win.DB.getSettings();

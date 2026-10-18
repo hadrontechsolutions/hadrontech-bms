@@ -28,7 +28,7 @@ async function main() {
   win.location.hash = '#/settings';
   await win.Router.resolveRoute();
   await wait(10);
-  console.log('STEP 2: Currency table renders with PHP + defaults (USD, EUR):', doc.getElementById('currencyTable').textContent.includes('PHP') && doc.getElementById('currencyTable').textContent.includes('USD') && doc.getElementById('currencyTable').textContent.includes('EUR'));
+  console.log('STEP 2: Currency table renders with PHP + defaults (USD, EUR):', doc.getElementById('currencyTable').textContent.includes('PHP') && [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === 'USD') && [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === 'EUR'));
 
   const newCurrencies = [['SGD', '43.5'], ['HKD', '7.45'], ['QAR', '15.9'], ['AED', '15.8']];
   for (const [code, rate] of newCurrencies) {
@@ -37,7 +37,7 @@ async function main() {
     doc.getElementById('btnAddCurrency').click();
     await wait(5);
   }
-  console.log('STEP 3: All 4 new currency rows added to the table:', newCurrencies.every(([c]) => doc.getElementById('currencyTable').textContent.includes(c)));
+  console.log('STEP 3: All 4 new currency rows added to the table:', newCurrencies.every(([c]) => [...doc.querySelectorAll('#currencyTable .ccy-code')].some(i => i.value === c)));
   console.log('STEP 4: Default Currency dropdown includes the new currencies live:', newCurrencies.every(([c]) => [...doc.getElementById('s_defaultCurrency').options].some(o => o.value === c)));
 
   // Try adding a duplicate -> should be rejected

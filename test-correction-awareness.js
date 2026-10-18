@@ -48,6 +48,7 @@ async function main() {
   row2.querySelector('.ln-supplier').value = String(supId);
   row2.querySelector('.ln-supplier').dispatchEvent(new win.Event('change'));
   await wait(10);
+  doc.getElementById('f_vatMode').value = 'Standard12'; doc.getElementById('f_vatMode').dispatchEvent(new win.Event('change', { bubbles: true }));
   doc.getElementById('qForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(30);
   let q = (await win.DB.dbGetAll('quotations'))[0];
@@ -103,7 +104,7 @@ async function main() {
   qtyInput.dispatchEvent(new win.Event('input'));
   await wait(10);
   // Amount cell shows the VAT-inclusive line total: 2 x 9350.51 = 18701.02 net, +12% VAT = 20945.14
-  console.log('STEP 10: Amount recalculates live as qty is corrected (incl. VAT, 20,945.14):', doc.querySelector('.so-amount').textContent.includes('20,945.14'));
+  console.log('STEP 10: Amount recalculates live as qty is corrected (incl. VAT, 20,945.14):', doc.querySelector('.so-amount-vat').textContent.includes('20,945.14'));
 
   doc.getElementById('soForm').dispatchEvent(new win.Event('submit', { cancelable: true }));
   await wait(20);
