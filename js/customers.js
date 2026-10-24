@@ -15,35 +15,30 @@ Entities.defineEntity({
     { key: 'customerNo', label: 'Customer #' },
     { key: 'companyName', label: 'Company Name' },
     { key: 'contactPerson', label: 'Contact Person' },
-    { key: 'telephone', label: 'Phone' },
+    { key: 'email', label: 'Email' },
+    { key: 'telephone', label: 'Telephone' },
     { key: 'status', label: 'Status', render: r => statusBadge(r.status) }
   ],
   fields: [
     { name: 'companyName', label: 'Company Name', type: 'text', required: true },
-    { name: 'customerType', label: 'Customer Type', type: 'select', options: ['Retail', 'Wholesale', 'Government', 'Contractor', 'Distributor', 'Other'] },
     { name: 'contactPerson', label: 'Contact Person', type: 'text' },
-    { name: 'jobTitle', label: 'Job Title', type: 'text' },
     { name: 'email', label: 'Email', type: 'email' },
     { name: 'telephone', label: 'Telephone', type: 'text' },
-    { name: 'mobile', label: 'Mobile', type: 'text' },
     { name: 'billingAddress', label: 'Billing Address', type: 'textarea' },
     { name: 'shippingAddress', label: 'Shipping Address', type: 'textarea' },
     { name: 'country', label: 'Country', type: 'text', default: 'Philippines' },
     { name: 'tin', label: 'Tax Identification Number', type: 'text' },
-    { name: 'vatStatus', label: 'VAT Status', type: 'select', options: ['VAT Registered', 'Non-VAT', 'VAT Exempt'] },
-    { name: 'defaultCurrency', label: 'Default Currency', type: 'currency-select', default: 'PHP' },
     { name: 'paymentTerms', label: 'Payment Terms', type: 'text' },
     { name: 'incoterms', label: 'Default Incoterms', type: 'text' },
-    { name: 'creditLimit', label: 'Credit Limit', type: 'money' },
     { name: 'salesperson', label: 'Salesperson', type: 'text' },
-    { name: 'industry', label: 'Industry', type: 'text' },
     { name: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive', 'Prospect'] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ],
   checkRelatedBeforeDelete: async (record) => {
     const q = await DB.dbQueryIndex('quotations', 'customerId', record.id);
     const so = await DB.dbQueryIndex('salesOrders', 'customerId', record.id);
-    return q.length + so.length;
+    const cpo = await DB.dbQueryIndex('customerPOs', 'customerId', record.id);
+    return q.length + so.length + cpo.length;
   },
   relatedPanels: async (record) => {
     const [quotations, salesOrders, customerPOs] = await Promise.all([
@@ -59,14 +54,14 @@ Entities.defineEntity({
 
     return `
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-num">${formatMoney(totalQuoted, record.defaultCurrency)}</div><div class="stat-lbl">Total Quoted Value</div></div>
-        <div class="stat-box"><div class="stat-num">${formatMoney(totalOrdered, record.defaultCurrency)}</div><div class="stat-lbl">Total Order Value</div></div>
+        <div class="stat-box"><div class="stat-num">${formatMoney(totalQuoted, 'PHP')}</div><div class="stat-lbl">Total Quoted Value</div></div>
+        <div class="stat-box"><div class="stat-num">${formatMoney(totalOrdered, 'PHP')}</div><div class="stat-lbl">Total Order Value</div></div>
         <div class="stat-box"><div class="stat-num">${lastTx ? formatDate(lastTx) : '—'}</div><div class="stat-lbl">Last Transaction</div></div>
       </div>
 
-      ${relatedTable('Quotations', latestQuotes, ['quotationNo', 'date', 'status', 'grandTotal'], '/quotations', record.defaultCurrency)}
-      ${relatedTable('Customer POs', customerPOs, ['poNo', 'poDate', 'status', 'poAmount'], '/customer-pos', record.defaultCurrency)}
-      ${relatedTable('Sales Orders', salesOrders, ['soNo', 'orderDate', 'status', 'grandTotal'], '/sales-orders', record.defaultCurrency)}
+      ${relatedTable('Quotations', latestQuotes, ['quotationNo', 'date', 'status', 'grandTotal'], '/quotations', 'PHP')}
+      ${relatedTable('Customer POs', customerPOs, ['poNo', 'poDate', 'status', 'poAmount'], '/customer-pos', 'PHP')}
+      ${relatedTable('Sales Orders', salesOrders, ['soNo', 'orderDate', 'status', 'grandTotal'], '/sales-orders', 'PHP')}
     `;
   }
 });

@@ -27,7 +27,7 @@ async function main() {
     customerNo: 'CUST-00003', companyName: 'Key Electrochem Limited Co./KEYEC',
     contactPerson: 'Willie Sicat', jobTitle: 'Business Development & Technical Sales Executive',
     email: 'willie@keyelectrochem.com', paymentTerms: '100% Advance Payment', incoterms: 'DDP',
-    defaultCurrency: 'PHP', salesperson: 'Gretchen Caballero', status: 'Active',
+    salesperson: 'Gretchen Caballero', status: 'Active',
     shippingAddress: '', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
   });
   // And a second customer that has NOT set custom terms, to prove the fallback still works

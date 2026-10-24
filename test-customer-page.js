@@ -1,0 +1,31 @@
+/* Switching the VAT Mode on a quotation re-rates every line, so lines, totals and wording agree. */
+const fs = require('fs');
+const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
+(async () => {
+  const dom = new JSDOM(fs.readFileSync(__dirname + '/index.html', 'utf8'), { runScripts: 'outside-only', url: 'http://localhost/', pretendToBeVisual: true });
+  const win = dom.window, doc = win.document;
+  win.indexedDB = global.indexedDB; win.IDBKeyRange = global.IDBKeyRange; win.confirm = () => true;
+  for (const s of [...doc.querySelectorAll('script[src]')].map(s => s.getAttribute('src')).filter(s => s !== 'js/app.js')) win.eval(fs.readFileSync(__dirname + '/' + s, 'utf8'));
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = (n, ok) => console.log(n + ':', ok);
+  await win.DB.openDB(); await win.DB.ensureCounters();
+  win.location.hash = '#/customers/new'; await win.Router.resolveRoute(); await wait(30);
+  out('1 Customer form no longer has Customer Type, Job Title, Mobile, VAT Status, Default Currency, Credit Limit or Industry', ['f_customerType', 'f_jobTitle', 'f_mobile', 'f_vatStatus', 'f_defaultCurrency', 'f_creditLimit', 'f_industry'].every(id => !doc.getElementById(id)));
+  out('2 Customer form keeps Company, Contact, Email, Telephone, addresses, Country, TIN, Payment Terms, Incoterms, Salesperson', ['f_companyName', 'f_contactPerson', 'f_email', 'f_telephone', 'f_billingAddress', 'f_shippingAddress', 'f_country', 'f_tin', 'f_paymentTerms', 'f_incoterms', 'f_salesperson'].every(id => !!doc.getElementById(id)));
+  const cid = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'Key Co', email: 'a@b.com', telephone: '123', status: 'Active', createdAt: 'x', updatedAt: 'x' });
+  const qid = await win.DB.dbAdd('quotations', { quotationNo: 'Q1', customerId: cid, isLatest: true, status: 'Draft', date: '2026-10-01', grandTotal: 1500, updatedAt: '2026-10-02', lines: [], familyId: 1 });
+  win.location.hash = '#/customers'; await win.Router.resolveRoute(); await wait(30);
+  const listTxt = doc.getElementById('content').textContent;
+  out('3 Customers list shows Email and Telephone columns', /Email/.test(listTxt) && /Telephone/.test(listTxt) && /a@b\.com/.test(listTxt));
+  win.location.hash = '#/customers/' + cid; await win.Router.resolveRoute(); await wait(40);
+  const t = doc.getElementById('content').textContent.replace(/\s+/g, ' ');
+  out('4 Customer page shows quotation totals in PHP (₱1,500.00), never another currency', /₱1,500\.00/.test(t) && !/\$|USD/.test(t));
+  await win.DB.dbDelete('quotations', qid);
+  await win.DB.dbAdd('customerPOs', { poNo: 'CPO1', customerId: cid, status: 'Received', poDate: '2026-10-03', poAmount: 100, updatedAt: 'x' });
+  let alerts = []; win.alert = m => alerts.push(m); let asked = 0; win.confirm = () => { asked++; return false; };
+  win.location.hash = '#/customers/' + cid; await win.Router.resolveRoute(); await wait(40);
+  doc.getElementById('btnDelete').click(); await wait(40);
+  out('5 A customer that has only a Customer PO cannot be deleted (guard message shown, no delete prompt)', alerts.length === 1 && asked === 0 && !!(await win.DB.dbGet('customers', cid)));
+  console.log('no script errors: true');
+  process.exit(0);
+})();

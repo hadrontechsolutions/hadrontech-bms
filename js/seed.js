@@ -13,22 +13,22 @@ async function seedIfEmpty() {
 
   const cust1Id = await DB.dbAdd('customers', Object.assign({
     customerNo: await DB.nextDocNumber('customer'), companyName: 'Luzon Water Treatment Corp.',
-    customerType: 'Contractor', contactPerson: 'Maria Santos', jobTitle: 'Procurement Manager',
-    email: 'maria.santos@example.com', telephone: '(046) 123-4567', mobile: '0917-000-1111',
+    contactPerson: 'Maria Santos',
+    email: 'maria.santos@example.com', telephone: '(046) 123-4567',
     billingAddress: 'Km 30 National Highway, General Trias, Cavite', shippingAddress: 'Same as billing',
-    country: 'Philippines', tin: '000-111-222-000', vatStatus: 'VAT Registered', defaultCurrency: 'PHP',
-    currency: 'USD', paymentTerms: '50% down / 50% before delivery', incoterms: 'EXW', creditLimit: 500000,
-    salesperson: 'Admin', industry: 'Water Treatment', status: 'Active', notes: 'Sample record — safe to delete.'
+    country: 'Philippines', tin: '000-111-222-000',
+    paymentTerms: '50% down / 50% before delivery', incoterms: 'EXW',
+    salesperson: 'Admin', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
   const cust2Id = await DB.dbAdd('customers', Object.assign({
     customerNo: await DB.nextDocNumber('customer'), companyName: 'Cavite Steel Fabrication Inc.',
-    customerType: 'Wholesale', contactPerson: 'Robert Cruz', jobTitle: 'Purchasing Officer',
-    email: 'robert.cruz@example.com', telephone: '(046) 987-6543', mobile: '0917-222-3333',
+    contactPerson: 'Robert Cruz',
+    email: 'robert.cruz@example.com', telephone: '(046) 987-6543',
     billingAddress: 'Governor\'s Drive, Dasmariñas, Cavite', shippingAddress: 'Same as billing',
-    country: 'Philippines', tin: '000-333-444-000', vatStatus: 'VAT Registered', defaultCurrency: 'PHP',
-    paymentTerms: '30 days after delivery', incoterms: 'DAP', creditLimit: 300000,
-    salesperson: 'Admin', industry: 'Steel Fabrication', status: 'Active', notes: 'Sample record — safe to delete.'
+    country: 'Philippines', tin: '000-333-444-000',
+    paymentTerms: '30 days after delivery', incoterms: 'DAP',
+    salesperson: 'Admin', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
   const sup1Id = await DB.dbAdd('suppliers', Object.assign({

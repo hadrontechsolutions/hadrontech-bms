@@ -154,10 +154,8 @@ async function renderCPOForm(id, query) {
   function applyCustomerDefaults(customerId) {
     const selectedCustomer = customers.find(c => c.id === Number(customerId));
     if (!selectedCustomer) return;
-    const currencyEl = document.getElementById('f_currency');
     const contactEl = document.getElementById('f_customerContact');
     const shippingEl = document.getElementById('f_shippingAddress');
-    if (selectedCustomer.defaultCurrency) currencyEl.value = selectedCustomer.defaultCurrency;
     if (!contactEl.value && selectedCustomer.contactPerson) contactEl.value = selectedCustomer.contactPerson;
     if (!shippingEl.value && selectedCustomer.shippingAddress) shippingEl.value = selectedCustomer.shippingAddress;
   }
