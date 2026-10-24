@@ -35,7 +35,8 @@ function suggestedPOFreight(lines, soCurrency, poCurrency) {
   return { amount: r2(total), skipped };
 }
 
-async function createFromSalesOrder(so, supplierId, lines) {
+/** Creates ONE draft PO in ONE currency (the currency the lines were costed in). Returns the new PO id. */
+async function createOnePO(so, supplierId, lines, poCurrency) {
   const settings = await DB.getSettings();
   const supplier = await DB.dbGet('suppliers', supplierId);
   const customerPO = so.customerPOId ? await DB.dbGet('customerPOs', so.customerPOId) : null;
@@ -45,7 +46,6 @@ async function createFromSalesOrder(so, supplierId, lines) {
     qty: l.qty, uom: l.uom, unitCost: l.unitCost, discountPercent: 0, receivedQty: 0,
     amount: r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0))
   }));
-  const poCurrency = supplier?.currency || 'PHP';
   // The rate is saved ON the PO (PHP per 1 unit of the PO currency) and never follows later changes in Settings.
   // Default: the rate the quotation used for this cost (so the PO matches that month's quote); otherwise the Settings rate today.
   let exchangeRate = 1, exchangeRateSource = '';
@@ -70,10 +70,20 @@ async function createFromSalesOrder(so, supplierId, lines) {
     notes: '', createdAt: now, updatedAt: now, createdBy: settings.userName, modifiedBy: settings.userName
   };
   const newId = await DB.dbAdd('supplierPOs', rec);
-  await DB.logActivity(`Created supplier PO ${poNo} for ${supplier?.companyName || 'supplier'} from sales order ${so.soNo}`);
-  toast('Supplier PO created.');
-  if (window.SalesOrders && window.SalesOrders.syncStatus) await window.SalesOrders.syncStatus(so.id);
-  Router.navigate(`/supplier-pos/${newId}`);
+  await DB.logActivity(`Created supplier PO ${poNo} (${poCurrency}) for ${supplier?.companyName || 'supplier'} from sales order ${so.soNo}`);
+  return newId;
+}
+
+/** The PO's currency is the currency the items were costed in (set on the Product / quotation line), not a supplier setting.
+    If one supplier's lines were costed in different currencies, one PO is made per currency so amounts are never mixed. */
+async function createFromSalesOrder(so, supplierId, lines) {
+  const groups = {};
+  (lines || []).forEach(l => { const c = l.costCurrency || so.currency || 'PHP'; (groups[c] = groups[c] || []).push(l); });
+  const ids = [];
+  for (const cur of Object.keys(groups)) ids.push(await createOnePO(so, supplierId, groups[cur], cur));
+  toast(ids.length > 1 ? `${ids.length} Supplier POs created — one per cost currency (${Object.keys(groups).join(', ')}).` : 'Supplier PO created.');
+  if (so.id && window.SalesOrders && window.SalesOrders.syncStatus) await window.SalesOrders.syncStatus(so.id);
+  Router.navigate(ids.length > 1 ? `/sales-orders/${so.id}` : `/supplier-pos/${ids[0]}`);
 }
 
 /** Small note comparing the PO's freight with the quotation estimate it was pre-filled from. */

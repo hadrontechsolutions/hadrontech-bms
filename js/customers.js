@@ -88,7 +88,7 @@ function relatedTable(title, rows, cols, baseHash, currency) {
             <tr class="clickable-row" data-hash="${baseHash}/${r.id}">
               ${cols.map(c => {
                 if (c === 'status') return `<td>${statusBadge(r[c])}</td>`;
-                if (['grandTotal', 'poAmount', 'totalCost'].includes(c)) return `<td>${formatMoney(r[c] || 0, currency)}</td>`;
+                if (['grandTotal', 'poAmount', 'totalCost'].includes(c)) return `<td>${formatMoney(r[c] || 0, currency || r.currency)}</td>`;
                 if (c.toLowerCase().includes('date')) return `<td>${formatDate(r[c])}</td>`;
                 return `<td>${escapeHtml(r[c] ?? '')}</td>`;
               }).join('')}

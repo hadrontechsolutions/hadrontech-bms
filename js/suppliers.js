@@ -31,12 +31,8 @@ Entities.defineEntity({
     { name: 'country', label: 'Country', type: 'text' },
     { name: 'brandsSupplied', label: 'Brands Supplied', type: 'text' },
     { name: 'productCategories', label: 'Product Categories', type: 'text' },
-    { name: 'currency', label: 'Currency', type: 'currency-select', default: 'USD' },
     { name: 'paymentTerms', label: 'Payment Terms', type: 'text' },
     { name: 'incoterms', label: 'Incoterms', type: 'text' },
-    { name: 'leadTime', label: 'Typical Lead Time', type: 'text' },
-    { name: 'authorizedDistributor', label: 'Authorized Distributor', type: 'checkbox' },
-    { name: 'rating', label: 'Supplier Rating', type: 'select', options: ['1', '2', '3', '4', '5'] },
     { name: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ],
@@ -46,6 +42,6 @@ Entities.defineEntity({
   },
   relatedPanels: async (record) => {
     const pos = await DB.dbQueryIndex('supplierPOs', 'supplierId', record.id);
-    return relatedTable('Supplier Purchase Orders', pos, ['poNo', 'poDate', 'status', 'totalCost'], '/supplier-pos', record.currency);
+    return relatedTable('Supplier Purchase Orders', pos, ['poNo', 'poDate', 'status', 'totalCost'], '/supplier-pos');
   }
 });

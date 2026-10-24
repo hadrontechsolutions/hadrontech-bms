@@ -19,7 +19,7 @@ async function main() {
   const pHdmi = await win.DB.dbAdd('products', { itemNo: 'ITEM-00049', type: 'Product', description: 'HDMI cable', status: 'Active', createdAt: now, supplierListingUrl: 'https://shop.example.com/hdmi' });
   const pBad = await win.DB.dbAdd('products', { itemNo: 'ITEM-00050', type: 'Product', description: 'Bad link', status: 'Active', createdAt: now, supplierListingUrl: 'javascript:alert(1)' });
   const pNone = await win.DB.dbAdd('products', { itemNo: 'ITEM-00051', type: 'Product', description: 'No link', status: 'Active', createdAt: now });
-  const so = { soNo: 'HT-SO-T1', currency: 'PHP', shippingAddress: '', lines: [] };
+  const so = { id: 999, soNo: 'HT-SO-T1', currency: 'PHP', shippingAddress: '', lines: [] };
   const L = (o) => Object.assign({ lineId: 'L' + Math.random().toString(36).slice(2, 8), description: 'x', qty: 1, uom: 'pc', unitCost: 100, estimatedFreightCost: 0, freightMode: 'total', costCurrency: 'PHP' }, o);
   const mk = async (supId, lines) => { await win.SupplierPOs.createFromSalesOrder(so, supId, lines); const all = await win.DB.dbGetAll('supplierPOs'); return all[all.length - 1]; };
 
@@ -30,8 +30,10 @@ async function main() {
   po = await mk(supPhp, [L({ qty: 3, estimatedFreightCost: 10, freightMode: undefined })]);
   console.log('2 old per-unit freight line counts qty x per-unit (30):', near(po.freight, 30));
   // 3 other-currency line not guessed
-  po = await mk(supPhp, [L({ estimatedFreightCost: 5, costCurrency: 'USD' }), L({ estimatedFreightCost: 20 })]);
-  console.log('3 USD-cost freight on a PHP supplier is not converted (only 20 added) and is reported:', near(po.freight, 20) && po.freightSkippedLines === 1);
+  await mk(supPhp, [L({ estimatedFreightCost: 5, costCurrency: 'USD' }), L({ estimatedFreightCost: 20 })]);
+  { const all = await win.DB.dbGetAll('supplierPOs'); const usd = all.filter(x => x.currency === 'USD').pop(), php = all[all.length - 1];
+    console.log('3 Mixed-currency lines make one PO per currency: USD PO gets freight 5, PHP PO gets freight 20, nothing skipped:', usd.currency === 'USD' && php.currency === 'PHP' && near(usd.freight, 5) && near(php.freight, 20) && usd.freightSkippedLines === 0 && php.freightSkippedLines === 0);
+    po = php; }
   // 4 no freight -> 0, same as before
   po = await mk(supPhp, [L({})]);
   console.log('4 lines without freight give freight 0:', po.freight === 0 && near(po.totalCost, 100));

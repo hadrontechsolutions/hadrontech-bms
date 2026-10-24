@@ -60,9 +60,9 @@ async function main() {
   await win.SupplierPOs.createFromSalesOrder(so, supId, so.lines.map(l => Object.assign({}, l, { supplierId: supId })));
   await wait(100);
   const spo = (await win.DB.dbGetAll('supplierPOs'))[0];
-  console.log('9 Supplier PO total = USD 1,000 (10 x 100), unchanged by freight model:', !!spo && near(spo.totalCost, 1000), spo && spo.totalCost);
+  console.log('9 Supplier PO is in USD (the items\' cost currency) = 10 x 100 + USD 80 freight = 1,080:', !!spo && spo.currency === 'USD' && near(spo.totalCost, 1080), spo && spo.totalCost);
   spo.payments = [{ amount: 400, date: new Date().toISOString() }]; await win.DB.dbPut('supplierPOs', spo);
-  console.log('10 Supplier PO payment math: paid 400, balance 600:', near(win.SupplierPOs.spoAmountPaid(spo), 400) && near(win.SupplierPOs.spoBalanceDue(spo), 600));
+  console.log('10 Supplier PO payment math: paid 400, balance 680:', near(win.SupplierPOs.spoAmountPaid(spo), 400) && near(win.SupplierPOs.spoBalanceDue(spo), 680));
   await go('#/supplier-pos/' + spo.id);
   console.log('11 Supplier PO detail renders, no NaN/undefined:', !/NaN|undefined/.test(doc.getElementById('content').textContent));
   await go('#/customer-pos/' + cpo.id);

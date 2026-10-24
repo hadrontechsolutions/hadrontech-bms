@@ -19,7 +19,7 @@ const APP = __dirname;
   const cId = await win.DB.dbAdd('customers', { customerNo: 'C1', companyName: 'Cust', status: 'Active', createdAt: now });
   const soId = await win.DB.dbAdd('salesOrders', { soNo: 'SO-T', customerId: cId, status: 'Confirmed', currency: 'PHP', lines: [], grandTotal: 1000, orderDate: '2026-09-05', createdAt: now });
   const so = await win.DB.dbGet('salesOrders', soId);
-  await win.SupplierPOs.createFromSalesOrder(so, supId, [{ lineId: 'L1', description: 'Pump', qty: 2, uom: 'pc', unitCost: 50 }]);
+  await win.SupplierPOs.createFromSalesOrder(so, supId, [{ lineId: 'L1', description: 'Pump', qty: 2, uom: 'pc', unitCost: 50, costCurrency: 'USD' }]);
   const id = (await win.DB.dbGetAll('supplierPOs')).find(p => p.supplierId === supId).id;
   let po = await win.DB.dbGet('supplierPOs', id);
   ok('1 new USD PO snapshots the rate (58) and its source', po.exchangeRate === 58 && /Settings/.test(po.exchangeRateSource), JSON.stringify(po));

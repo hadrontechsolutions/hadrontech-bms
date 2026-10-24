@@ -254,3 +254,6 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 `js/importCharges.js` (`estimateImportCharges`, `applyImportEstimate`) -> writes `line.importCharge` (PHP) -> `QuoteCalc.computeLine` adds it to `costTotal` -> quotation totals (`importEstimate`), Sales Order lines (copied), `soGrossProfit`, Order Profit "as ordered" cost, Distributions. Flag: `quotation.includeImportEstimate` (undefined = off for old records). Settings: `settings.importCharges`.
 
 The estimated customs duty is one default (`settings.importCharges.dutyPct`, default 5, flagged unverified until `dutyVerified` is ticked in Settings); there is no per-product duty field.
+
+## Supplier record and Supplier PO currency
+Suppliers no longer have Currency, Supplier Rating, Typical Lead Time or Authorized Distributor (lead time lives on the Product; the supplier is identified by Country and by the products it supplies). A Supplier PO's currency is the **cost currency of its item lines** (`SupplierPOs.createFromSalesOrder` groups the lines by cost currency and makes one PO per currency, so amounts are never mixed). Old suppliers may still carry the removed fields in saved data; nothing reads them. The Supplier page's PO list (`relatedTable`) shows each PO in its own currency.

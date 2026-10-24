@@ -36,8 +36,8 @@ async function seedIfEmpty() {
     contactPerson: 'John Lim', email: 'john.lim@example.com', telephone: '+65 6000 0000',
     website: 'https://www.grundfos.com', address: 'Singapore', country: 'Singapore',
     brandsSupplied: 'Grundfos', productCategories: 'Centrifugal Pumps, Submersible Pumps',
-    currency: 'USD', paymentTerms: '30% down / 70% before shipment', incoterms: 'FOB',
-    leadTime: '6-8 weeks', authorizedDistributor: true, rating: '5', status: 'Active', notes: 'Sample record — safe to delete.'
+    paymentTerms: '30% down / 70% before shipment', incoterms: 'FOB',
+    status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
   const sup2Id = await DB.dbAdd('suppliers', Object.assign({
@@ -45,8 +45,8 @@ async function seedIfEmpty() {
     contactPerson: 'Amy Tan', email: 'amy.tan@example.com', telephone: '+65 6111 1111',
     website: 'https://www.victaulic.com', address: 'Singapore', country: 'Singapore',
     brandsSupplied: 'Victaulic', productCategories: 'Pipe Fittings, Valves, Couplings',
-    currency: 'USD', paymentTerms: '50% down / 50% before shipment', incoterms: 'FOB',
-    leadTime: '4-6 weeks', authorizedDistributor: false, rating: '4', status: 'Active', notes: 'Sample record — safe to delete.'
+    paymentTerms: '50% down / 50% before shipment', incoterms: 'FOB',
+    status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
   const prod1Id = await DB.dbAdd('products', Object.assign({

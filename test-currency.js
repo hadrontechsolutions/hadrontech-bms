@@ -65,7 +65,7 @@ async function main() {
   win.location.hash = '#/suppliers/new';
   await win.Router.resolveRoute();
   await wait(40);
-  console.log('STEP 9: Supplier currency dropdown includes HKD:', [...doc.getElementById('f_currency').options].some(o => o.value === 'HKD'));
+  console.log('STEP 9: Supplier form has no Currency field (PO currency comes from the item lines):', !doc.getElementById('f_currency') && !doc.getElementById('f_rating') && !doc.getElementById('f_leadTime') && !doc.getElementById('f_authorizedDistributor'));
 
   /* ---------- Currency now available on Quotation line items ---------- */
   const custId = await win.DB.dbAdd('customers', { customerNo: 'CUST-00001', companyName: 'Test Co.', status: 'Active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });

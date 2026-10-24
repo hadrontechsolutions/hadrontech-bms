@@ -42,7 +42,7 @@ async function main() {
     ['Air compressor, 25 HP', 1, 'pc', 1500000, 'PHP', 0, 1, 15],
     ['Prefilter housing', 2, 'pc', 30000, 'PHP', 0, 1, 20],
     ['Pneumatic auto-drain', 4, 'pc', 12000, 'PHP', 6000, 4, 25],
-    ['Imported dryer', 1, 'set', 800, 'USD', 120, 1, 30],
+    ['Imported dryer', 1, 'set', 800, 'PHP', 120, 1, 30],
     ['Piping materials, valves, fittings as detailed below', 1, 'lot', 300000, 'PHP', 0, 1, 25],
     ['GI pipe 2in', 60, 'm', 0, 'PHP', 0, 1, 0],
     ['Ball valve', 8, 'pc', 0, 'PHP', 0, 1, 0],
