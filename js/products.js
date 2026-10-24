@@ -143,9 +143,18 @@ Entities.defineEntity({
   afterNumber: (obj) => { if (obj.type === 'Project Package') pkgAssignComponentNumbers(obj); },
   // A project package carries its cost/price on its components, so the single-item fields are not shown on its page.
   detailHiddenFields: (r) => r.type === 'Project Package' ? ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'countryOfOrigin'] : [],
-  beforeSave: (obj, form, orig) => {
+  beforeSave: async (obj, form, orig) => {
     if (orig) obj.type = orig.type; // a record's type is fixed once created (it decides its numbering)
-    if (obj.type !== 'Project Package') return null;
+    if (obj.type !== 'Project Package') {
+      // Safety: a product's currency must be the currency we pay its supplier in (set on the Supplier page).
+      const sup = obj.defaultSupplierId ? await DB.dbGet('suppliers', Number(obj.defaultSupplierId)) : null;
+      if (sup && sup.currency && obj.currency && obj.currency !== sup.currency) {
+        const msg = `Not saved: ${sup.companyName} is paid in ${sup.currency}, but this product's currency is ${obj.currency}.\n\nChange the product's Currency to ${sup.currency} (and enter its cost in ${sup.currency}), or choose the correct supplier. If this supplier now uses ${obj.currency}, update the currency on the Supplier page first.`;
+        alert(msg);
+        return `Not saved — the product currency (${obj.currency}) must match ${sup.companyName}'s currency (${sup.currency}).`;
+      }
+      return null;
+    }
     const comps = (form._pkgComps || []).filter(c => String(c.description || '').trim())
       .map(c => Object.assign({}, c, { description: String(c.description).trim() }));
     if (!obj.defaultSupplierId) return 'Choose the supplier who quotes this project package.';

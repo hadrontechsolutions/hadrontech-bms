@@ -106,6 +106,7 @@ function fieldInputHTML(f, value) {
         `</select>`;
     case 'currency-select': // options resolved from Settings → Currencies & Exchange Rates
       return `<select id="${id}" name="${f.name}" ${req}>` +
+        (f.blankOption ? `<option value="" ${v ? '' : 'selected'}>— Choose currency —</option>` : '') +
         (f._resolvedOptions || [{ value: 'PHP', label: 'PHP' }]).map(o => `<option value="${o.value}" ${o.value === v ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('') +
         `</select>`;
     case 'checkbox':

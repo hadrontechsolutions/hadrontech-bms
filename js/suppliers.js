@@ -29,6 +29,7 @@ Entities.defineEntity({
     { name: 'tin', label: 'Tax Identification Number (TIN)', type: 'text' },
     { name: 'address', label: 'Address', type: 'textarea' },
     { name: 'country', label: 'Country', type: 'text' },
+    { name: 'currency', label: 'Currency We Pay This Supplier In', type: 'currency-select', required: true, blankOption: true },
     { name: 'brandsSupplied', label: 'Brands Supplied', type: 'text' },
     { name: 'productCategories', label: 'Product Categories', type: 'text' },
     { name: 'paymentTerms', label: 'Payment Terms', type: 'text' },
@@ -36,6 +37,14 @@ Entities.defineEntity({
     { name: 'status', label: 'Status', type: 'select', options: ['Active', 'Inactive'] },
     { name: 'notes', label: 'Notes', type: 'textarea' }
   ],
+  /** Safety: if the supplier's currency is changed, products that name this supplier but use another currency would no longer match. */
+  beforeSave: async (obj, form, orig) => {
+    if (!orig || !obj.currency || obj.currency === orig.currency) return null;
+    const mismatched = (await DB.dbGetAll('products')).filter(p => !p.archived && p.type !== 'Project Package' && String(p.defaultSupplierId) === String(orig.id) && p.currency && p.currency !== obj.currency);
+    if (!mismatched.length) return null;
+    const names = mismatched.slice(0, 5).map(p => `• ${p.itemNo} (${p.currency})`).join('\n') + (mismatched.length > 5 ? `\n…and ${mismatched.length - 5} more` : '');
+    return confirm(`${mismatched.length} product(s) supplied by ${obj.companyName} are priced in a different currency than ${obj.currency}:\n\n${names}\n\nThey will not be changed, but they will not match this supplier until you update them (the product will be blocked from saving until it matches). Save the new currency anyway?`) ? null : 'Not saved — the supplier currency was left as it was.';
+  },
   checkRelatedBeforeDelete: async (record) => {
     const po = await DB.dbQueryIndex('supplierPOs', 'supplierId', record.id);
     return po.length;

@@ -17,7 +17,7 @@ async function seedIfEmpty() {
     email: 'maria.santos@example.com', telephone: '(046) 123-4567', mobile: '0917-000-1111',
     billingAddress: 'Km 30 National Highway, General Trias, Cavite', shippingAddress: 'Same as billing',
     country: 'Philippines', tin: '000-111-222-000', vatStatus: 'VAT Registered', defaultCurrency: 'PHP',
-    paymentTerms: '50% down / 50% before delivery', incoterms: 'EXW', creditLimit: 500000,
+    currency: 'USD', paymentTerms: '50% down / 50% before delivery', incoterms: 'EXW', creditLimit: 500000,
     salesperson: 'Admin', industry: 'Water Treatment', status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
@@ -36,7 +36,7 @@ async function seedIfEmpty() {
     contactPerson: 'John Lim', email: 'john.lim@example.com', telephone: '+65 6000 0000',
     website: 'https://www.grundfos.com', address: 'Singapore', country: 'Singapore',
     brandsSupplied: 'Grundfos', productCategories: 'Centrifugal Pumps, Submersible Pumps',
-    paymentTerms: '30% down / 70% before shipment', incoterms: 'FOB',
+    currency: 'USD', paymentTerms: '30% down / 70% before shipment', incoterms: 'FOB',
     status: 'Active', notes: 'Sample record — safe to delete.'
   }, by));
 
