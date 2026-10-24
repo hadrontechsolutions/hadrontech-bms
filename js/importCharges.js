@@ -9,7 +9,7 @@
    - Only the ITEM cost (unit cost x qty) counts as the declared goods value. Freight is left out.
    - The ₱10,000 limit is tested on goods value only (FOB/FCA: no freight, no insurance). Above it, duty and
      import VAT are worked out on the CUSTOMS VALUE = goods + international freight (the BMS has no insurance field),
-     duty at each product's own rate (or the unverified default), VAT on customs value + duty + processing charge.
+     duty at the default estimated rate from Settings, VAT on customs value + duty + processing charge.
    - Item cost is converted with the rate already on the quotation line (the BMS rate, which is
      deliberately set higher as a safety allowance).
    - All foreign lines on ONE quotation are added together (parcels are combined at customs).
@@ -25,7 +25,7 @@ var IMPORT_CHARGE_DEFAULTS = {
   govFees: 140,            // Customs Documentary Stamp 100 + BIR DST 30 + Legal Research Fund 10
   brokerage: 112.5,        // courier brokerage / disbursement fee per shipment
   brokerageVatPct: 12,     // VAT on the brokerage (service charge)
-  dutyPct: 5,              // DEFAULT estimated customs duty % (unverified budgeting figure; a product's own Customs Duty % overrides it)
+  dutyPct: 5,              // estimated customs duty % applied to all goods above the limit (unverified budgeting figure)
   dutyVerified: false,     // tick in Settings only once the default rate has been confirmed
   importVatPct: 12,        // import VAT on landed value over the limit
   // processing charge for goods above the limit: [up to goods value (PHP), charge (PHP)]
@@ -64,12 +64,8 @@ function importFreightPHP(l, quoteCurrency, settings) {
   const rate = (quoteCurrency === 'PHP' ? Number(l.costExchangeRate) : 0) || referenceRate(ccy, 'PHP', settings) || 1;
   return perUnit * (Number(l.qty) || 0) * rate;
 }
-/** Duty % that applies to a line: the product's own rate if it has one, otherwise the default estimate. */
-function importDutyRate(l, cfg) {
-  const own = l.dutyPct;
-  if (own !== '' && own != null && Number(own) >= 0) return { pct: Number(own), own: true };
-  return { pct: cfg.dutyPct, own: false };
-}
+/** Duty % for a line: always the default estimate from Settings > Import Charges. */
+function importDutyRate(l, cfg) { return { pct: cfg.dutyPct, own: false }; }
 
 /** Estimate for a set of lines. Returns { goodsPHP, totalPHP, parts:[{label,amount}], perLinePHP:{lineId:amount}, mode }. */
 function estimateImportCharges(lines, quoteCurrency, settings) {

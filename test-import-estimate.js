@@ -30,10 +30,8 @@ const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
   out('4b Limit is tested on goods only (9,000 goods + freight stays a small shipment, no duty)', e.mode === 'small' && e.freightPHP === 0);
   e = win.estimateImportCharges([L({ unitCost: 2000, costExchangeRate: 9, estimatedFreightCost: 200 })], 'PHP', settings);
   out('4c Above the limit duty is on goods + freight: customs value 19,800, duty 990', near(e.customsValuePHP, 19800) && e.parts.some(p => /duty/i.test(p.label) && near(p.amount, 990)));
-  e = win.estimateImportCharges([L({ unitCost: 2000, costExchangeRate: 9, dutyPct: 0 })], 'PHP', settings);
-  out('4d A product with its own rate (0%) is used and is not flagged unverified; no duty line', !e.unverified && !e.parts.some(p => /^Import duty/i.test(p.label)));
-  e = win.estimateImportCharges([L({ lineId: 'p', unitCost: 1000, costExchangeRate: 9, dutyPct: 10 }), L({ lineId: 'q', unitCost: 1000, costExchangeRate: 9 })], 'PHP', settings);
-  out('4e Mixed rates: 10% on 9,000 + default 5% on 9,000 = duty 1,350, flagged (1 line on default)', e.parts.some(p => /duty/i.test(p.label) && near(p.amount, 1350)) && e.unverified && e.defaultDutyLines === 1);
+  e = win.estimateImportCharges([L({ lineId: 'p', unitCost: 1000, costExchangeRate: 9 }), L({ lineId: 'q', unitCost: 1000, costExchangeRate: 9 })], 'PHP', settings);
+  out('4e Every line uses the one default duty %: 5% on 18,000 = duty 900, flagged unverified', e.parts.some(p => /^Import duty/i.test(p.label) && near(p.amount, 900)) && e.unverified);
   e = win.estimateImportCharges([L({ unitCost: 2000, costExchangeRate: 9 })], 'PHP', { referenceRates: { HKD: 9 }, importCharges: { dutyVerified: true } });
   out('4f Ticking "default rate confirmed" in Settings removes the flag', !e.unverified);
   // 5 duty setting is used
@@ -77,10 +75,9 @@ const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
   win.location.hash = '#/settings'; await win.Router.resolveRoute(); await wait(30);
   const d = doc.getElementById('s_ic_dutyPct');
   out('13 Settings has an Import Charges tab with the duty % field', !!d && !!doc.querySelector('.settings-tab-btn[data-tab="imports"]') && d.value === '5' && !!doc.getElementById('s_ic_dutyVerified'));
-  // 14 Product has the Customs Duty % field; blank stays blank (means 'use the default'), 0 is a real 0%
+  // 14 Product form no longer has a duty field
   win.location.hash = '#/products/new'; await win.Router.resolveRoute(); await wait(30);
-  const df = doc.getElementById('f_dutyPct');
-  out('14 New Product form has a Customs Duty % field, blank by default', !!df && df.value === '');
+  out('14 Product form has no Customs Duty % field (the Settings default is used)', !doc.getElementById('f_dutyPct'));
   // 15 Detail page of a quotation using the default rate shows the unverified warning (above-limit goods)
   const big = Object.assign({}, q); delete big.id; big.quotationNo = 'BIG-1'; big.includeImportEstimate = true;
   big.lines = [Object.assign({}, q.lines[0], { lineId: 'big1', unitCost: 2000, costExchangeRate: 9, qty: 1, dutyPct: '' })];

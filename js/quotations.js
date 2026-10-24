@@ -923,7 +923,6 @@ async function renderQuoteForm(id) {
             // dropped, always left at the line's own blank/zero default instead.
             line.markupPercent = p.markupPercent || 0;
             line.leadTime = p.leadTime || '';
-            line.dutyPct = (p.dutyPct === '' || p.dutyPct == null) ? '' : Number(p.dutyPct);
             // Catalog freight is for a quantity (amount / 'covers qty' = per unit); the line stores TOTAL freight for the row.
             line.freightMode = 'total';
             line.priceOverridden = false;
@@ -976,11 +975,11 @@ async function renderQuoteForm(id) {
     const box = document.getElementById('importEstText');
     if (!est.goodsPHP) { box.innerHTML = '<span class="muted-text">No foreign-currency item cost on this quotation, so no import charges are expected.</span>'; return; }
     const php = n => formatMoney(n, 'PHP');
-    const warn = est.unverified ? `<div style="margin:4px 0; padding:4px 8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px;">⚠ <b>Unverified estimate:</b> ${est.defaultDutyLines} line(s) use the default duty of ${est.cfg.dutyPct}%, which is a budgeting figure, not the official rate. Enter the real Customs Duty % on the product once you know its HS code.</div>` : '';
+    const warn = est.unverified ? `<div style="margin:4px 0; padding:4px 8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px;">⚠ <b>Unverified estimate:</b> The duty is estimated at the default ${est.cfg.dutyPct}%, which is a budgeting figure, not the official rate. Update the default in Settings > Import Charges once your broker confirms the rate.</div>` : '';
     box.innerHTML = `${warn}Goods value for the ₱10,000 limit (item cost of foreign-currency lines only; freight and insurance not counted): <b>${php(est.goodsPHP)}</b>.${est.mode === 'large' ? `<br>Customs value for duty and import VAT (goods + freight ${php(est.freightPHP)}): <b>${php(est.customsValuePHP)}</b>.` : ''}<br>
       Estimated import charges: <b>${php(est.totalPHP)}</b>${cur !== 'PHP' ? ` (${formatMoney(est.inQuoteCurrency, cur)})` : ''} — ${est.on ? 'included in the Total Cost and Est. Gross Profit below.' : '<b>not included</b> in the profit below (box unticked).'}
       <details style="margin-top:3px;"><summary class="muted-text" style="cursor:pointer;">How this is worked out</summary><ul style="margin:4px 0 0 18px;">${est.parts.map(p => `<li>${escapeHtml(p.label)}: ${php(p.amount)}</li>`).join('')}</ul>
-      <div class="muted-text">${est.mode === 'small' ? `Goods are within the ${php(est.cfg.deMinimis)} limit, so no duty or import VAT.` : `Goods are above the ${php(est.cfg.deMinimis)} limit, so duty and import VAT apply. Duty uses each product's own Customs Duty %, or the default of ${est.cfg.dutyPct}% (change in Settings &gt; Import Charges).`} This is only an estimate; amounts can be changed in Settings &gt; Import Charges.</div></details>`;
+      <div class="muted-text">${est.mode === 'small' ? `Goods are within the ${php(est.cfg.deMinimis)} limit, so no duty or import VAT.` : `Goods are above the ${php(est.cfg.deMinimis)} limit, so duty and import VAT apply. Duty uses the default of ${est.cfg.dutyPct}% (change in Settings &gt; Import Charges).`} This is only an estimate; amounts can be changed in Settings &gt; Import Charges.</div></details>`;
   }
 
   function refreshTotals() {
@@ -1272,7 +1271,7 @@ async function renderQuoteDetail(id) {
   const dutyWarningHTML = importEst && importEst.unverified ? `
     <div class="card warning-card internal-only">
       ⚠ <b>Unverified customs duty rate.</b> This quotation's estimated import charges use the default duty of ${importEst.cfg.dutyPct}% on ${importEst.defaultDutyLines} line(s),
-      which is a budgeting figure, not a confirmed rate. Confirm the rate from the HS code (then enter it on the product) before this quotation is finalised.
+      which is a budgeting figure, not a confirmed rate. Confirm the rate with your broker (then update Settings > Import Charges) before this quotation is finalised.
     </div>` : '';
   const expiredWarningHTML = expiryInfo.state === 'expired' ? `
     <div class="card warning-card">

@@ -253,4 +253,4 @@ When adding a new store, or a meaningful new field (especially a status or a fin
 ## Estimated import charges
 `js/importCharges.js` (`estimateImportCharges`, `applyImportEstimate`) -> writes `line.importCharge` (PHP) -> `QuoteCalc.computeLine` adds it to `costTotal` -> quotation totals (`importEstimate`), Sales Order lines (copied), `soGrossProfit`, Order Profit "as ordered" cost, Distributions. Flag: `quotation.includeImportEstimate` (undefined = off for old records). Settings: `settings.importCharges`.
 
-Product field `dutyPct` (blank = use default; 0 = real 0%) is copied to the quotation line as `dutyPct`; `settings.importCharges.dutyPct` (default 5) and `dutyVerified` control the default and its unverified flag.
+The estimated customs duty is one default (`settings.importCharges.dutyPct`, default 5, flagged unverified until `dutyVerified` is ticked in Settings); there is no per-product duty field.
