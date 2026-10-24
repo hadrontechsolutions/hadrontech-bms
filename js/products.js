@@ -181,6 +181,25 @@ Entities.defineEntity({
       if (ccy) ccy.addEventListener('change', update);
       update();
     }
+    // Choosing a supplier fills in the Currency that supplier is paid in (the same currency the save check requires).
+    const supSel = form.querySelector('#f_defaultSupplierId');
+    if (supSel && ccy) {
+      const note = document.createElement('div');
+      note.id = 'supplierCurrencyNote'; note.className = 'muted-text'; note.style.cssText = 'font-size:11px; margin-top:4px;';
+      ccy.parentNode.appendChild(note);
+      supSel.addEventListener('change', async () => {
+        note.textContent = '';
+        if (!supSel.value) return;
+        const sup = await DB.dbGet('suppliers', Number(supSel.value));
+        if (!sup || !sup.currency) return;
+        if ([...ccy.options].some(o => o.value === sup.currency)) {
+          if (ccy.value !== sup.currency) { ccy.value = sup.currency; ccy.dispatchEvent(new Event('input', { bubbles: true })); ccy.dispatchEvent(new Event('change', { bubbles: true })); }
+          note.textContent = `Currency set to ${sup.currency} — the currency ${sup.companyName} is paid in.`;
+        } else {
+          note.textContent = `${sup.companyName} is paid in ${sup.currency}, which is not in Settings > Currencies & Exchange Rates yet. Add it there first.`;
+        }
+      });
+    }
     setupProjectPackageForm(form, record);
   },
   checkRelatedBeforeDelete: async (record) => {

@@ -26,6 +26,11 @@ const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
   win.location.hash = '#/suppliers/' + sup; await win.Router.resolveRoute(); await wait(40);
   const txt = doc.getElementById('content').textContent.replace(/\s+/g, ' ');
   out('5 Supplier page lists each PO in its own currency (HKD 1,085.00 not ₱ or $)', /HK\$\s?1,085\.00|HKD\s?1,085\.00/.test(txt) && !/NaN|undefined/.test(txt));
+  // 5b choosing a supplier on the Product form sets the currency automatically
+  win.location.hash = '#/products/new'; await win.Router.resolveRoute(); await wait(40);
+  { const sSel = doc.getElementById('f_defaultSupplierId'), cSel = doc.getElementById('f_currency');
+    const before = cSel.value; sSel.value = String(sup); sSel.dispatchEvent(new win.Event('change', { bubbles: true })); await wait(30);
+    out('5b Choosing an HKD supplier on a new Product sets its Currency to HKD and says so (was ' + before + ')', cSel.value === 'HKD' && /HKD/.test(doc.getElementById('supplierCurrencyNote').textContent)); }
   // 6-9 Product currency must match the supplier's currency
   let alerts = []; win.alert = m => alerts.push(m); let confirms = []; let confirmAnswer = false; win.confirm = m => { confirms.push(m); return confirmAnswer; };
   const set = (el, v, ev) => { el.value = v; el.dispatchEvent(new win.Event(ev || 'input', { bubbles: true })); };
