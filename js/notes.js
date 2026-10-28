@@ -27,19 +27,6 @@ const BALL_PARTIES = ['Us', 'Supplier', 'Customer', 'End-User'];
 const ACTIVITY_TYPES = ['Email sent', 'Email received', 'Phone / chat', 'Note'];
 const BALL_EXPLAIN = { 'Us': 'we need to act', 'Supplier': 'waiting for a supplier', 'Customer': 'waiting for the customer', 'End-User': 'waiting for the end-user' };
 
-/** "5 days ago" for a saved date, counted against today (the BMS clock). Empty when there is no date. */
-function daysAgoText(iso) {
-  if (!iso) return '';
-  const d = daysBetweenISO(String(iso).slice(0, 10), todayISO());
-  return d <= 0 ? 'today' : d === 1 ? '1 day ago' : `${d} days ago`;
-}
-/** A date followed by how many days ago it was. */
-function dateWithDaysAgo(iso) {
-  return iso ? `${formatDate(iso)} <span class="muted-text">· ${daysAgoText(iso)}</span>` : '—';
-}
-/** Supplier statuses where we are still waiting for the supplier to answer. */
-const SUPPLIER_WAITING_STATUSES = ['RFQ sent', 'Waiting for reply', 'Asked a clarification'];
-
 Router.route('/rfq-tracker', () => renderRfqList());
 Router.route('/rfq-tracker/new', () => renderRfqForm(null));
 Router.route('/rfq-tracker/new-note', () => renderGeneralNoteForm(null));
@@ -239,15 +226,7 @@ async function renderRfqList() {
       </div>
       <div id="rfqBasis" class="muted-text" style="margin-top:8px; line-height:1.6;"></div>
     </div>
-    <div class="card" style="padding:0;" id="rfqTableWrap"></div>
-    <div class="card" id="supEmailsCard">
-      <h3 class="section-title">Supplier emails — who we asked, status, and how long ago</h3>
-      <div class="page-actions" style="margin:0 0 8px; flex-wrap:wrap; gap:10px;">
-        <label style="font-size:12px;">Supplier status <select id="supEmailStatus"><option value="">All statuses</option><option value="__waiting">Still waiting for the supplier</option>${SUPPLIER_ENTRY_STATUSES.map(x => `<option>${escapeHtml(x)}</option>`).join('')}</select></label>
-      </div>
-      <div id="supEmailsBasis" class="muted-text" style="margin-bottom:8px; line-height:1.6;"></div>
-      <div id="supEmailsWrap"></div>
-    </div>`;
+    <div class="card" style="padding:0;" id="rfqTableWrap"></div>`;
 
   let ballFilter = '';
   const q = (id) => document.getElementById(id);
@@ -298,38 +277,11 @@ async function renderRfqList() {
     }).join('')}</tbody></table>`;
   }
 
-  /** Every supplier we asked for a price on an OPEN RFQ: one row per supplier email, stalest first. Internal, so hidden in Customer view. */
-  function drawSupplierEmails() {
-    const card = q('supEmailsCard');
-    if (q('rfqCustView').checked) { card.style.display = 'none'; return; }
-    card.style.display = '';
-    const cust = Number(q('rfqCustomer').value) || 0, st = q('supEmailStatus').value;
-    const rows = [];
-    all.filter(n => isRfq(n) && n.status !== 'Closed' && (!cust || n.customerId === cust)).forEach(n => (n.suppliers || []).forEach(s => {
-      if (st === '__waiting' ? !SUPPLIER_WAITING_STATUSES.includes(s.status) : (st && s.status !== st)) return;
-      const lastDate = s.lastUpdate || s.contactedDate || '';
-      const days = lastDate ? daysBetweenISO(String(lastDate).slice(0, 10), todayISO()) : -1;
-      rows.push({ n, s, lastDate, days });
-    }));
-    rows.sort((a, b) => b.days - a.days);
-    q('supEmailsBasis').innerHTML = `Showing <b>${rows.length}</b> supplier email${rows.length === 1 ? '' : 's'} from <b>open RFQs</b>${cust ? ' for <b>' + escapeHtml((custMap[cust] || {}).companyName || '') + '</b>' : ' for all customers'}, oldest last update first. “Days ago” counts from the date shown to <b>today (${formatDate(todayISO())})</b>. <span style="color:#b45309;">Amber</span> = still waiting for the supplier after 5 or more days since the last update; <span style="color:#b91c1c;">red</span> = 10 or more.`;
-    if (!rows.length) { q('supEmailsWrap').innerHTML = '<div class="empty-inline">No supplier emails match. Add suppliers inside an RFQ (“+ Add supplier”) and they appear here.</div>'; return; }
-    q('supEmailsWrap').innerHTML = `<table class="data-table compact"><thead><tr><th>Supplier</th><th>RFQ / Inquiry</th><th>Customer</th><th>Our email subject to them</th><th>Status</th><th>Emailed on</th><th>Last update</th></tr></thead><tbody>${rows.map(({ n, s, lastDate, days }) => {
-      const waiting = SUPPLIER_WAITING_STATUSES.includes(s.status);
-      const colour = waiting && days >= 10 ? '#b91c1c' : waiting && days >= 5 ? '#b45309' : '';
-      const lastCell = lastDate ? `${formatDate(lastDate)} <span style="${colour ? 'color:' + colour + '; font-weight:700;' : 'color:var(--muted);'}">· ${daysAgoText(lastDate)}</span>` : '—';
-      return `<tr class="clickable-row" data-hash="/rfq-tracker/${n.id}"><td><b>${escapeHtml(s.name)}</b></td><td>${escapeHtml(n.referenceEmail || n.noteNo || '—')}</td><td>${escapeHtml(custName(n))}</td><td>${escapeHtml(s.emailRef || '—')}</td><td>${escapeHtml(s.status)}</td><td>${s.contactedDate ? dateWithDaysAgo(s.contactedDate) : '<span class="muted-text">Not emailed yet</span>'}</td><td>${lastCell}</td></tr>`;
-    }).join('')}</tbody></table>`;
-  }
-  q('supEmailStatus').addEventListener('change', drawSupplierEmails);
-  ['rfqCustomer', 'rfqCustView'].forEach(id => q(id).addEventListener('change', drawSupplierEmails));
-
   ['rfqShow', 'rfqCustomer', 'rfqCustView'].forEach(id => q(id).addEventListener('change', draw));
   q('rfqSearch').addEventListener('input', debounce(draw, 200));
   document.querySelectorAll('.ball-card').forEach(b => b.onclick = () => { ballFilter = ballFilter === b.dataset.ball ? '' : b.dataset.ball; if (ballFilter && q('rfqShow').value !== 'open' && q('rfqShow').value !== 'rfq') q('rfqShow').value = 'open'; draw(); });
   q('btnNewRfq').onclick = () => Router.navigate('/rfq-tracker/new');
   q('btnNewGeneral').onclick = () => Router.navigate('/rfq-tracker/new-note');
-  drawSupplierEmails();
   q('btnPrintCust').onclick = () => {
     const rows = filtered().filter(isRfq).sort((a, b) => (b.date || '').localeCompare(a.date || '')); const cust = Number(q('rfqCustomer').value);
     printCustomerUpdate(rows.map(n => ({ n, qt: quoteOf(n) })), cust ? (custMap[cust] || {}).companyName : '', custName);
@@ -393,10 +345,10 @@ async function renderRfqDetail(id) {
 
     <div class="card">
       <h3 class="section-title">Suppliers asked for a price</h3>
-      ${note.suppliers.length ? `<table class="data-table compact"><thead><tr><th>Supplier</th><th>Our email subject to them</th><th>Status</th><th>First emailed (days ago)</th><th>Last update (days ago)</th><th></th></tr></thead><tbody>${note.suppliers.map(s => `<tr>
+      ${note.suppliers.length ? `<table class="data-table compact"><thead><tr><th>Supplier</th><th>Our email subject to them</th><th>Status</th><th>First contacted</th><th>Last update</th><th></th></tr></thead><tbody>${note.suppliers.map(s => `<tr>
         <td><b>${escapeHtml(s.name)}</b></td><td>${escapeHtml(s.emailRef || '—')}</td>
         <td><select class="selSupStatus" data-sid="${s.id}">${SUPPLIER_ENTRY_STATUSES.map(x => `<option ${x === s.status ? 'selected' : ''}>${escapeHtml(x)}</option>`).join('')}</select></td>
-        <td>${dateWithDaysAgo(s.contactedDate)}</td><td>${dateWithDaysAgo(s.lastUpdate || s.contactedDate)}</td>
+        <td>${s.contactedDate ? formatDate(s.contactedDate) : '—'}</td><td>${formatDate(s.lastUpdate || s.contactedDate)}</td>
         <td style="white-space:nowrap;"><button class="btn-line btn-sm btnSupLog" data-sid="${s.id}">Log activity</button> <button class="btn-line btn-sm btnSupDel" data-sid="${s.id}" title="Remove this supplier from the RFQ">✕</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted-text">No supplier added yet. Add each supplier you email for this RFQ so you can see who has replied.</p>'}
       <div id="supAddHost" style="margin-top:12px;"></div>
       ${closed ? '' : '<div class="btn-row" style="margin-top:10px;"><button class="btn-line btn-sm" id="btnAddSupplier">+ Add supplier</button></div>'}
