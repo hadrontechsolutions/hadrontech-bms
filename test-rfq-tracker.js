@@ -30,25 +30,25 @@ async function main() {
   ok('4 RFQ saved with kind, number, reference, end-user, status New, ball with Us', notes.length === 1 && n.kind === 'RFQ' && /^HT-RFQ-\d{4}-\d{4}$/.test(n.noteNo) && n.referenceEmail === REF && n.endUser === 'Onsemi Cebu Fab 2' && n.status === 'New' && n.ballWith === 'Us');
   ok('5 detail page shows reference as the heading', doc.querySelector('h1.rfq-ref-title')?.textContent === REF);
 
-  doc.getElementById('btnAddSupplier').click(); await wait(30);
-  doc.getElementById('sa_supplier').value = String(sup1); doc.getElementById('sa_ref').value = 'RFQ – Box with Roller Cart';
-  doc.getElementById('sa_save').click(); await wait(150);
+  ok('6 the old "Suppliers asked for a price" section is gone (no supplier dropdown, no Add supplier button)', !doc.getElementById('btnAddSupplier') && !doc.getElementById('act_sup') && !/Suppliers asked for a price/.test(doc.getElementById('content').textContent));
+  // log an email to a supplier by choosing who has the ball
+  doc.getElementById('act_type').value = 'Email sent'; doc.getElementById('act_type').dispatchEvent(new win.Event('change'));
+  doc.getElementById('act_ball').value = 'Supplier'; doc.getElementById('act_text').value = 'Asked Roller Cart Mfg for a price - RFQ – Box with Roller Cart';
+  doc.getElementById('actForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   n = (await win.DB.dbGetAll('notes'))[0];
-  ok('6 supplier added, status Sourcing, ball moved to Supplier', n.suppliers.length === 1 && n.suppliers[0].emailRef === 'RFQ – Box with Roller Cart' && n.status === 'Sourcing' && n.ballWith === 'Supplier');
-  ok('7 supplier subject visible on detail', doc.getElementById('content').textContent.includes('RFQ – Box with Roller Cart'));
+  ok('7 logging an email with the ball on Supplier moves the RFQ to Sourcing and the ball to Supplier', n.status === 'Sourcing' && n.ballWith === 'Supplier' && doc.getElementById('content').textContent.includes('RFQ – Box with Roller Cart'));
 
   ok('8a no redundant "With (who it involves)" field', !doc.getElementById('act_party') && !doc.getElementById('content').textContent.includes('who it involves'));
-  doc.getElementById('act_sup').value = n.suppliers[0].id;
   doc.getElementById('act_type').value = 'Email received'; doc.getElementById('act_type').dispatchEvent(new win.Event('change'));
   ok('8 email received defaults ball to Us', doc.getElementById('act_ball').value === 'Us');
   doc.getElementById('act_text').value = 'Supplier asks what wheel size is needed.';
   doc.getElementById('actForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   n = (await win.DB.dbGetAll('notes'))[0];
-  ok('9 activity logged and ball is back with Us', n.activity.length >= 3 && n.activity.at(-1).text.includes('wheel size') && n.ballWith === 'Us' && n.ballSupplierEntryId === '');
+  ok('9 activity logged and ball is back with Us', n.activity.length >= 3 && n.activity.at(-1).text.includes('wheel size') && n.ballWith === 'Us');
 
   // Ball to End-User
   doc.getElementById('act_type').value = 'Email sent'; doc.getElementById('act_type').dispatchEvent(new win.Event('change'));
-  doc.getElementById('act_sup').value = ''; doc.getElementById('act_ball').value = 'End-User';
+  doc.getElementById('act_ball').value = 'End-User';
   doc.getElementById('act_text').value = 'Asked end-user for wheel size.';
   doc.getElementById('actForm').dispatchEvent(new win.Event('submit', { cancelable: true })); await wait(150);
   n = (await win.DB.dbGetAll('notes'))[0];
@@ -65,7 +65,7 @@ async function main() {
 
   doc.getElementById('rfqCustView').checked = true; doc.getElementById('rfqCustView').dispatchEvent(new win.Event('change')); await wait(30);
   const t = doc.getElementById('rfqTableWrap').textContent;
-  ok('14 customer view shows reference + hides supplier name and internal text', t.includes(REF) && !t.includes('Roller Cart Mfg') && !t.includes('wheel size') && !t.includes('Supplier'));
+  ok('14 customer view shows reference + hides internal text', t.includes(REF) && !t.includes('Roller Cart Mfg') && !t.includes('wheel size') && !t.includes('Supplier'));
   let printed = ''; win.printShell = (title, body) => { printed = title + body; };
   doc.getElementById('btnPrintCust').click(); await wait(100);
   ok('15 customer print has reference, hides supplier', printed.includes(REF) && !printed.includes('Roller Cart Mfg') && !printed.includes('RFQ – Box'));
@@ -97,7 +97,7 @@ async function main() {
   // Search + CSV
   let dl = null; win.downloadFile = (nm, c) => { dl = { nm, c }; };
   await go('#/settings/backup'); doc.querySelector('[data-csv="notes"]').click(); await wait(40);
-  ok('24 CSV has reference, end-user, supplier', dl && dl.c.includes(REF) && dl.c.includes('Onsemi Cebu Fab 2') && dl.c.includes('Roller Cart Mfg'));
+  ok('24 CSV has reference, end-user and the Emails Sent column', dl && dl.c.includes(REF) && dl.c.includes('Onsemi Cebu Fab 2') && dl.c.includes('Emails Sent'));
   await go('#/search'); const si = doc.getElementById('globalSearchInput'); si.value = '35066'; si.dispatchEvent(new win.Event('input')); await wait(300);
   ok('25 global search finds RFQ by reference', doc.getElementById('searchResults').textContent.includes('35066'));
 

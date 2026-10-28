@@ -16,7 +16,7 @@ const { JSDOM } = require('jsdom'); require('fake-indexeddb/auto');
   const set = (el, v, ev) => { el.value = v; el.dispatchEvent(new win.Event(ev || 'change', { bubbles: true })); };
   await go();
   const card = () => [...doc.querySelectorAll('.card')].find(c => /Emails sent for this RFQ/.test(c.textContent));
-  out('1 RFQ page has an "Emails sent for this RFQ" section with + Add email, and the Suppliers section is back as before', !!card() && !!doc.getElementById('btnAddEmail') && /Suppliers asked for a price/.test(doc.getElementById('content').textContent) && /First contacted/.test(doc.getElementById('content').textContent) === false);
+  out('1 RFQ page has an "Emails sent for this RFQ" section with + Add email, and no Suppliers asked for a price section', !!card() && !!doc.getElementById('btnAddEmail') && !/Suppliers asked for a price/.test(doc.getElementById('content').textContent));
   doc.getElementById('btnAddEmail').click(); await wait(20);
   out('2 The add form has only text boxes and a date (no dropdown)', !!doc.getElementById('em_text') && !!doc.getElementById('em_status') && doc.getElementById('em_date').type === 'date' && !doc.querySelector('#emAddHost select'));
   set(doc.getElementById('em_text'), 'ANSAC Technology — RFQ level transmitter', 'input'); set(doc.getElementById('em_status'), 'Awaiting reply', 'input'); set(doc.getElementById('em_date'), iso(12), 'change');
