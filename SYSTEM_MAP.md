@@ -261,3 +261,6 @@ Product form: picking a Default Supplier sets the product's Currency to that sup
 
 ## Customer record
 Customers no longer have Customer Type, Job Title, Mobile (use Telephone), VAT Status, Default Currency, Credit Limit or Industry. Currency lives only on Products and Suppliers (customer-side amounts are PHP): the customer page shows its totals in PHP and a new Customer PO no longer pre-fills a currency from the customer. The Customers list shows Email and Telephone. A customer with a quotation, Sales Order or Customer PO cannot be deleted. Older saved customers may still hold the removed fields in data; nothing reads them.
+
+## RFQ Tracker — supplier emails list
+The RFQ Tracker page has a "Supplier emails" card (`drawSupplierEmails` in `notes.js`): one row per supplier entry of every OPEN RFQ (`note.suppliers[]`: name, emailRef, status, contactedDate, lastUpdate), oldest last update first, with "N days ago" counted to today; waiting statuses turn amber at 5+ days and red at 10+. Hidden in Customer view. The RFQ detail supplier table shows the same "days ago" beside First emailed and Last update.
