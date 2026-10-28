@@ -27,6 +27,13 @@ const BALL_PARTIES = ['Us', 'Supplier', 'Customer', 'End-User'];
 const ACTIVITY_TYPES = ['Email sent', 'Email received', 'Phone / chat', 'Note'];
 const BALL_EXPLAIN = { 'Us': 'we need to act', 'Supplier': 'waiting for a supplier', 'Customer': 'waiting for the customer', 'End-User': 'waiting for the end-user' };
 
+/** Whole days from a saved date to today ("today", "1 day", "12 days"). */
+function daysSinceText(iso) {
+  if (!iso) return '—';
+  const d = daysBetweenISO(String(iso).slice(0, 10), todayISO());
+  return d <= 0 ? 'today' : d === 1 ? '1 day' : `${d} days`;
+}
+
 Router.route('/rfq-tracker', () => renderRfqList());
 Router.route('/rfq-tracker/new', () => renderRfqForm(null));
 Router.route('/rfq-tracker/new-note', () => renderGeneralNoteForm(null));
@@ -243,7 +250,7 @@ async function renderRfqList() {
       if (cust && !(isRfq(n) && n.customerId === cust)) return false;
       if (ballFilter && !(isRfq(n) && !closed && ballInfo(n).party === ballFilter)) return false;
       if (term) {
-        const hay = [n.noteNo, n.referenceEmail, custName(n), n.endUser, n.body, ...(n.suppliers || []).map(s => s.name + ' ' + s.emailRef), ...(n.activity || []).map(a => a.text)].join(' ').toLowerCase();
+        const hay = [n.noteNo, n.referenceEmail, custName(n), n.endUser, n.body, ...(n.suppliers || []).map(s => s.name + ' ' + s.emailRef), ...(n.emailLog || []).map(e => e.text + ' ' + (e.status || '')), ...(n.activity || []).map(a => a.text)].join(' ').toLowerCase();
         if (!hay.includes(term)) return false;
       }
       return true;
@@ -310,7 +317,7 @@ async function renderRfqDetail(id) {
   if (!isRfq(note)) return renderGeneralNoteDetail(note);
 
   const [customer, suppliers, quote] = await Promise.all([DB.dbGet('customers', note.customerId), DB.dbGetAll('suppliers'), note.quotationId ? DB.dbGetAll('quotations').then(all => quoteForRfq(note, all)) : null]);
-  note.suppliers = note.suppliers || []; note.activity = note.activity || [];
+  note.suppliers = note.suppliers || []; note.activity = note.activity || []; note.emailLog = note.emailLog || [];
   const info = getReminderInfo(note); const b = ballInfo(note); const st = effectiveRfqStatus(note, quote); const closed = note.status === 'Closed'; const trashed = isTrashed(note);
   Router.setBreadcrumb([{ label: 'RFQ Tracker', hash: '/rfq-tracker' }, { label: note.noteNo }]);
   const save = async (msg) => { note.updatedAt = new Date().toISOString(); await DB.dbPut('notes', note); if (msg) await DB.logActivity(msg); renderRfqDetail(id); };
@@ -341,6 +348,18 @@ async function renderRfqDetail(id) {
         <div class="detail-item"><div class="detail-label">Follow-up reminder</div><div class="detail-value">${escapeHtml(info.text)}${note.remindAfterDays !== '' && note.remindAfterDays != null && !closed ? ` <span class="muted-text">(${note.remindAfterDays} day${Number(note.remindAfterDays) === 1 ? '' : 's'} after the last activity)</span>` : ''}</div></div>
       </div>
       ${note.body ? `<div style="margin-top:12px;"><div class="detail-label">Background / internal notes</div><p style="white-space:pre-line; margin:4px 0 0;">${escapeHtml(note.body)}</p></div>` : ''}
+    </div>
+
+    <div class="card">
+      <h3 class="section-title">Emails sent for this RFQ — date and days since</h3>
+      ${note.emailLog.length ? `<table class="data-table compact"><thead><tr><th style="width:36%;">Email (who / subject)</th><th style="width:28%;">Status</th><th>Date emailed</th><th>Days since the date (to today, ${formatDate(todayISO())})</th><th></th></tr></thead><tbody>${note.emailLog.slice().sort((a, c) => String(a.date || '').localeCompare(String(c.date || ''))).map(e => `<tr>
+        <td><input type="text" class="emText" data-eid="${e.id}" value="${escapeHtml(e.text)}" style="width:100%; min-width:220px;" ${closed ? 'disabled' : ''}></td>
+        <td><input type="text" class="emStatus" data-eid="${e.id}" value="${escapeHtml(e.status || '')}" placeholder="e.g. Awaiting reply" style="width:100%; min-width:160px;" ${closed ? 'disabled' : ''}></td>
+        <td><input type="date" class="emDate" data-eid="${e.id}" value="${escapeHtml(e.date || '')}" ${closed ? 'disabled' : ''}></td>
+        <td><b>${daysSinceText(e.date)}</b></td>
+        <td>${closed ? '' : `<button class="btn-line btn-sm btnEmDel" data-eid="${e.id}" title="Remove this email from the list">✕</button>`}</td></tr>`).join('')}</tbody></table>` : '<p class="muted-text">No emails listed yet. Click “+ Add email” each time you email someone about this RFQ, then keep its status up to date.</p>'}
+      <div id="emAddHost" style="margin-top:12px;"></div>
+      ${closed ? '' : '<div class="btn-row" style="margin-top:10px;"><button class="btn-line btn-sm" id="btnAddEmail">+ Add email</button></div>'}
     </div>
 
     <div class="card">
@@ -385,6 +404,27 @@ async function renderRfqDetail(id) {
   document.querySelectorAll('.selSupStatus').forEach(sel => sel.onchange = async () => { const s = note.suppliers.find(x => x.id === sel.dataset.sid); s.status = sel.value; s.lastUpdate = todayISO(); await save(`Set ${s.name} status on ${note.noteNo} to ${s.status}`); });
   document.querySelectorAll('.btnSupDel').forEach(btn => btn.onclick = async () => { const s = note.suppliers.find(x => x.id === btn.dataset.sid); if (!confirm(`Remove ${s.name} from this RFQ? Log entries about it are kept.`)) return; note.suppliers = note.suppliers.filter(x => x.id !== s.id); if (note.ballSupplierEntryId === s.id) note.ballSupplierEntryId = ''; await save(`Removed supplier ${s.name} from ${note.noteNo}`); });
   document.querySelectorAll('.btnSupLog').forEach(btn => btn.onclick = () => { if (q('act_sup')) { q('act_sup').value = btn.dataset.sid; q('act_sup').dispatchEvent(new Event('change')); } q('act_text').focus(); q('actForm').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+
+  /* Emails list: plain text boxes + a date; "days since" is worked out from the date. */
+  const emSave = async (eid, patch, msg) => { const e = note.emailLog.find(x => x.id === eid); if (!e) return; Object.assign(e, patch); await save(msg); };
+  document.querySelectorAll('.emText').forEach(i => i.onchange = () => emSave(i.dataset.eid, { text: i.value.trim() || '(no text)' }, `Edited an email on ${note.noteNo}`));
+  document.querySelectorAll('.emStatus').forEach(i => i.onchange = () => emSave(i.dataset.eid, { status: i.value.trim() }, `Updated the status of an email on ${note.noteNo}`));
+  document.querySelectorAll('.emDate').forEach(i => i.onchange = () => { if (i.value) emSave(i.dataset.eid, { date: i.value }, `Changed the date of an email on ${note.noteNo}`); });
+  document.querySelectorAll('.btnEmDel').forEach(b => b.onclick = async () => { const e = note.emailLog.find(x => x.id === b.dataset.eid); if (!e || !confirm(`Remove “${e.text}” from this list?`)) return; note.emailLog = note.emailLog.filter(x => x.id !== e.id); await save(`Removed an email from ${note.noteNo}`); });
+  if (q('btnAddEmail')) q('btnAddEmail').onclick = () => {
+    q('emAddHost').innerHTML = `<div class="card" style="background:var(--bg-soft, #f6f7fa);"><div class="form-grid">
+      <div class="field"><label>Email (who / subject)</label><input type="text" id="em_text" placeholder="e.g. ANSAC Technology — RFQ level transmitter"></div>
+      <div class="field"><label>Status</label><input type="text" id="em_status" placeholder="e.g. Follow-up sent — awaiting reply"></div>
+      <div class="field"><label>Date emailed</label><input type="date" id="em_date" value="${todayISO()}"></div></div>
+      <div class="btn-row"><button class="btn-amber btn-sm" id="em_save">Add email</button><button class="btn-line btn-sm" id="em_cancel">Cancel</button></div></div>`;
+    q('em_text').focus();
+    q('em_cancel').onclick = () => { q('emAddHost').innerHTML = ''; };
+    q('em_save').onclick = async () => {
+      const text = q('em_text').value.trim(); if (!text) { toast('Type the email (who / subject).', 'err'); return; }
+      note.emailLog.push({ id: 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), text, status: q('em_status').value.trim(), date: q('em_date').value || todayISO() });
+      await save(`Added an email to ${note.noteNo}`);
+    };
+  };
 
   if (q('btnAddSupplier')) q('btnAddSupplier').onclick = () => {
     const used = new Set(note.suppliers.map(s => s.supplierId));
