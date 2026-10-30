@@ -141,6 +141,14 @@ Entities.defineEntity({
   ],
   counterFor: (obj) => obj.type === 'Project Package' ? 'projectPackage' : 'product',
   afterNumber: (obj) => { if (obj.type === 'Project Package') pkgAssignComponentNumbers(obj); },
+  allowDuplicate: true,
+  // A duplicated project package gets fresh component numbers under its own new package number.
+  prepareDuplicate: (copy) => {
+    if (copy.type === 'Project Package') {
+      copy.nextCompSeq = 1;
+      (copy.components || []).forEach(c => { c.compNo = ''; });
+    }
+  },
   // A project package carries its cost/price on its components, so the single-item fields are not shown on its page.
   detailHiddenFields: (r) => r.type === 'Project Package' ? ['category', 'manufacturer', 'brand', 'modelNo', 'uom', 'supplierListingUrl', 'supplierPartNo', 'estimatedFreightCost', 'freightCoversQty', 'standardCost', 'currency', 'standardPrice', 'markupPercent', 'countryOfOrigin'] : [],
   beforeSave: async (obj, form, orig) => {

@@ -127,7 +127,7 @@ js/router.js              Hash-based navigation (#/customers/12, etc.)
 js/entities.js             Generic list/form/detail engine (used by Customers/Suppliers/Products)
 js/customers.js            Customer fields + related-records panel
 js/suppliers.js            Supplier fields + related-records panel
-js/products.js             Product/Service fields, On Hand/Committed/Available stock tracking
+js/products.js             Product/Service fields, On Hand/Committed/Available stock tracking; Duplicate button (copy under the next item #)
 js/quotations.js           Quotation module: line items, calculations, revisions, status workflow
 js/customerPOs.js          Customer PO module
 js/salesOrders.js          Sales Order module + "create Supplier PO" grouping logic

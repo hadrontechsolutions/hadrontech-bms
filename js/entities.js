@@ -265,6 +265,7 @@ async function renderDetail(cfg, id) {
         ${record.archived
           ? `<button class="btn-line" id="btnUnarchive">Unarchive</button>`
           : `<button class="btn-line" id="btnArchive">Archive</button>`}
+        ${cfg.allowDuplicate ? `<button class="btn-line" id="btnDuplicate" title="Make an exact copy of this ${escapeHtml(cfg.label.toLowerCase())} under the next ${escapeHtml(cfg.label.toLowerCase())} number">Duplicate</button>` : ''}
         <button class="btn-danger" id="btnDelete">Delete</button>
       </div>
     </div>
@@ -311,6 +312,34 @@ async function renderDetail(cfg, id) {
     await DB.logActivity(`Restored ${cfg.label.toLowerCase()} ${record[cfg.titleField]}`);
     toast(`${cfg.label} restored.`);
     renderDetail(cfg, id);
+  };
+
+  // Duplicate: an exact copy of every field, saved under the NEXT number from the counter
+  // (never the number of the original, and never a number already used). Stock, quotations
+  // and other transactions belong to the original and are not copied.
+  const dupBtn = document.getElementById('btnDuplicate');
+  if (dupBtn) dupBtn.onclick = async () => {
+    if (dupBtn.disabled) return; // guards against a double-click creating two copies
+    if (!confirm(`Duplicate ${record[cfg.numberField]}?\n\nThis creates an exact copy under the next ${cfg.label.toLowerCase()} number. Stock and transaction history are not copied.`)) return;
+    dupBtn.disabled = true;
+    try {
+      const settings = await DB.getSettings();
+      const now = new Date().toISOString();
+      const copy = JSON.parse(JSON.stringify(record));
+      delete copy.id;
+      copy.archived = false;
+      copy.createdAt = now; copy.updatedAt = now;
+      copy.createdBy = settings.userName; copy.modifiedBy = settings.userName;
+      if (cfg.prepareDuplicate) cfg.prepareDuplicate(copy, record);
+      copy[cfg.numberField] = await DB.nextDocNumber(cfg.counterFor ? cfg.counterFor(copy) : cfg.counterName);
+      if (cfg.afterNumber) cfg.afterNumber(copy);
+      const newId = await DB.dbAdd(cfg.key, copy);
+      await DB.logActivity(`Duplicated ${cfg.label.toLowerCase()} ${record[cfg.numberField]} as ${copy[cfg.numberField]} — ${copy[cfg.titleField]}`);
+      toast(`Duplicated as ${copy[cfg.numberField]}.`);
+      Router.navigate(`/${cfg.key}/${newId}`);
+    } finally {
+      dupBtn.disabled = false;
+    }
   };
 
   document.getElementById('btnDelete').onclick = async () => {
