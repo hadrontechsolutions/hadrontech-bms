@@ -13,6 +13,7 @@
    - office-ready  (Office → BMS): send the live records
    - office-open   (Office → BMS): open a record by its number, e.g. HT-Q-2026-0044
    - office-goto   (Office → BMS): open a BMS page, e.g. /products/new
+   - office-fill   (Office → BMS): open New/Edit Product or Supplier with the fields filled in (not saved)
    ============================================================ */
 
 const OFFICE_STORES = ['customers', 'suppliers', 'products', 'quotations', 'customerPOs', 'salesOrders', 'supplierPOs',
@@ -78,6 +79,68 @@ function mountOffice(slot) {
 Router.route('/office', () => Router.navigate('/dashboard'));
 window.addEventListener('resize', officeSendSize);
 
+
+/* ---------- Office → BMS form: open New Product / New Supplier (or Edit) already filled in ----------
+   Fills the fields of the normal BMS form by their names. Nothing is saved: the person checks the
+   form and presses Save, which runs every normal BMS check (currency, duplicates, required fields). */
+let officePendingFill = null;
+const officeNorm = (v) => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+function officeSetField(form, name, value) {
+  const el = form.querySelector(`[name="${name}"]`);
+  if (!el) return { ok: false };
+  const before = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.tagName === 'SELECT') {
+    const want = officeNorm(value);
+    const opts = [...el.options];
+    const opt = opts.find(o => officeNorm(o.value) === want || officeNorm(o.textContent) === want)
+      || (want.length > 3 && opts.find(o => officeNorm(o.textContent).startsWith(want) || (officeNorm(o.textContent).length > 3 && want.startsWith(officeNorm(o.textContent)))));
+    if (!opt) return { ok: false };
+    el.value = opt.value;
+  } else if (el.type === 'checkbox') {
+    el.checked = /^(yes|true|y|1|authori[sz]ed)/i.test(String(value).trim());
+  } else {
+    el.value = String(value);
+  }
+  const after = el.type === 'checkbox' ? el.checked : el.value;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  const changed = String(before) !== String(after);
+  if (changed) { el.style.outline = '2px solid #e8a33d'; el.style.outlineOffset = '1px'; el.title = 'Filled in by the Office'; }
+  return { ok: true, changed };
+}
+function officeFillForm(form, m) {
+  const v = Object.assign({}, m.values);
+  if (v.supplier !== undefined) { v.defaultSupplierId = v.supplier; delete v.supplier; }   // product: supplier name → Default Supplier list
+  const first = ['type', 'defaultSupplierId'], last = ['currency'];
+  const keys = Object.keys(v).sort((a, b) => (first.includes(b) - first.includes(a)) || (last.includes(a) - last.includes(b)));
+  let changed = 0; const missed = [];
+  for (const k of keys) {
+    const r = officeSetField(form, k, v[k]);
+    if (!r.ok) missed.push(`${k.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).replace(/ (.)/g, (x, c) => ' ' + c.toLowerCase())}: ${v[k]}`); else if (r.changed) changed++;
+  }
+  const what = m.entity === 'products' ? 'product' : 'supplier';
+  const note = document.createElement('div');
+  note.className = 'office-fill-note';
+  note.style.cssText = 'grid-column:1/-1;margin:0 0 14px;padding:10px 14px;border-radius:8px;background:#fff6e5;border:1px solid #f0c27a;color:#6b4300;font-size:13px;line-height:1.5';
+  note.innerHTML =
+    `<b>Filled in by the Office</b> from the table you gave the Manager — ${changed} field${changed === 1 ? '' : 's'} ${m.id ? 'changed (highlighted)' : 'filled (highlighted)'}. ` +
+    `<b>Nothing is saved yet:</b> check the fields, then press Save.` +
+    (m.dupOf ? `<div style="margin-top:6px;color:#9b1c2e"><b>⚠ Possible duplicate of ${escapeHtml(m.dupOf)}.</b> You chose to create a new ${what}; make sure it really is different before saving.</div>` : '') +
+    (missed.length ? `<div style="margin-top:6px">Not filled — this form has no field or matching choice for: ${escapeHtml(missed.join(' · '))}. Put them in Notes if you want to keep them.</div>` : '') +
+    (m.productWaiting ? `<div style="margin-top:6px">After saving this supplier, go back to the Dashboard and give the Manager the product table again.</div>` : '');
+  form.insertBefore(note, form.firstChild);
+  window.scrollTo({ top: 0 });
+}
+async function officeWaitAndFill(m) {
+  const want = m.id ? `#/${m.entity}/${m.id}/edit` : `#/${m.entity}/new`;
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 80));
+    if (officePendingFill !== m || location.hash !== want) return;
+    const form = document.getElementById('entityForm');
+    if (form && form.querySelector('[name]')) { officePendingFill = null; officeFillForm(form, m); return; }
+  }
+}
+
 window.addEventListener('message', async (e) => {
   const f = document.getElementById('officeFrame');
   if (!f || e.source !== f.contentWindow) return;
@@ -86,6 +149,11 @@ window.addEventListener('message', async (e) => {
     if (m.type === 'office-height') {
       if (m.h > 0) f.style.height = Math.round(m.h) + 'px';
       if (!f.dataset.fitted) { f.dataset.fitted = '1'; setTimeout(officeSendSize, 300); }
+    } else if (m.type === 'office-fill' && ['products', 'suppliers'].includes(m.entity) && m.values && typeof m.values === 'object') {
+      const id = m.id != null && /^\d+$/.test(String(m.id)) ? Number(m.id) : null;
+      officePendingFill = Object.assign({}, m, { id });
+      Router.navigate(id ? `/${m.entity}/${id}/edit` : `/${m.entity}/new`);
+      officeWaitAndFill(officePendingFill);
     } else if (m.type === 'office-focus') {
       // a pop-up opened in the Office: bring the whole Office on screen (just below the top bar)
       const r = f.getBoundingClientRect(), bar = (document.querySelector('.topbar') || { offsetHeight: 56 }).offsetHeight;
@@ -105,4 +173,4 @@ window.addEventListener('message', async (e) => {
   }
 });
 
-window.Office = { officeData, officeRecordHash, mount: mountOffice };
+window.Office = { officeData, officeRecordHash, mount: mountOffice, fillForm: officeFillForm };

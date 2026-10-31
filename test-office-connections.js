@@ -59,6 +59,19 @@ async function main() {
   }
   ok(await win.Office.officeRecordHash('HT-Q-2026-9999') === null, 'unknown number opens nothing');
 
+  // Office → filled BMS form (nothing saved until Save)
+  const prodCount = (await win.DB.dbGetAll('products')).length;
+  win.location.hash = '#/products/new'; await win.Router.resolveRoute(); await wait(80);
+  win.Office.fillForm(doc.getElementById('entityForm'), { entity: 'products', values: { category: 'Push Carts', description: 'Fenced push cart', supplier: 'MyProjectorLamps', standardCost: '53', currency: 'HKD', leadTime: '4 weeks', notAField: 'x' }, dupOf: 'ITEM-00048' });
+  const fv = n => doc.querySelector(`#entityForm [name="${n}"]`).value;
+  ok(fv('description') === 'Fenced push cart' && fv('category') === 'Push Carts' && fv('standardCost') === '53' && fv('leadTime') === '4 weeks', 'New Product form is filled in');
+  ok(fv('defaultSupplierId') === String(sid), 'supplier is picked from the list by name');
+  const curOpts = [...doc.querySelectorAll('#entityForm [name="currency"] option')].map(o => o.value);
+  ok(curOpts.includes('HKD') ? fv('currency') === 'HKD' : /Currency: HKD/.test(doc.querySelector('.office-fill-note').textContent), 'currency is set (or listed as not filled when the BMS has no such currency)');
+  const fnote = doc.querySelector('.office-fill-note');
+  ok(fnote && /Nothing is saved yet/.test(fnote.textContent) && /Possible duplicate of ITEM-00048/.test(fnote.textContent) && /Not a field: x/.test(fnote.textContent), 'form says not saved, warns about the duplicate, lists what could not be filled');
+  ok((await win.DB.dbGetAll('products')).length === prodCount, 'filling the form saves nothing');
+
   // read-only: no write while collecting the data
   const writes = [];
   for (const f of ['dbAdd', 'dbPut', 'dbDelete']) { const orig = win.DB[f]; win.DB[f] = (...a) => { writes.push(f); return orig(...a); }; }

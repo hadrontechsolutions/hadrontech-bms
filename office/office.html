@@ -2068,8 +2068,8 @@ function renderProduct(parsed){
   const stops = checks.filter(c => c.lvl === 'stop').length;
   let h = '<div class="prodgrid"><div class="panel"><div><h3>BMS New Product form</h3><p class="sub">Filled from ' + rows + ' lines of ChatGPT’s table. Values are cleaned for the BMS (numbers only, “Leave blank” left empty).</p></div>' + formTable(PF, out, notes) + '<div class="pfoot">';
   if (stops) h += '<button class="btn primary" type="button" disabled>Fix the stop items first</button>';
-  else if (dup) h += '<button class="btn primary" type="button" data-save="update">Update ' + dup.itemNo + ' (recommended)</button><button class="btn" type="button" data-save="new">Preview as a new product anyway</button>';
-  else h += '<button class="btn primary" type="button" data-save="new">Preview as ' + nextItemNo() + '</button>';
+  else if (dup) h += '<button class="btn primary" type="button" data-save="update">Update ' + dup.itemNo + ' (recommended)</button><button class="btn" type="button" data-save="new">Create as a new product anyway</button>';
+  else h += '<button class="btn primary" type="button" data-save="new">Fill the New Product form in the BMS</button>';
   h += '<button class="btn" type="button" id="copyAll">Copy all fields</button></div></div>' + checksPanel(checks, blanksWithReason) + '</div><div id="prodDb"></div>';
   res.innerHTML = h;
   wireResult(res, checks, PF, out);
@@ -2093,8 +2093,8 @@ function renderSupplier(parsed){
   const stops = checks.filter(c => c.lvl === 'stop').length;
   let h = '<div class="prodgrid"><div class="panel"><div><h3>BMS New Supplier form</h3><p class="sub">Filled from ' + rows + ' lines of ChatGPT’s table.</p></div>' + formTable(SF, out, notes) + '<div class="pfoot">';
   if (stops) h += '<button class="btn primary" type="button" disabled>Fix the stop items first</button>';
-  else if (dup) h += '<button class="btn primary" type="button" data-save="update">Update ' + esc(dup[2] || 'existing') + ' (recommended)</button><button class="btn" type="button" data-save="new">Preview as a new supplier anyway</button>';
-  else h += '<button class="btn primary" type="button" data-save="new">Preview as ' + nextSupNo() + '</button>';
+  else if (dup) h += '<button class="btn primary" type="button" data-save="update">Update ' + esc(dup[2] || 'existing') + ' (recommended)</button><button class="btn" type="button" data-save="new">Create as a new supplier anyway</button>';
+  else h += '<button class="btn primary" type="button" data-save="new">Fill the New Supplier form in the BMS</button>';
   h += '<button class="btn" type="button" id="copyAll">Copy all fields</button></div></div>' + checksPanel(checks, blanksWithReason) + '</div><div id="prodDb"></div>';
   res.innerHTML = h;
   wireResult(res, checks, SF, out);
@@ -2112,6 +2112,7 @@ function previewTable(title, sub, cols, rows, shown, changed, isNew, dupOf){
   return h + '</tbody></table></div></div>';
 }
 function saveProduct(o, dup, dupOf){
+  if (window.__BMS_FILL) return window.__BMS_FILL('product', o, dup, dupOf, false);
   const sup = findSupplier(o.supplier);
   const rec = {itemNo: dup ? dup.itemNo : nextItemNo(), category:o.category || '', brand:o.brand || '', modelNo:o.modelNo || '', description:o.description || '', supplier: sup ? sup[0] : (o.supplier || ''),
     standardCost:o.standardCost || '', currency:o.currency || '', estimatedFreightCost:o.estimatedFreightCost || '', freightCoversQty:o.freightCoversQty || '', leadTime:o.leadTime || '', uom:o.uom || ''};
@@ -2131,6 +2132,7 @@ function saveProduct(o, dup, dupOf){
 }
 let lastSupplierPreview = '';
 function saveSupplier(o, dup, dupOf){
+  if (window.__BMS_FILL) return window.__BMS_FILL('supplier', o, dup, dupOf, !!pendingProduct);
   let rec;
   const changed = new Set();
   if (dup){ rec = dup; if (o.currency && o.currency !== dup[1]){ dup[1] = o.currency; changed.add('currency'); } if (o.country && o.country !== dup[3]){ dup[3] = o.country; changed.add('country'); } if (o.email && o.email !== dup[4]){ dup[4] = o.email; changed.add('email'); } if (o.contactPerson && o.contactPerson !== dup[5]){ dup[5] = o.contactPerson; changed.add('contact'); } }
@@ -3638,6 +3640,14 @@ packImg.src = PACK_SRC;
       catch (err){ console.error(err); document.body.insertAdjacentHTML('afterbegin', '<div style="background:#fde8e8;color:#8a1c1c;padding:10px 14px;font:14px system-ui">The Office could not read the BMS data: ' + String(err.message).replace(/</g, '&lt;') + '</div>'); }
     }
   });
+  /* hand a checked product / supplier to the BMS form: the BMS opens New (or Edit) and fills the fields */
+  window.__BMS_FILL = (kind, o, dup, dupOf, productWaiting) => {
+    const values = {};
+    for (const [k, v] of Object.entries(o || {})) if (v !== '' && v != null) values[k] = v;
+    const label = dup ? (kind === 'product' ? dup.itemNo : (dup[2] || dup[0])) : '';
+    window.parent.postMessage({type:'office-fill', entity: kind === 'product' ? 'products' : 'suppliers', id: dup && dup.id ? dup.id : null, label, values, dupOf: dupOf || null, productWaiting: !!productWaiting}, '*');
+    if (window.__toast) window.__toast('Opening ' + (dup ? label + ' in the BMS with the changes filled in' : 'the New ' + (kind === 'product' ? 'Product' : 'Supplier') + ' form, filled in') + ' — check it and press Save.');
+  };
   /* the scene is as large as the space below the BMS breadcrumb allows, so the whole Office shows with no scrolling */
   let avail = 0;
   const contentH = () => { const w = document.querySelector('.wrap'); return w ? Math.ceil(w.getBoundingClientRect().bottom + 6) : document.body.scrollHeight; };
