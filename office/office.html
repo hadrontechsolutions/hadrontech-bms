@@ -244,7 +244,7 @@ button.chip{cursor:pointer;font-weight:500;font-size:13px;padding:3px 10px}
 .mainbar{display:grid;gap:8px}
 .hint{margin:0;color:var(--muted);font-size:14px}
 dialog#dlg{width:min(880px, calc(100vw - 24px));max-height:88vh;padding:0;border:3px solid #1a1c2c;border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden}
-dialog#dlg::backdrop{background:rgba(26,28,44,.18)}
+dialog#dlg::backdrop{background:transparent}dialog#dlg{box-shadow:0 10px 30px rgba(26,28,44,.28)}
 dialog#dlg[open]{display:flex;flex-direction:column}
 .dlghead{display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--soft)}
 .dlghead h2{flex:1;min-width:0;font-size:19px}
