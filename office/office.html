@@ -319,7 +319,7 @@ dialog#dlg[data-look="glass"] .flist li{background:color-mix(in srgb, var(--soft
 
   <div class="mainarea">
     <div id="mainStage"></div>
-    <div class="mainbar" id="mainBar"><p class="hint">Click the <b>Manager</b> in his office to give him a task. He shows a yellow <b class="ex">!</b> when something is ready for you. Click any worker to see their character sheet.</p></div>
+    <div class="mainbar" id="mainBar"><p class="hint">Click the <b>Manager</b> in his office to give him a task. He shows a yellow <b class="ex">!</b> when something is ready for you. Click the <b>Secretary</b> for your reminders, or any other worker to see their character sheet.</p></div>
   </div>
   <dialog id="dlg" aria-labelledby="dlgTitle" data-look="cream">
     <div class="dlghead"><button type="button" class="btn" id="dlgBack">← Menu</button><h2 id="dlgTitle">Manager</h2><button type="button" class="btn" id="dlgClose" aria-label="Close">✕</button></div>
@@ -2246,7 +2246,7 @@ cv.addEventListener('click', e => {
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
   const u = UNITS.mgr;
   if (x > u.chairX - 10 && x < u.chairX + 22 && y > u.chairY - 22 && y < u.chairY + 24) openWorker('mgr');
-  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ if (k === 'sec' && remDue().length) openView('reminders'); else openSheet(k); break; } }
+  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ if (k === 'sec') openView('reminders'); else openSheet(k); break; } }
 });
 function section(box, title, sub){ const h = document.createElement('h3'); h.textContent = title; box.appendChild(h); if (sub){ const p = document.createElement('p'); p.className = 'sub'; p.textContent = sub; box.appendChild(p); } const ul = document.createElement('ul'); ul.className = 'flist'; box.appendChild(ul); return ul; }
 function renderInbox(){
@@ -2319,10 +2319,9 @@ const MENU = [
   {id:'rfq', title:'Review an RFQ & find suppliers', desc:'ChatGPT reviews the RFQ, searches suppliers and checks they\u2019re legit'},
   {id:'add', title:'Add a supplier or product', desc:'Paste ChatGPT’s table — supplier first, then product'},
   {id:'ops', title:'Orders, payments & deliveries', desc:'Supplier POs, late shipments, 100% advance, BIR invoices'},
-  {id:'how', title:'How is Hadrontech doing?', desc:'The Data Analyst’s review and the latest decisions'},
-  {id:'reminders', title:'My reminders', desc:'What the Secretary will remind you about, and on which day'}
+  {id:'how', title:'How is Hadrontech doing?', desc:'The Data Analyst’s review and the latest decisions'}
 ];
-const TITLES = {reminders:'My reminders', menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
+const TITLES = {reminders:'Secretary — your reminders', menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
 
 function openView(v){
   moveBack();
@@ -3737,11 +3736,11 @@ function reminderAnswer(text){
   if (!/\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/.test(L)){
     const open = REM.filter(r => !r.done).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
     if (!open.length) return 'You have no reminders. Tell me “remind me on Monday to …” and I’ll write it down.';
-    return 'Your reminders (' + open.length + '):\n' + open.map(r => '• ' + remWhen(r) + ' — ' + r.task + (r.links.length ? ' (' + r.links.join(', ') + ')' : '')).join('\n') + '\nOpen “My reminders” in the Manager’s menu to change or delete them.';
+    return 'Your reminders (' + open.length + '):\n' + open.map(r => '• ' + remWhen(r) + ' — ' + r.task + (r.links.length ? ' (' + r.links.join(', ') + ')' : '')).join('\n') + '\nClick the Secretary to change or delete them.';
   }
   const {r, found} = addReminder(text), n = daysUntil(r.date);
   return 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') + ':\n“' + r.task + '”'
-    + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. You can change the date in “My reminders”.')
+    + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. Click the Secretary to change the date.')
     + (r.links.length ? '\nI linked: ' + r.links.map(no => { const q = quoteByNo(no), f = BIZ.rfqs.find(x => x.no === no); return no + ' (“' + ((f && f.ref) || (q && q.ref) || '') + '”)'; }).join(', ') + '.' : '')
     + '\nOn that day you’ll see a 🔔 over my head. Click me to see it.';
 }
@@ -3752,7 +3751,7 @@ function remPrompt(r){
 }
 function secretarySays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('sec')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
 VIEWS.reminders = function(){
-  dlgTitle.textContent = 'My reminders';
+  dlgTitle.textContent = 'Secretary — your reminders';
   const due = remDue(), upcoming = REM.filter(r => !r.done && !due.includes(r)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))),
         done = REM.filter(r => r.done).sort((a, b) => String(b.done).localeCompare(String(a.done))).slice(0, 5);
   secretarySays(due.length ? '<b>You have ' + due.length + ' reminder' + (due.length > 1 ? 's' : '') + ' for today.</b> I’ve put the RFQs and quotes they’re about underneath.' : 'Nothing for today. ' + (upcoming.length ? 'Here’s what’s coming up.' : 'Tell the Manager “remind me on Monday to …”, or add one below.'));
