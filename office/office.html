@@ -9,7 +9,7 @@
 :root{
   --bg:#eef1f5; --surface:#ffffff; --ink:#1a1c2c; --muted:#566c86; --line:#cfd8e2; --soft:#f5f7fa;
   --accent:#ffcd75; --accent-ink:#1a1c2c; --outline:#1a1c2c; --link:#29366f;
-  --mgr:#b13e53; --sales:#257179; --purch:#3b5dc9; --bill:#5d275d; --books:#41a6f6; --recs:#ef7d57; --analyst:#38b764;
+  --mgr:#b13e53; --sales:#257179; --purch:#3b5dc9; --bill:#5d275d; --books:#41a6f6; --recs:#ef7d57; --analyst:#38b764; --sec:#c0577a;
   --urgent:#b13e53; --urgent-bg:#fbe3e7; --week:#8a5a00; --week-bg:#fff0cc; --fyi:#29366f; --fyi-bg:#e1eafb; --ok:#1f6b4a; --ok-bg:#dcf3e6;
   --s-busy:#ef7d57; --s-online:#38b764; --s-idle:#3b5dc9; --s-break:#566c86; --s-meet:#5d275d;
   --display:"Pixelify Sans", ui-monospace, "Courier New", monospace;
@@ -223,6 +223,8 @@ button{font:inherit;cursor:pointer}
 .dupwarn{border:2px solid var(--urgent);background:var(--urgent-bg)}.dupwarn h3{color:var(--urgent)}.dupwarn .pbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .pdb td.chg{font-weight:700;box-shadow:inset 0 -2px 0 #ef7d57}
 #prodStageSlot .scroller{border-width:3px}
+.donemark.bell{background:#fff6e5;font-size:clamp(9px,1.3cqw,15px);padding:0 .3cqw;animation:bellring 2.4s ease-in-out infinite}@keyframes bellring{0%,70%,100%{rotate:0deg}75%{rotate:-14deg}85%{rotate:12deg}}@media (prefers-reduced-motion: reduce){.donemark.bell{animation:none}}
+.remlist li.due{border-left:4px solid var(--sec)}.remlist .when{font-weight:700;color:var(--sec)}.remlist .links{margin:6px 0 0;padding-left:16px;font-size:13px}.remadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.remadd input[type=text]{flex:1 1 260px}
 .ex{display:inline-block;background:#ffcd75;color:#1a1c2c;border:2px solid #1a1c2c;border-radius:3px;padding:0 5px;font-family:var(--display);line-height:1.2}
 .inbox{display:grid;gap:10px;margin-top:10px}
 .inbox .whead{display:flex;gap:10px;align-items:center}
@@ -309,7 +311,7 @@ dialog#dlg[data-look="glass"] .flist li{background:color-mix(in srgb, var(--soft
   <header>
     <div>
       <h1><span>Hadrontech</span> Office</h1>
-      <p>Seven workers that check the BMS data every day. You only talk to the Manager: he hands your task to the person with the right skills and brings the result back to you.</p>
+      <p>Eight workers that check the BMS data every day. You only talk to the Manager: he hands your task to the person with the right skills and brings the result back to you.</p>
     </div>
     <div class="today">Today<b id="todayLbl"></b></div>
   </header>
@@ -603,9 +605,12 @@ const TEAM = {
     routine:['Comparing with last month…','Updating charts…','Looking for patterns…']},
   recs:{label:'Records & Backup', short:'RECORDS', color:'var(--recs)', role:'Data quality and BMS backups',
     look:{head:'girlR', hair:P.O, hairHi:P.R, skin:P.Y, skinSh:P.O, coat:P.N, coatSh:P.k, shirt:P.W, pants:P.D, shoes:P.k, skirt:true, long:true},
-    routine:['Checking the last backup…','Looking for duplicates…','Checking currencies…']}
+    routine:['Checking the last backup…','Looking for duplicates…','Checking currencies…']},
+  sec:{label:'Secretary', short:'SECRETARY', color:'var(--sec)', role:'Your reminders: what to do, on which day',
+    look:{head:'girlD', hair:P.R, hairHi:P.O, skin:P.Y, skinSh:P.O, coat:P.G, coatSh:P.T, shirt:P.W, pants:P.Q, shoes:P.k, skirt:true, long:true},
+    routine:['Checking your reminders…','Updating the calendar…','Filing notes…']}
 };
-const ORDER = ['mgr','sales','purch','bill','books','analyst','recs'];
+const ORDER = ['mgr','sales','purch','bill','books','analyst','recs','sec'];
 const STAFF_KEYS = ORDER.filter(k => k !== 'mgr');
 
 /* =====================================================================
@@ -1049,6 +1054,8 @@ function addUnit(key, ux, py, chair){ UNITS[key] = {key, kind:'cubicle', ux, py,
 addUnit('sales', 12, 82, 'chairG'); addUnit('purch', 52, 82, 'chairB');
 addUnit('bill', 112, 82, 'chairO'); addUnit('books', 152, 82, 'chairW');
 addUnit('analyst', 12, 138, 'chairY'); addUnit('recs', 52, 138, 'chairO');
+addUnit('sec', 112, 138, 'chairB');   // the Secretary sits where the lounge sofas used to be
+UNITS.spare = {key:'spare', kind:'cubicle', ux:152, py:138, chairX:159, chairY:145, stand:[164, A2], chair:'chairW', stack:0};   // empty desk beside her, ready for the next hire
 UNITS.mgr = {key:'mgr', kind:'boss', chairX:249, chairY:92, stand:[254, A1], chair:'chairD', stack:0};
 UNITS.guest = {key:'guest', kind:'guest', chairX:297, chairY:92, stand:[302, A1], chair:'chairD', stack:0};
 const SIDE_SPOT = [281, 124];
@@ -1193,7 +1200,6 @@ function buildBackground(){
   b.fillStyle = ws.top; b.fillRect(0, 0, W, 5); b.fillStyle = ws.topLine; b.fillRect(0, 5, W, 1);
   b.fillStyle = ws.board; b.fillRect(0, WALL - 4, W, 3); b.fillStyle = ws.boardLine; b.fillRect(0, WALL - 1, W, 1);
   b.fillStyle = 'rgba(145,193,209,.10)'; b.fillRect(229, WALL, W - 229, H - WALL);
-  b.fillStyle = '#8c4a2a'; b.fillRect(117, 158, 74, 30); b.fillStyle = '#e58a48'; b.fillRect(119, 160, 70, 26); b.fillStyle = '#c9703a'; for (let x = 123; x < 186; x += 6) b.fillRect(x, 162, 2, 22);
   const s = (n, x, y) => { const [sx, sy, w, h] = S[n]; b.drawImage(pack, sx, sy, w, h, x, y, w, h); };
   b.fillStyle = P.Q; b.fillRect(4, 8, 92, 11); b.fillStyle = P.O; b.fillRect(4, 18, 92, 1);
   s('window', 100, 18); s('window', 200, 18); s('calendar', 132, 24); b.drawImage(CHART, 184, 22);
@@ -1206,12 +1212,12 @@ const PROPS = [
   {b:62, d:() => { spr('tableL', 155, 46); spr('printer', 159, 40); printerFx(); spr('paperB', 170, 40); spr('boxB', 179, 41); }},
   {b:63, d:() => spr('plant', 213, 44)}, {b:63, d:() => spr('plant', 302, 44)}, {b:62, d:() => spr('binB', 234, 48)},
   {b:202, d:() => sofa('sofaOrange', 240, 186)}, {b:204, d:() => spr('plant', 298, 185)},
-  {b:178, d:() => sofa('sofaGreen', 120, 162)}, {b:178, d:() => sofa('sofaBlue', 156, 162)}, {b:210, d:() => spr('plant', 176, 191)},
+  {b:210, d:() => spr('plant', 176, 191)},
   {b:210, d:() => spr('binR', 6, 196)},
   {b:A1 - 15, d:() => glass(228, WALL, A1 - 15)}, {b:H, d:() => glass(228, A1 + 6, H)}
 ];
 function glass(x, y0, y1){ ctx.fillStyle = 'rgba(145,193,209,.32)'; ctx.fillRect(x - 1, y0, 4, y1 - y0); fill('#34465d', x - 2, y0, 1, y1 - y0); fill('#93a9bb', x + 3, y0, 1, y1 - y0); fill('#d6ebf2', x, y0 + 4, 1, Math.max(0, y1 - y0 - 8)); }
-const PARTITIONS = [[12, 82], [112, 82], [12, 138]];
+const PARTITIONS = [[12, 82], [112, 82], [12, 138], [112, 138]];
 function drawShell(px, py){ spr('partition', px, py); spr('post', px + 36, py + 3); fill(P.Q, px + 40, py + 17, 1, 14); fill(P.Q, px + 35, py + 30, 6, 1); }
 
 /* people */
@@ -1894,7 +1900,8 @@ const SKILLS = {
   bill:['payment','paid','pay ','invoice','bir','proforma','collect','balance','advance','receivable'],
   books:['expense','receipt','tax','bookkeeper','payslip','distribution','vat','3m','percentage tax','partner'],
   analyst:['report','analy','how are we','how is hadrontech','sales','profit','margin','trend','win rate','numbers','compare','review','performance'],
-  recs:['product','supplier','record','database','backup','duplicate','category','currency','clean up','cleanup','item-']
+  recs:['product','supplier','record','database','backup','duplicate','category','currency','clean up','cleanup','item-'],
+  sec:['remind','reminder','reminders','paalala','ipaalala','calendar','schedule']
 };
 const SKILL_VERBS = {
   sales:['Checking the RFQ Tracker…','Looking at the quotations…','Checking reference emails…','Writing it up…'],
@@ -1903,6 +1910,7 @@ const SKILL_VERBS = {
   books:['Sorting expenses…','Checking the bookkeeper pack…','Checking sales year to date…','Writing it up…'],
   analyst:['Pulling the numbers…','Comparing periods…','Looking for patterns…','Writing it up…'],
   recs:['Searching the records…','Checking for duplicates…','Checking currencies…','Writing it up…'],
+  sec:['Reading the date…','Finding the related RFQs and quotes…','Writing it in the calendar…'],
   mgr:['Thinking it over…','Checking the reports…','Writing my notes…']
 };
 const SKILL_RESULT = {
@@ -1912,10 +1920,12 @@ const SKILL_RESULT = {
   books:'I checked expenses and year-to-date figures for this. In the real BMS I’d show the totals for the exact period and anything the bookkeeper still needs.',
   analyst:'I ran the numbers for this. In the real BMS I’d show the figures for the exact dates, compared with the period before, plus 2–3 recommendations.',
   recs:'I checked the records for this. To add a new product or supplier, use the Add Supplier / Product tab: paste ChatGPT’s table and I’ll check it.',
+  sec:'I keep your reminders. Tell the Manager “remind me on Monday to …” and I’ll show a 🔔 over my head on that day.',
   mgr:'I looked at this myself. In the real BMS I’d pull the reports involved and give you my recommendation with the reasons.'
 };
 function routeRequest(text){
   const t = ' ' + text.toLowerCase() + ' ';
+  if (isReminderText(text)) return {k:'sec', why:'it’s a reminder — the Secretary keeps your reminders and shows a 🔔 on the day', think:'A reminder — that’s for the Secretary.'};
   const topic = /\bpa(y|id|yment)|invoice|\bbir\b|collect|proforma|balance/.test(t) ? 'bill'
     : /deliver|ship|arriv|supplier po|purchase order|tracking|\beta\b|freight|forwarder/.test(t) ? 'purch'
     : /profit|margin|markup|trend|win rate|how are we|how is hadrontech|compare|performance|how much (did|will|do|can|could|would) we (make|earn|gain|get)|\bearn|\bkita\b|kumita|tubo|income/.test(t) ? 'analyst'
@@ -1923,7 +1933,7 @@ function routeRequest(text){
     : /backup|duplicate|currency|record|database|clean ?up/.test(t) ? 'recs'
     : /priorit|focus|what should (i|we)|decide|today.?s plan/.test(t) ? 'mgr' : null;
   const JOB = {sales:'she keeps the RFQ Tracker and the quotations', purch:'he handles Supplier POs and deliveries', bill:'she tracks payments and invoices',
-    books:'he keeps the expenses and tax figures', analyst:'he has the numbers', recs:'she keeps the records clean', mgr:'it’s a decision about priorities'};
+    books:'he keeps the expenses and tax figures', analyst:'he has the numbers', recs:'she keeps the records clean', sec:'she keeps your reminders', mgr:'it’s a decision about priorities'};
   const docNo = text.match(/HT-(Q|RFQ|SO|PO)-\d{4}-\d{4}/i);
   if (typeof lookupRoute === 'function' && !/discount|lower (the )?price|best price|profit|margin|how much (did|will|do|can|could|would) we (make|earn)/i.test(t)){ const lr = lookupRoute(text); if (lr) return lr; }
   if (!docNo && typeof detectIntent === 'function'){
@@ -2216,7 +2226,8 @@ const MARKS = {};
 for (const k of ORDER){
   const m = document.createElement('button'); m.type = 'button'; m.className = 'donemark'; m.textContent = '!'; m.hidden = true;
   m.setAttribute('aria-label', 'The Manager has something for you'); ov.appendChild(m); MARKS[k] = m;
-  m.addEventListener('click', () => openView('new'));
+  m.addEventListener('click', () => openView(k === 'sec' ? 'reminders' : 'new'));
+  if (k === 'sec'){ m.textContent = '🔔'; m.classList.add('bell'); m.setAttribute('aria-label', 'The Secretary has a reminder for you today'); }
 }
 const ATTN = {};
 const unseenUrgent = () => F.filter(f => !f.done && f.sev === 'urgent' && !f.seen);
@@ -2225,7 +2236,7 @@ function refreshAttention(){
   for (const k of ORDER) ATTN[k] = 0;
   ATTN.mgr = REPORTS.filter(r => !r.seen).length;   // the \u201c!\u201d only shows for answers to what Gian asked or handed over
 }
-const markVisible = k => k === 'mgr' && M.seated === UNITS.mgr && ATTN.mgr > 0;
+const markVisible = k => k === 'mgr' ? M.seated === UNITS.mgr && ATTN.mgr > 0 : k === 'sec' ? remDue().length > 0 : false;
 let inboxKey = null;
 function openWorker(k){
   if (k !== 'mgr') return;
@@ -2235,7 +2246,7 @@ cv.addEventListener('click', e => {
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
   const u = UNITS.mgr;
   if (x > u.chairX - 10 && x < u.chairX + 22 && y > u.chairY - 22 && y < u.chairY + 24) openWorker('mgr');
-  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ openSheet(k); break; } }
+  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ if (k === 'sec' && remDue().length) openView('reminders'); else openSheet(k); break; } }
 });
 function section(box, title, sub){ const h = document.createElement('h3'); h.textContent = title; box.appendChild(h); if (sub){ const p = document.createElement('p'); p.className = 'sub'; p.textContent = sub; box.appendChild(p); } const ul = document.createElement('ul'); ul.className = 'flist'; box.appendChild(ul); return ul; }
 function renderInbox(){
@@ -2308,9 +2319,10 @@ const MENU = [
   {id:'rfq', title:'Review an RFQ & find suppliers', desc:'ChatGPT reviews the RFQ, searches suppliers and checks they\u2019re legit'},
   {id:'add', title:'Add a supplier or product', desc:'Paste ChatGPT’s table — supplier first, then product'},
   {id:'ops', title:'Orders, payments & deliveries', desc:'Supplier POs, late shipments, 100% advance, BIR invoices'},
-  {id:'how', title:'How is Hadrontech doing?', desc:'The Data Analyst’s review and the latest decisions'}
+  {id:'how', title:'How is Hadrontech doing?', desc:'The Data Analyst’s review and the latest decisions'},
+  {id:'reminders', title:'My reminders', desc:'What the Secretary will remind you about, and on which day'}
 ];
-const TITLES = {menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
+const TITLES = {reminders:'My reminders', menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
 
 function openView(v){
   moveBack();
@@ -2971,6 +2983,7 @@ function brainTopics(){
 /* answers to typed requests, from the real data */
 function realAnswer(wk, text){
   const t = String(text || ''), L = t.toLowerCase();
+  if (wk === 'sec' || isReminderText(t)) return reminderAnswer(t);
   const fmtF = f => f.title + (f.rule ? ' (rule: ' + ruleTitle(f.rule) + ')' : '');
   const mq = t.match(/HT-Q-\d{4}-\d{4}/i), ms = t.match(/HT-SO-\d{4}-\d{4}/i), mp = t.match(/HT-PO-\d{4}-\d{4}/i), mr = t.match(/HT-RFQ-\d{4}-\d{4}/i);
   const about = no => F.filter(f => !f.done && (f.title + ' ' + f.detail).includes(no));
@@ -3044,7 +3057,10 @@ const SHEET = {
        works:['Sales: what wins and what doesn’t', 'Manager: evidence for decisions']},
   recs:{job:'Keeps the BMS clean and safe: backups, reference emails, currencies, duplicates and missing information.',
        checks:['Backup date', 'Quotations without reference emails', 'Product vs supplier currency', 'Supplier names'], skills:'data quality, backups',
-       works:['Everyone: clean records make every check work']}
+       works:['Everyone: clean records make every check work']},
+  sec:{job:'Keeps your reminders. Tell the Manager “remind me on Monday to follow up the butterfly valves” and she writes it down, links the matching RFQs and quotes, and shows a 🔔 over her head on that day.',
+       checks:['Your reminders and their dates', 'RFQs and quotations that match each reminder'], skills:'dates, reminders, follow-up emails',
+       works:['Manager: hands her every reminder you give him', 'Sales Coordinator: the RFQs and quotes behind a follow-up']}
 };
 let sheetKey = null;
 function openSheet(k){ sheetKey = k; openView('sheet'); dlgTitle.textContent = TEAM[k].label; }
@@ -3623,6 +3639,161 @@ function lookupRoute(t){
   return a && LK ? {k:LOOK_OWNER[LK], why:LOOK_WHY[LK], think:'That’s for ' + TEAM[LOOK_OWNER[LK]].label + '.'} : null;
 }
 
+
+/* =====================================================================
+   SECRETARY — your reminders ("remind me on Monday to …")
+   Kept in the Office on this computer only (browser storage), never in the BMS.
+   ===================================================================== */
+const REM_KEY = 'ht-office-reminders';
+let REM = (() => { try { const r = JSON.parse(localStorage.getItem(REM_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (e){ return []; } })();
+const remSave = () => { try { localStorage.setItem(REM_KEY, JSON.stringify(REM)); } catch (e){} };
+const pad2 = n => String(n).padStart(2, '0');
+const todayIso = () => isoOf(new Date());
+const addDays = (d, n) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; };
+const dayName = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+const daysUntil = iso => Math.round((new Date(iso + 'T00:00:00') - new Date(todayIso() + 'T00:00:00')) / 864e5);
+function isReminderText(t){
+  const L = String(t || '').toLowerCase();
+  return /\bremind(er|ers)?\b|\bpaalala|ipaalala|\bset an? (alarm|reminder)\b|don'?t let me forget/.test(L);
+}
+const WEEKDAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const MONTHS3 = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const NUMW = {a:1, an:1, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, ten:10};
+/** When? Returns {date:'YYYY-MM-DD', time:'HH:MM'|null, found:bool, cut:[phrases to remove from the task]} */
+function parseWhen(text){
+  const L = ' ' + String(text).toLowerCase() + ' ', now = new Date(), base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let d = null, cut = [], m;
+  if ((m = L.match(/\b(?:on |sa )?(?:this |next |coming |sa )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)\b/))){
+    const w = WEEKDAYS.findIndex(x => x.startsWith(m[1].slice(0, 3)));
+    let diff = (w - base.getDay() + 7) % 7;
+    if (diff === 0 && !/this |today/.test(m[0])) diff = 7;
+    d = addDays(base, diff); cut.push(m[0].trim());
+  } else if ((m = L.match(/\b(?:on )?(today|tonight|later today|this afternoon|this morning|tomorrow|bukas)\b/))){
+    d = addDays(base, /tomorrow|bukas/.test(m[1]) ? 1 : 0); cut.push(m[0].trim());
+  } else if ((m = L.match(/\bin (\d+|a|an|one|two|three|four|five|six|seven|ten) (day|days|week|weeks)\b/))){
+    const n = /^\d+$/.test(m[1]) ? +m[1] : NUMW[m[1]]; d = addDays(base, n * (/week/.test(m[2]) ? 7 : 1)); cut.push(m[0].trim());
+  } else if ((m = L.match(/\bnext week\b/))){
+    d = addDays(base, ((1 - base.getDay() + 7) % 7) || 7); cut.push(m[0]);
+  } else if ((m = L.match(/\b(?:on )?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?\b/)) || (m = L.match(/\b(?:on )?(\d{1,2})(?:st|nd|rd|th)? (?:of )?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,? (\d{4}))?\b/))){
+    const mon = MONTHS3.indexOf(isNaN(+m[1]) ? m[1] : m[2]), day = +(isNaN(+m[1]) ? m[2] : m[1]);
+    d = new Date(m[3] ? +m[3] : base.getFullYear(), mon, day); if (!m[3] && d < base) d.setFullYear(d.getFullYear() + 1); cut.push(m[0].trim());
+  } else if ((m = L.match(/\b(?:on )?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/))){
+    d = new Date(m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : base.getFullYear(), +m[1] - 1, +m[2]); if (!m[3] && d < base) d.setFullYear(d.getFullYear() + 1); cut.push(m[0].trim());
+  } else if ((m = L.match(/\bon the (\d{1,2})(?:st|nd|rd|th)?\b/))){
+    d = new Date(base.getFullYear(), base.getMonth(), +m[1]); if (d < base) d = new Date(base.getFullYear(), base.getMonth() + 1, +m[1]); cut.push(m[0].trim());
+  }
+  let time = null;
+  if ((m = L.match(/\b(?:at |by |around )?(\d{1,2})(?::(\d{2}))? ?(am|pm|a\.m\.|p\.m\.)/))){
+    let h = +m[1] % 12; if (/p/.test(m[3])) h += 12; time = pad2(h) + ':' + (m[2] || '00'); cut.push(m[0].trim());
+  } else if ((m = L.match(/\bat (\d{1,2}):(\d{2})\b/))){ time = pad2(+m[1]) + ':' + m[2]; cut.push(m[0].trim()); }
+  return {date: d ? isoOf(d) : isoOf(addDays(base, 1)), time, found: !!d, cut};
+}
+/** What to do: the request without "can you remind me", the date words and the politeness. */
+function reminderTask(text, cut){
+  let t = String(text).trim();
+  for (const c of cut) t = t.replace(new RegExp('\\b' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i'), ' ');
+  t = t.replace(/^(hi|hello|hey|ok|okay|manager)[,!.\s]+/i, '')
+       .replace(/^.*?\b(remind|paalala(?:han)?|ipaalala)\b( me| us| gian| po)?( (that|about|to))?\s*/i, '')
+       .replace(/^(set (a|an) (reminder|alarm)( for)?|don'?t let me forget( to)?)\s*/i, '')
+       .replace(/\b(pls|please|po)\b/gi, ' ').replace(/\s+([,;.])/g, '$1').replace(/\s{2,}/g, ' ').trim()
+       .replace(/^(to|that|about|on|for)\s+/i, '').replace(/^[,;:.\-\s]+|[,;:\s]+$/g, '');
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Reminder';
+}
+/** RFQs and quotes the reminder is about (e.g. "butterfly valves and check valves"). */
+const REM_STOP = new Set('follow followup follow-up email emails mail send make need needs supplier suppliers customer customers call ask update reply check-in remind reminder tomorrow monday tuesday wednesday thursday friday saturday sunday'.split(' '));
+function reminderLinks(task){
+  const parts = String(task).split(/\band\b|,|;|\//i).map(p => searchWords(p).filter(w => !REM_STOP.has(w))).filter(w => w.length);
+  const out = [], add = no => { if (no && !out.includes(no)) out.push(no); };
+  for (const m of String(task).matchAll(/\b(HT-(?:Q|RFQ)-\d{4}-\d{4})\b/gi)){ const no = m[1].toUpperCase(); if (quoteByNo(no) || BIZ.rfqs.some(r => r.no === no)) add(no); }
+  for (const w of parts){
+    const need = Math.min(2, w.length);
+    const rf = searchIn(BIZ.rfqs.filter(r => r.st !== 'Closed' || !r.quote), r => r.ref + ' ' + r.end, w).filter(x => x.n >= need).sort((a, b) => b.n - a.n || String(b.x.date).localeCompare(String(a.x.date)));
+    rf.slice(0, 2).forEach(x => add(x.x.no));
+    const qs = searchIn(BIZ.quotes.filter(q => (q.st === 'Sent' && until(q.valid) >= 0) || q.st === 'Draft'), q => q.ref + ' ' + q.item + ' ' + q.end, w).filter(x => x.n >= need).sort((a, b) => b.n - a.n || String(b.x.date).localeCompare(String(a.x.date)));
+    qs.slice(0, 2).forEach(x => add(x.x.no));
+  }
+  return out.slice(0, 5);
+}
+function remLinkLine(no){
+  const r = BIZ.rfqs.find(x => x.no === no);
+  if (r) return no + ' — “' + r.ref + '”, ' + r.st + (r.quote ? ', quoted in ' + r.quote : ', no quotation yet') + (r.log.length ? '. Emails: ' + r.log.map(e => e.to + ' (' + e.st + (e.date ? ', ' + fD(e.date) : '') + ')').join('; ') : r.sups.length ? '. Suppliers: ' + r.sups.map(x => x.name + ' (' + x.st + ')').join('; ') : '. No supplier emails logged');
+  const q = quoteByNo(no);
+  if (q) return qRef(q) + ' — ' + pesoX(q.total) + ', ' + q.st + (q.st === 'Sent' ? ', valid until ' + fD(q.valid) : '');
+  return no + ' (no longer in the BMS)';
+}
+function addReminder(text, when){
+  const w = when || parseWhen(text), task = reminderTask(text, w.cut || []);
+  const r = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: String(text), task, date: w.date, time: w.time || null, links: reminderLinks(task), created: new Date().toISOString(), done: null};
+  REM.push(r); remSave(); return {r, found: w.found};
+}
+/** Due now: dated today or earlier (and past its time, if it has one), not done yet. */
+function remDue(){
+  const today = todayIso(), now = new Date(), hhmm = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+  return REM.filter(r => !r.done && (r.date < today || (r.date === today && (!r.time || r.time <= hhmm))));
+}
+const remWhen = r => dayName(r.date) + (r.time ? ' at ' + new Date('2000-01-01T' + r.time).toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'}) : '');
+function reminderAnswer(text){
+  const L = String(text).toLowerCase();
+  if (!/\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/.test(L)){
+    const open = REM.filter(r => !r.done).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+    if (!open.length) return 'You have no reminders. Tell me “remind me on Monday to …” and I’ll write it down.';
+    return 'Your reminders (' + open.length + '):\n' + open.map(r => '• ' + remWhen(r) + ' — ' + r.task + (r.links.length ? ' (' + r.links.join(', ') + ')' : '')).join('\n') + '\nOpen “My reminders” in the Manager’s menu to change or delete them.';
+  }
+  const {r, found} = addReminder(text), n = daysUntil(r.date);
+  return 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') + ':\n“' + r.task + '”'
+    + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. You can change the date in “My reminders”.')
+    + (r.links.length ? '\nI linked: ' + r.links.map(no => { const q = quoteByNo(no), f = BIZ.rfqs.find(x => x.no === no); return no + ' (“' + ((f && f.ref) || (q && q.ref) || '') + '”)'; }).join(', ') + '.' : '')
+    + '\nOn that day you’ll see a 🔔 over my head. Click me to see it.';
+}
+function remPrompt(r){
+  return 'Write a short, polite follow-up email for Hadrontech Industrial Solutions (Philippines).\nWhat I need: ' + r.task + '\n'
+    + (r.links.length ? 'Details from our BMS:\n' + r.links.map(no => '- ' + remLinkLine(no)).join('\n') + '\n' : '')
+    + 'Keep it brief. If it is for several suppliers, write one email I can send to each, with a placeholder for the supplier name. Ask for their quotation (price, lead time, validity) if they have not sent it yet.';
+}
+function secretarySays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('sec')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
+VIEWS.reminders = function(){
+  dlgTitle.textContent = 'My reminders';
+  const due = remDue(), upcoming = REM.filter(r => !r.done && !due.includes(r)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))),
+        done = REM.filter(r => r.done).sort((a, b) => String(b.done).localeCompare(String(a.done))).slice(0, 5);
+  secretarySays(due.length ? '<b>You have ' + due.length + ' reminder' + (due.length > 1 ? 's' : '') + ' for today.</b> I’ve put the RFQs and quotes they’re about underneath.' : 'Nothing for today. ' + (upcoming.length ? 'Here’s what’s coming up.' : 'Tell the Manager “remind me on Monday to …”, or add one below.'));
+  const again = () => { remSave(); refreshAttention(); openView('reminders'); };
+  const li = (r, isDue) => {
+    const e = document.createElement('li'); if (isDue) e.className = 'due';
+    const late = daysUntil(r.date) < 0 ? ' — ' + (-daysUntil(r.date)) + ' day' + (daysUntil(r.date) === -1 ? '' : 's') + ' late' : '';
+    e.innerHTML = '<div class="top"><span class="ft">' + esc(r.task) + '</span></div><div class="fd"><span class="when">' + esc(remWhen(r) + late) + '</span>'
+      + (r.text && r.text !== r.task ? ' · you said: “' + esc(r.text) + '”' : '') + '</div>'
+      + (r.links.length ? '<ul class="links">' + r.links.map(no => '<li>' + esc(remLinkLine(no)) + '</li>').join('') + '</ul>' : '') + '<div class="fa"></div>';
+    const fa = e.querySelector('.fa'), b = (t, fn, primary) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn' + (primary ? ' primary' : ''); x.textContent = t; x.addEventListener('click', fn); fa.appendChild(x); return x; };
+    if (isDue){
+      b('Done', () => { r.done = new Date().toISOString(); toast('Done — nice.'); again(); }, true);
+      b('Remind me tomorrow', () => { r.date = isoOf(addDays(new Date(), 1)); r.time = null; again(); });
+      b('Next week', () => { const t = new Date(); r.date = isoOf(addDays(t, ((1 - t.getDay() + 7) % 7) || 7)); r.time = null; again(); });
+    }
+    if (!r.done && (r.links.length || /follow|email|e-mail/i.test(r.task))) b('Copy for ChatGPT', () => copyText(remPrompt(r), 'Copied — paste it into ChatGPT to draft the email'));
+    if (!isDue && !r.done){
+      const d = document.createElement('input'); d.type = 'date'; d.value = r.date; d.title = 'Change the date'; d.className = 'btn';
+      d.addEventListener('change', () => { if (d.value){ r.date = d.value; again(); } }); fa.appendChild(d);
+    }
+    b('Delete', () => { REM = REM.filter(x => x !== r); toast('Reminder deleted.'); again(); });
+    return e;
+  };
+  const sec = (title, list, isDue) => { if (!list.length) return; const h = document.createElement('h3'); h.textContent = title; dlgBody.appendChild(h); const ul = document.createElement('ul'); ul.className = 'flist remlist'; list.forEach(r => ul.appendChild(li(r, isDue))); dlgBody.appendChild(ul); };
+  sec('Today', due, true);
+  sec('Coming up', upcoming, false);
+  // add one directly
+  const h = document.createElement('h3'); h.textContent = 'Add a reminder'; dlgBody.appendChild(h);
+  const f = document.createElement('form'); f.className = 'remadd';
+  f.innerHTML = '<input type="text" maxlength="200" placeholder="e.g. Monday: follow up the butterfly valve suppliers" aria-label="What to remind you about"><input type="date" aria-label="Date (optional)"><button class="btn primary" type="submit">Add</button>';
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const [t, dt] = f.querySelectorAll('input'); if (!t.value.trim()) return;
+    const w = parseWhen(t.value); if (dt.value){ w.date = dt.value; w.found = true; }
+    const {r} = addReminder(t.value, w); toast('The Secretary will remind you on ' + remWhen(r) + '.'); again();
+  });
+  dlgBody.appendChild(f);
+  const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Reminders are kept in the Office on this computer only — not in the BMS or its backups. On the day, a 🔔 shows over the Secretary’s head.'; dlgBody.appendChild(p);
+  sec('Done recently', done, false);
+};
 
 /* ---------- the team's work survives a page reload (and, in the BMS, leaving the Dashboard) ----------
    Kept in this browser only: your requests, their answers, and supplier/product checks. */
