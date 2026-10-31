@@ -2197,14 +2197,23 @@ function renderReqs(){
     ul.appendChild(li);
   }
 }
-document.getElementById('reqForm').addEventListener('submit', e => {
-  e.preventDefault();
-  const inp = document.getElementById('reqInput'), text = inp.value.trim(); if (!text) return;
-  inp.value = '';
+function sendRequest(text){
   const route = routeRequest(text);
   const r = {id: ++reqId, text, route, ref: refFor(text)};
   REQS.unshift(r); setReq(r, 'Waiting for the Manager');
   managerTask({kind:'req', req:r, worker:route.k, label:'a request'});
+}
+const reqAsk = document.createElement('div'); reqAsk.id = 'reqAsk'; document.getElementById('reqForm').after(reqAsk);
+document.getElementById('reqForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = document.getElementById('reqInput'), text = inp.value.trim(); if (!text) return;
+  inp.value = '';
+  if (reminderNeedsDate(text)) return askWhen(reqAsk, text, 'mgr', when => {
+    sendRequest(withWhen(text, when)); reqAsk.innerHTML = '';
+    toast(when ? 'Got it — the Secretary will remind you on ' + dayName(when) + '.' : 'Got it — the Secretary will keep it on your list without a date.');
+  });
+  reqAsk.innerHTML = '';
+  sendRequest(text);
 });
 for (const ex of ['How are we doing this month?', 'Which quotes need a follow-up today?', 'Is HT-SO-2026-0005 fully paid?', 'Why is HT-Q-2026-0067 flagged?', 'Clean up duplicate suppliers']){
   const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = ex;
@@ -3685,6 +3694,7 @@ function parseWhen(text){
   if ((m = L.match(/\b(?:at |by |around )?(\d{1,2})(?::(\d{2}))? ?(am|pm|a\.m\.|p\.m\.)/))){
     let h = +m[1] % 12; if (/p/.test(m[3])) h += 12; time = pad2(h) + ':' + (m[2] || '00'); cut.push(m[0].trim());
   } else if ((m = L.match(/\bat (\d{1,2}):(\d{2})\b/))){ time = pad2(+m[1]) + ':' + m[2]; cut.push(m[0].trim()); }
+  if (!d && /\(no date\)/.test(L)) return {date:null, time:null, found:true, cut};
   return {date: d ? isoOf(d) : isoOf(addDays(base, 1)), time, found: !!d, cut};
 }
 /** What to do: the request without "can you remind me", the date words and the politeness. */
@@ -3695,7 +3705,7 @@ function reminderTask(text, cut){
        .replace(/^.*?\b(remind|paalala(?:han)?|ipaalala)\b( me| us| gian| po)?( (that|about|to))?\s*/i, '')
        .replace(/^(set (a|an) (reminder|alarm)( for)?|don'?t let me forget( to)?)\s*/i, '')
        .replace(/\b(pls|please|po)\b/gi, ' ').replace(/\s+([,;.])/g, '$1').replace(/\s{2,}/g, ' ').trim()
-       .replace(/^(to|that|about|on|for)\s+/i, '').replace(/^[,;:.\-\s]+|[,;:\s]+$/g, '');
+       .replace(/\s*\(no date\)\s*/i, ' ').replace(/^(to|that|about|on|for)\s+/i, '').replace(/^[,;:.\-—–\s]+|[,;:\-—–\s]+$/g, '');
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Reminder';
 }
 /** RFQs and quotes the reminder is about (e.g. "butterfly valves and check valves"). */
@@ -3728,9 +3738,9 @@ function addReminder(text, when){
 /** Due now: dated today or earlier (and past its time, if it has one), not done yet. */
 function remDue(){
   const today = todayIso(), now = new Date(), hhmm = pad2(now.getHours()) + ':' + pad2(now.getMinutes());
-  return REM.filter(r => !r.done && (r.date < today || (r.date === today && (!r.time || r.time <= hhmm))));
+  return REM.filter(r => !r.done && r.date && (r.date < today || (r.date === today && (!r.time || r.time <= hhmm))));
 }
-const remWhen = r => dayName(r.date) + (r.time ? ' at ' + new Date('2000-01-01T' + r.time).toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'}) : '');
+const remWhen = r => !r.date ? 'No date' : dayName(r.date) + (r.time ? ' at ' + new Date('2000-01-01T' + r.time).toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'}) : '');
 function reminderAnswer(text){
   const L = String(text).toLowerCase();
   if (!/\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/.test(L)){
@@ -3738,11 +3748,32 @@ function reminderAnswer(text){
     if (!open.length) return 'You have no reminders. Tell me “remind me on Monday to …” and I’ll write it down.';
     return 'Your reminders (' + open.length + '):\n' + open.map(r => '• ' + remWhen(r) + ' — ' + r.task + (r.links.length ? ' (' + r.links.join(', ') + ')' : '')).join('\n') + '\nClick the Secretary to change or delete them.';
   }
-  const {r, found} = addReminder(text), n = daysUntil(r.date);
-  return 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') + ':\n“' + r.task + '”'
+  const {r, found} = addReminder(text), n = r.date ? daysUntil(r.date) : null;
+  return (r.date ? 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') : 'Done — it’s on your list without a date. Click me any time to see it or give it a date') + ':\n“' + r.task + '”'
     + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. Click the Secretary to change the date.')
     + (r.links.length ? '\nI linked: ' + r.links.map(no => { const q = quoteByNo(no), f = BIZ.rfqs.find(x => x.no === no); return no + ' (“' + ((f && f.ref) || (q && q.ref) || '') + '”)'; }).join(', ') + '.' : '')
-    + '\nOn that day you’ll see a 🔔 over my head. Click me to see it.';
+    + (r.date ? '\nOn that day you’ll see a 🔔 over my head. Click me to see it.' : '');
+}
+
+/* the Manager asks for a date when a reminder has none */
+const reminderNeedsDate = t => isReminderText(t) && /\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/i.test(t) && !parseWhen(t).found;
+const withWhen = (text, iso) => text + (iso ? ' — on ' + new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : ' (no date)');
+function askWhen(host, text, who, onPick){
+  const t = new Date(), mon = addDays(t, ((1 - t.getDay() + 7) % 7) || 7), follow = /follow|email|e-mail|reply|quote|quotation/i.test(text);
+  const choices = [['Today', isoOf(t)], ['Tomorrow', isoOf(addDays(t, 1))]];
+  if (follow) choices.push(['In 2 days — our follow-up rule', isoOf(addDays(t, 2))]);
+  choices.push([mon.toLocaleDateString('en-PH', {weekday:'long'}) + ', ' + mon.toLocaleDateString('en-PH', {month:'short', day:'numeric'}), isoOf(mon)], ['In a week', isoOf(addDays(t, 7))]);
+  host.innerHTML = '';
+  const say = document.createElement('div'); say.className = 'msay'; say.appendChild(avatar(who));
+  const p = document.createElement('p'); p.innerHTML = '<b>When should I remind you?</b> You didn’t give a date for “' + esc(reminderTask(text, [])) + '”. Do you have one in mind?' + (follow ? ' Our rule is to follow up within 2 days.' : '');
+  say.appendChild(p); host.appendChild(say);
+  const row = document.createElement('div'); row.className = 'pbtns'; row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px';
+  for (const [label, iso] of choices){ const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (label.startsWith('In 2 days') ? ' primary' : ''); b.textContent = label; b.addEventListener('click', () => onPick(iso)); row.appendChild(b); }
+  const d = document.createElement('input'); d.type = 'date'; d.className = 'btn'; d.min = isoOf(t); d.title = 'Pick a date'; d.setAttribute('aria-label', 'Pick a date');
+  d.addEventListener('change', () => { if (d.value) onPick(d.value); }); row.appendChild(d);
+  const n = document.createElement('button'); n.type = 'button'; n.className = 'btn'; n.textContent = 'No date — just keep it on my list'; n.addEventListener('click', () => onPick(null)); row.appendChild(n);
+  host.appendChild(row);
+  host.scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block:'nearest'});
 }
 function remPrompt(r){
   return 'Write a short, polite follow-up email for Hadrontech Industrial Solutions (Philippines).\nWhat I need: ' + r.task + '\n'
@@ -3752,7 +3783,7 @@ function remPrompt(r){
 function secretarySays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('sec')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
 VIEWS.reminders = function(){
   dlgTitle.textContent = 'Secretary — your reminders';
-  const due = remDue(), upcoming = REM.filter(r => !r.done && !due.includes(r)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))),
+  const due = remDue(), nodate = REM.filter(r => !r.done && !r.date), upcoming = REM.filter(r => !r.done && r.date && !due.includes(r)).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))),
         done = REM.filter(r => r.done).sort((a, b) => String(b.done).localeCompare(String(a.done))).slice(0, 5);
   secretarySays(due.length ? '<b>You have ' + due.length + ' reminder' + (due.length > 1 ? 's' : '') + ' for today.</b> I’ve put the RFQs and quotes they’re about underneath.' : 'Nothing for today. ' + (upcoming.length ? 'Here’s what’s coming up.' : 'Tell the Manager “remind me on Monday to …”, or add one below.'));
   const again = () => { remSave(); refreshAttention(); openView('reminders'); };
@@ -3779,6 +3810,7 @@ VIEWS.reminders = function(){
   const sec = (title, list, isDue) => { if (!list.length) return; const h = document.createElement('h3'); h.textContent = title; dlgBody.appendChild(h); const ul = document.createElement('ul'); ul.className = 'flist remlist'; list.forEach(r => ul.appendChild(li(r, isDue))); dlgBody.appendChild(ul); };
   sec('Today', due, true);
   sec('Coming up', upcoming, false);
+  sec('No date yet', nodate, false);
   // add one directly
   const h = document.createElement('h3'); h.textContent = 'Add a reminder'; dlgBody.appendChild(h);
   const f = document.createElement('form'); f.className = 'remadd';
@@ -3787,9 +3819,12 @@ VIEWS.reminders = function(){
     e.preventDefault();
     const [t, dt] = f.querySelectorAll('input'); if (!t.value.trim()) return;
     const w = parseWhen(t.value); if (dt.value){ w.date = dt.value; w.found = true; }
-    const {r} = addReminder(t.value, w); toast('The Secretary will remind you on ' + remWhen(r) + '.'); again();
+    const save = w2 => { const {r} = addReminder(t.value, w2); toast(r.date ? 'The Secretary will remind you on ' + remWhen(r) + '.' : 'Kept on your list without a date.'); again(); };
+    if (!w.found) return askWhen(ask, t.value, 'sec', iso => save(Object.assign(w, {date: iso, found: true})));
+    save(w);
   });
   dlgBody.appendChild(f);
+  const ask = document.createElement('div'); dlgBody.appendChild(ask);
   const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Reminders are kept in the Office on this computer only — not in the BMS or its backups. On the day, a 🔔 shows over the Secretary’s head.'; dlgBody.appendChild(p);
   sec('Done recently', done, false);
 };
