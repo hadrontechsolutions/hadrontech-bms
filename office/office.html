@@ -224,6 +224,7 @@ button{font:inherit;cursor:pointer}
 .pdb td.chg{font-weight:700;box-shadow:inset 0 -2px 0 #ef7d57}
 #prodStageSlot .scroller{border-width:3px}
 .donemark.bell{background:#fff6e5;font-size:clamp(9px,1.3cqw,15px);padding:0 .3cqw;animation:bellring 2.4s ease-in-out infinite}@keyframes bellring{0%,70%,100%{rotate:0deg}75%{rotate:-14deg}85%{rotate:12deg}}@media (prefers-reduced-motion: reduce){.donemark.bell{animation:none}}
+.fd.also{margin-top:4px;font-size:13px;color:var(--muted)}
 .remlist li.due{border-left:4px solid var(--sec)}.remlist .when{font-weight:700;color:var(--sec)}.remlist .links{margin:6px 0 0;padding-left:16px;font-size:13px}.remadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.remadd input[type=text]{flex:1 1 260px}
 .ex{display:inline-block;background:#ffcd75;color:#1a1c2c;border:2px solid #1a1c2c;border-radius:3px;padding:0 5px;font-family:var(--display);line-height:1.2}
 .inbox{display:grid;gap:10px;margin-top:10px}
@@ -606,7 +607,7 @@ const TEAM = {
   recs:{label:'Records & Backup', short:'RECORDS', color:'var(--recs)', role:'Data quality and BMS backups',
     look:{head:'girlR', hair:P.O, hairHi:P.R, skin:P.Y, skinSh:P.O, coat:P.N, coatSh:P.k, shirt:P.W, pants:P.D, shoes:P.k, skirt:true, long:true},
     routine:['Checking the last backup…','Looking for duplicates…','Checking currencies…']},
-  sec:{label:'Secretary', short:'SECRETARY', color:'var(--sec)', role:'Your reminders: what to do, on which day',
+  sec:{label:'Secretary', short:'SECRETARY', color:'var(--sec)', role:'Quick answers, reminders and meeting minutes',
     look:{head:'girlD', hair:P.R, hairHi:P.O, skin:P.Y, skinSh:P.O, coat:P.G, coatSh:P.T, shirt:P.W, pants:P.Q, shoes:P.k, skirt:true, long:true},
     routine:['Checking your reminders…','Updating the calendar…','Filing notes…']}
 };
@@ -881,22 +882,34 @@ function findingLi(f, showWorker){
   }
   return li;
 }
+/* the Secretary tidies the lists: all findings about the same quotation / order / PO / RFQ become one item */
+const recKeyOf = f => { const m = String(f.title).match(/HT-(?:Q|SO|PO|RFQ)-\d{4}-\d{4}/); return m ? m[0] : 'k:' + (f.key || f.title); };
+function groupFindings(list){ const map = new Map(); for (const f of list){ const k = recKeyOf(f); if (!map.has(k)) map.set(k, []); map.get(k).push(f); } return [...map.values()]; }
+function alsoLine(g){
+  if (g.length < 2) return null;
+  const no = recKeyOf(g[0]), d = document.createElement('div'); d.className = 'fd also';
+  d.innerHTML = '<b>Also on ' + esc(no) + ':</b> ' + g.slice(1).map(x => esc(String(x.title).replace(no, '').replace(/^[\s—:-]+/, '').trim())).join(' · ');
+  return d;
+}
 function renderDash(){
   const open = F.filter(f => !f.done && f.sev !== 'fyi').sort((a, b) => planScore(b) - planScore(a));
   const plan = document.getElementById('plan'); plan.innerHTML = '';
-  for (const f of open.slice(0, 5)){
+  const groups = groupFindings(open);
+  for (const g of groups.slice(0, 5)){
+    const f = g[0];
     const li = document.createElement('li');
     const why = [SEV_TXT[f.sev]]; if (f.amt) why.push(peso(f.amt) + ' at stake'); if (f.overdue > 0) why.push(f.overdue + ' day' + (f.overdue > 1 ? 's' : '') + ' overdue'); if (f.big) why.push('big deal (over ₱500,000)'); if (f.rule && typeof ruleTitle === 'function') why.push('rule: ' + ruleTitle(f.rule));
     li.innerHTML = '<span class="t' + (f.red ? ' red' : '') + '">' + esc(f.title) + '</span><span class="acts"></span><span class="meta"><span class="sev ' + f.sev + '">' + SEV_TXT[f.sev] + '</span><span class="chip">' + esc(PEOPLE[f.who]) + '</span><span>from ' + TEAM[f.w].label + '</span><span>· ' + esc(why.slice(1).join(' · ') || 'policy check') + '</span></span>';
     const acts = li.querySelector('.acts');
     if (f.ref) li.insertBefore(refLine(f), li.querySelector('.meta'));
+    { const a = alsoLine(g); if (a) li.insertBefore(a, li.querySelector('.meta')); }
     if (f.gpt){ const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'Copy for ChatGPT'; b.addEventListener('click', () => copyFor(f, li)); acts.appendChild(b); }
     const d = document.createElement('button'); d.type = 'button'; d.className = 'btn'; d.textContent = 'Mark done'; d.addEventListener('click', () => { f.done = true; if (typeof memDone === 'function') memDone(f, true); renderDash(); toast('Done. Next item moved up.'); }); acts.appendChild(d);
     plan.appendChild(li);
   }
   if (!open.length) plan.innerHTML = '<li class="empty">Nothing urgent or due this week. Good job.</li>';
   const u = F.filter(f => !f.done && f.sev === 'urgent').length, w = F.filter(f => !f.done && f.sev === 'week').length;
-  document.getElementById('planSub').textContent = 'Top ' + Math.min(5, open.length) + ' of ' + open.length + ' open items (' + u + ' urgent, ' + w + ' this week), checked ' + fmtY(T0) + '.';
+  document.getElementById('planSub').textContent = 'Top ' + Math.min(5, groups.length) + ' of ' + groups.length + ' quotations, orders and other items needing action (' + open.length + ' findings: ' + u + ' urgent, ' + w + ' this week; findings about the same quotation or order are shown together), checked ' + fmtY(T0) + '.';
   if (typeof refreshAttention === 'function' && typeof MARKS !== 'undefined'){ refreshAttention(); if (inboxKey) renderInbox(); }
   const wrap = document.getElementById('workers'); wrap.innerHTML = '';
   for (const k of ORDER){
@@ -1528,6 +1541,7 @@ function logDecision(t, d){
     + '<small>Manager reviews this decision on ' + fmt(day(t.review)) + ' to check if it worked.</small>';
   const ref = refFor((task ? task.text : '') + ' ' + t.say.map(x => x[1]).join(' '));
   DECISIONS.push({no: decisionNo, t, d, task, ref, seen:false});
+  if (task && typeof secretaryMinutes === 'function') secretaryMinutes(t, d, task);
   if (ref) li.insertBefore(refLine({ref}), li.querySelector('p'));
   dl.prepend(li);
   refreshAttention();
@@ -1969,7 +1983,7 @@ function routeRequest(text){
   return {k:'sales', why: 'I don’t recognise “' + kw + '” myself, so I’m asking the Sales Coordinator — ' + JOB.sales + ', where most projects start',
     think: 'Hmm, “' + kw.split(' ').slice(0, 3).join(' ') + '”… I’ll ask Sales.'};
 }
-function managerTask(item){ MQ.push(item); nextMeeting = Math.max(nextMeeting, performance.now() + 60000); runMQ(); }
+function managerTask(item){ if (secretaryTakes(item)) return secTake(item); MQ.push(item); nextMeeting = Math.max(nextMeeting, performance.now() + 60000); runMQ(); }
 async function runMQ(){
   if (mBusy || !MQ.length) return;
   mBusy = true;
@@ -1997,7 +2011,7 @@ async function runMQ(){
       await go(M, u.stand[0] + 14, u.stand[1]);
       M.carry = false; M.flip = true; say(M, item.kind === 'job' ? 'Please check this and fill the form.' : 'Can you handle this?'); u.stack = (u.stack || 0) + 1;
       await wait(reduce ? 400 : 1300); say(M, null);
-      w.chain = (w.chain || Promise.resolve()).then(() => staffDo(w, item));
+      w.chain = (w.chain || Promise.resolve()).then(() => staffDo(w, item)).catch(e => console.error(e));
       await goSit(M, UNITS.mgr);
     }
     setState(M, 'online');
@@ -2012,6 +2026,30 @@ async function doWork(p, steps, item){
     await wait(reduce ? 500 : 1300);
   }
   say(p, null);
+}
+/* Quick questions go to the Secretary, not the Manager: she checks with the right worker and writes the answer.
+   The Manager only gets what needs his judgment (discounts, priorities, decisions, opinions). */
+const DECIDE_RE = /discount|lower (the )?price|best price|bawas|tawad|should (i|we)|what do you (think|suggest|recommend)|recommend|decide|decision|priorit|focus|opinion|strategy|worth it|approve|which is better/i;
+function secretaryTakes(item){
+  if (!item || item.kind !== 'req' || !item.req || !item.req.route) return false;
+  const k = item.req.route.k;
+  if (k === 'sec') return true;
+  return k !== 'mgr' && !!TEAM[k] && !DECIDE_RE.test(item.req.text);
+}
+function secTake(item){
+  const S = people.sec, src = item.req.route.k;
+  item.answerAs = src;
+  item.steps = src === 'sec' ? SKILL_VERBS.sec : ['Reading your question…', 'Checking with ' + TEAM[src].label + '…', 'Writing the answer…'];
+  setReq(item.req, src === 'sec' ? 'The Secretary has it' : 'The Secretary has it — checking with ' + TEAM[src].label);
+  S.chain = (S.chain || Promise.resolve()).then(() => secDo(S, item)).catch(e => console.error(e));
+}
+async function secDo(S, item){
+  while (S.away || S.amb || S.seated !== UNITS.sec) await wait(300);
+  S.away = true; S.act++;
+  await doWork(S, item.steps, item);
+  finishItem(item, S);
+  say(S, 'Done — it’s in the Manager’s What’s new.'); await wait(reduce ? 400 : 1500); say(S, null);
+  S.away = false; setState(S, 'idle');
 }
 async function staffDo(w, item){
   if (item.status && (w.away || w.seated !== UNITS[w.key])) setStatus('<b>' + TEAM[w.key].label + '</b> is on a short break — the paper is waiting on the desk.');
@@ -2040,7 +2078,7 @@ function finishItem(item, w){
     setStatus('<b>Done.</b> Records &amp; Backup gave it to the Manager. Click the Manager’s <b class="ex">!</b> (in his office) or <button class="btn" type="button" id="openJob">Open result</button>');
     document.getElementById('openJob').addEventListener('click', () => openJob(item.job));
   }
-  if (item.req){ item.req.result = (typeof realAnswer === 'function' ? realAnswer(w.key, item.req.text) : null) || SKILL_RESULT[w.key]; item.req.by = w.key; setReq(item.req, 'Done — waiting for you in the Manager’s office', true); }
+  if (item.req){ item.req.result = (typeof realAnswer === 'function' ? realAnswer(item.answerAs || w.key, item.req.text) : null) || SKILL_RESULT[item.answerAs || w.key]; item.req.by = w.key; setReq(item.req, 'Done — waiting for you in the Manager’s office', true); }
   refreshAttention();
 }
 function openJob(j){
@@ -2268,14 +2306,14 @@ function renderInbox(){
   close.addEventListener('click', () => { inboxKey = null; renderInbox(); }); head.appendChild(close);
   box.appendChild(head);
   const open = REPORTS.filter(r => !r.closed), fresh = DECISIONS.filter(d => !d.seen), urgent = F.filter(f => !f.done && f.sev === 'urgent');
-  const newCount = REPORTS.filter(r => !r.seen).length + fresh.length + unseenUrgent().length;
+  const newCount = REPORTS.filter(r => !r.seen).length + fresh.length + groupFindings(unseenUrgent()).length;
   hd.innerHTML = '<b>Manager</b><small>' + (newCount ? newCount + ' new since you last checked' : 'Nothing new since you last checked') + '</small>';
   if (open.length){
     const ul = section(box, 'Finished work', 'The team finished these and gave them to me.');
     for (const r of open){
       const li = document.createElement('li'), it = r.item;
       const title = it.kind === 'job' ? (it.job.kind === 'product' ? 'Product checked: ' : 'Supplier checked: ') + it.job.title : 'Done: ' + it.req.text;
-      li.innerHTML = '<div class="top"><span class="ft">' + esc(title) + '</span>' + (r.seen ? '' : '<span class="sev urgent">New</span>') + '</div><div class="fd ans">by ' + TEAM[r.worker].label + (it.kind === 'req' ? ' — ' + esc(it.req.result) : ' — ready for you to review and save.') + '</div><div class="fa"></div>';
+      li.innerHTML = '<div class="top"><span class="ft">' + esc(title) + '</span>' + (r.seen ? '' : '<span class="sev urgent">New</span>') + '</div><div class="fd ans">by ' + TEAM[r.worker].label + (it.answerAs && it.answerAs !== r.worker && TEAM[it.answerAs] ? ' (checked with ' + TEAM[it.answerAs].label + ')' : '') + (it.kind === 'req' ? ' — ' + esc(it.req.result) : ' — ready for you to review and save.') + '</div><div class="fa"></div>';
       if (it.req && it.req.ref) li.insertBefore(refLine(it.req), li.querySelector('.fa'));
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
       if (it.kind === 'job'){ b.textContent = 'Review'; b.addEventListener('click', () => openJob(it.job)); }
@@ -2296,8 +2334,9 @@ function renderInbox(){
     }
   }
   if (urgent.length){
-    const ul = section(box, 'Urgent items (' + urgent.length + ')', 'The full list is in Today’s Plan.');
-    for (const f of urgent.slice(0, 5)){ const li = findingLi(f, true); if (!f.seen){ const n = document.createElement('span'); n.className = 'sev urgent'; n.textContent = 'New'; li.querySelector('.top').appendChild(n); } ul.appendChild(li); f.seen = true; }
+    const ug = groupFindings(urgent.slice().sort((a, b) => planScore(b) - planScore(a)));
+    const ul = section(box, 'Urgent items (' + ug.length + ')', 'Findings about the same quotation or order are shown together. The full list is in Today’s Plan.');
+    for (const g of ug.slice(0, 5)){ const f = g[0], li = findingLi(f, true); { const a = alsoLine(g); if (a) li.insertBefore(a, li.querySelector('.fa')); } if (!f.seen){ const n = document.createElement('span'); n.className = 'sev urgent'; n.textContent = 'New'; li.querySelector('.top').appendChild(n); } ul.appendChild(li); f.seen = true; }
     urgent.forEach(f => f.seen = true);
   }
   if (!open.length && !fresh.length && !urgent.length){ const p = document.createElement('p'); p.className = 'allclear'; p.textContent = '✓ All clear'; box.appendChild(p); }
@@ -2373,7 +2412,7 @@ const VIEWS = {
     for (const m of MENU){
       if (m.show && !m.show()) continue;
       const b = document.createElement('button'); b.type = 'button'; b.className = 'opt' + (m.hot ? ' hot' : '');
-      const nn = REPORTS.filter(r => !r.seen).length + DECISIONS.filter(d => !d.seen).length + unseenUrgent().length;
+      const nn = REPORTS.filter(r => !r.seen).length + DECISIONS.filter(d => !d.seen).length + groupFindings(unseenUrgent()).length;
       const n = m.id === 'new' && nn ? ' <span class="cnt">' + nn + '</span>' : '';
       b.innerHTML = '<b>' + esc(m.title) + n + '</b><span>' + esc(m.desc) + '</span>';
       b.addEventListener('click', () => openView(m.id));
@@ -3066,15 +3105,15 @@ const SHEET = {
   recs:{job:'Keeps the BMS clean and safe: backups, reference emails, currencies, duplicates and missing information.',
        checks:['Backup date', 'Quotations without reference emails', 'Product vs supplier currency', 'Supplier names'], skills:'data quality, backups',
        works:['Everyone: clean records make every check work']},
-  sec:{job:'Keeps your reminders. Tell the Manager “remind me on Monday to follow up the butterfly valves” and she writes it down, links the matching RFQs and quotes, and shows a 🔔 over her head on that day.',
-       checks:['Your reminders and their dates', 'RFQs and quotations that match each reminder'], skills:'dates, reminders, follow-up emails',
-       works:['Manager: hands her every reminder you give him', 'Sales Coordinator: the RFQs and quotes behind a follow-up']}
+  sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a 🔔 over her head.',
+       checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks decided in team meetings', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
+       works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']}
 };
 let sheetKey = null;
 function openSheet(k){ sheetKey = k; openView('sheet'); dlgTitle.textContent = TEAM[k].label; }
 const memCount = (map, k) => Object.values(map).filter(v => String(v).split('|')[1] === k).length;
 VIEWS.task = function(){
-  managerSays('Tell me what you need. I’ll give it to the worker with the right skills, and I’ll show a <b>!</b> when the answer is ready.');
+  managerSays('Tell me what you need. Quick questions and reminders go straight to the <b>Secretary</b>; I take the decisions. Either way I show a <b>!</b> when the answer is ready.');
   moveIn(document.getElementById('reqForm').closest('.panel'));
   setTimeout(() => { const i = document.getElementById('reqInput'); if (i) i.focus(); }, 50);
 };
@@ -3780,6 +3819,14 @@ function remPrompt(r){
     + (r.links.length ? 'Details from our BMS:\n' + r.links.map(no => '- ' + remLinkLine(no)).join('\n') + '\n' : '')
     + 'Keep it brief. If it is for several suppliers, write one email I can send to each, with a placeholder for the supplier name. Ask for their quotation (price, lead time, validity) if they have not sent it yet.';
 }
+/* minutes: a task decided in a team meeting becomes one reminder (never twice for the same task) */
+function secretaryMinutes(t, d, task){
+  const key = 'meet:' + t.id + ':' + task.text;
+  if (REM.some(r => r.key === key && (!r.done || (Date.now() - new Date(r.done)) < 30 * 864e5))) return;
+  REM.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), key, src:'meeting', text:'meeting #' + decisionNo + ' “' + t.title + '” (' + d.label + ')',
+    task: task.text + (task.who && task.who !== 'gian' ? ' — for ' + PEOPLE[task.who] : ''), date: isoOf(addDays(new Date(), task.due || 0)), time:null, links: reminderLinks(task.text), created: new Date().toISOString(), done:null});
+  remSave();
+}
 function secretarySays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('sec')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
 VIEWS.reminders = function(){
   dlgTitle.textContent = 'Secretary — your reminders';
@@ -3791,7 +3838,7 @@ VIEWS.reminders = function(){
     const e = document.createElement('li'); if (isDue) e.className = 'due';
     const late = daysUntil(r.date) < 0 ? ' — ' + (-daysUntil(r.date)) + ' day' + (daysUntil(r.date) === -1 ? '' : 's') + ' late' : '';
     e.innerHTML = '<div class="top"><span class="ft">' + esc(r.task) + '</span></div><div class="fd"><span class="when">' + esc(remWhen(r) + late) + '</span>'
-      + (r.text && r.text !== r.task ? ' · you said: “' + esc(r.text) + '”' : '') + '</div>'
+      + (r.src === 'meeting' ? ' · from ' + esc(r.text) : r.text && r.text !== r.task ? ' · you said: “' + esc(r.text) + '”' : '') + '</div>'
       + (r.links.length ? '<ul class="links">' + r.links.map(no => '<li>' + esc(remLinkLine(no)) + '</li>').join('') + '</ul>' : '') + '<div class="fa"></div>';
     const fa = e.querySelector('.fa'), b = (t, fn, primary) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn' + (primary ? ' primary' : ''); x.textContent = t; x.addEventListener('click', fn); fa.appendChild(x); return x; };
     if (isDue){
@@ -3799,7 +3846,6 @@ VIEWS.reminders = function(){
       b('Remind me tomorrow', () => { r.date = isoOf(addDays(new Date(), 1)); r.time = null; again(); });
       b('Next week', () => { const t = new Date(); r.date = isoOf(addDays(t, ((1 - t.getDay() + 7) % 7) || 7)); r.time = null; again(); });
     }
-    if (!r.done && (r.links.length || /follow|email|e-mail/i.test(r.task))) b('Copy for ChatGPT', () => copyText(remPrompt(r), 'Copied — paste it into ChatGPT to draft the email'));
     if (!isDue && !r.done){
       const d = document.createElement('input'); d.type = 'date'; d.value = r.date; d.title = 'Change the date'; d.className = 'btn';
       d.addEventListener('change', () => { if (d.value){ r.date = d.value; again(); } }); fa.appendChild(d);
