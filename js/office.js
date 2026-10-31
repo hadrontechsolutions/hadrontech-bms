@@ -141,12 +141,30 @@ async function officeWaitAndFill(m) {
   }
 }
 
+/** Small line in the top bar with what the Office team is doing (only while the Dashboard is open). */
+function officeTopStatus() {
+  let st = document.getElementById('officeTopStatus');
+  if (!st) {
+    st = document.createElement('button'); st.type = 'button'; st.id = 'officeTopStatus'; st.hidden = true;
+    st.style.cssText = 'margin-left:auto;margin-right:16px;max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff6e5;color:#6b4300;border:1px solid #f0c27a;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer';
+    const bar = document.querySelector('.topbar'), user = bar && bar.querySelector('.header-user');
+    if (bar) bar.insertBefore(st, user || null);
+  }
+  return st;
+}
+window.addEventListener('hashchange', () => { if (!/^#\/dashboard|^#?$/.test(location.hash)) { const st = document.getElementById('officeTopStatus'); if (st) st.hidden = true; } });
+
 window.addEventListener('message', async (e) => {
   const f = document.getElementById('officeFrame');
   if (!f || e.source !== f.contentWindow) return;
   const m = e.data || {};
   try {
-    if (m.type === 'office-height') {
+    if (m.type === 'office-status') {
+      // what the team is working on, shown in the top bar so it stays visible while you scroll the Dashboard
+      const st = officeTopStatus();
+      st.hidden = !m.text; st.textContent = m.text ? '👥 ' + String(m.text).slice(0, 140) : ''; st.title = m.text ? m.text + ' — click to see the Office' : '';
+      st.onclick = () => { const fr = document.getElementById('officeFrame'); if (fr) fr.scrollIntoView({ behavior: 'smooth', block: 'start' }); else Router.navigate('/dashboard'); };
+    } else if (m.type === 'office-height') {
       if (m.h > 0) f.style.height = Math.round(m.h) + 'px';
       if (!f.dataset.fitted) { f.dataset.fitted = '1'; setTimeout(officeSendSize, 300); }
     } else if (m.type === 'office-fill' && ['products', 'suppliers'].includes(m.entity) && m.values && typeof m.values === 'object') {

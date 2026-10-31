@@ -1281,9 +1281,9 @@ const pets = [
   {name:'dog', x:60, y:205, flip:false, pts:[[60,205],[200,206],[100,204],[30,206],[160,206],[150,190],[300,206],[260,204]], speed:16, wait:0, rest:'sit'}
 ];
 
-let last = performance.now(), tick = 0;
-function frame(now){
-  const dt = Math.min(.1, (now - last) / 1000); last = now; tick += dt;
+let last = performance.now(), tick = 0, lastMove = performance.now();
+function movePeople(dt){
+  lastMove = performance.now();
   for (const k of ORDER){
     const p = people[k];
     if (p.target){
@@ -1292,6 +1292,13 @@ function frame(now){
       if (d <= step){ p.x = p.target.x; p.y = p.target.y; const r = p.target.res; p.target = null; r(); } else { p.x += dx / d * step; p.y += dy / d * step; }
     }
   }
+}
+/* the browser pauses drawing when the office is scrolled out of view or the tab is hidden;
+   work must not pause with it, so a timer keeps everyone walking until drawing resumes */
+setInterval(() => { const now = performance.now(), gap = now - lastMove; if (gap > 400) movePeople(Math.min(2, gap / 1000)); }, 250);
+function frame(now){
+  const dt = Math.min(.1, (now - last) / 1000); last = now; tick += dt;
+  movePeople(dt);
   for (const a of pets){
     if (a.wait > 0){ a.wait -= dt; continue; }
     if (!a.to){
@@ -1822,7 +1829,7 @@ function checkSupplier(o, raw){
 const R = people.recs;
 let job = null, mode = 'product', pendingProduct = null;
 const statusEl = () => document.getElementById('prodStatus');
-function setStatus(html){ const el = statusEl(); el.hidden = !html; el.innerHTML = html || ''; }
+function setStatus(html){ const el = statusEl(); el.hidden = !html; el.innerHTML = html || ''; try { window.parent.postMessage({type:'office-status', text: html ? el.textContent.replace(/\s*Open result\s*$/, '').replace(/\s+or\s*$/, '').trim() : ''}, '*'); } catch (e){} }
 function copyText(text, msg){ try { navigator.clipboard.writeText(text).then(() => toast(msg || 'Copied'), () => toast('Copy blocked — select the text and press Ctrl+C')); } catch (e){ toast('Copy blocked — select the text and press Ctrl+C'); } }
 const PRODUCT_PROMPT = () => 'Using the supplier details below, fill in a product record for our BMS (Hadrontech Industrial Solutions).\n'
   + 'Reply ONLY with a 2-column table (Field | Details) using exactly these field names, in this order:\n' + PF.filter(f => f[0] !== 'notes').map(f => f[1]).join(', ') + '.\n'
@@ -1852,7 +1859,13 @@ document.getElementById('exA').addEventListener('click', () => { const b = docum
 document.getElementById('exB').addEventListener('click', () => { const b = document.getElementById('pasteBox'); b.value = EXAMPLES.productNew; b.focus(); });
 document.getElementById('readBtn').addEventListener('click', () => {
   const box = document.getElementById('pasteBox'), res = document.getElementById('prodResult');
-  if (job) return;
+  if (job){
+    res.innerHTML = '<div class="panel"><p><b>' + (job.report ? 'Records &amp; Backup already finished “' + esc(job.title) + '”. Open it first, or start this one instead.' : 'Records &amp; Backup is still checking “' + esc(job.title) + '”.') + '</b></p>'
+      + '<div class="pbtns"><button class="btn primary" type="button" data-busy="open">' + (job.report ? 'Open its result' : 'Wait for it') + '</button><button class="btn" type="button" data-busy="new">Start this one instead</button></div></div>';
+    res.querySelector('[data-busy="open"]').addEventListener('click', () => { if (job && job.report) openJob(job); else { res.innerHTML = ''; closeDialog(); } });
+    res.querySelector('[data-busy="new"]').addEventListener('click', () => { job = null; setStatus(''); res.innerHTML = ''; saveWork(); document.getElementById('readBtn').click(); });
+    return;
+  }
   if (!box.value.trim()){ res.innerHTML = '<p class="empty">Paste ChatGPT’s table first, or load an example.</p>'; return; }
   const parsed = parseTable(box.value, mode === 'product' ? PF : SF);
   if (!parsed.rows){ res.innerHTML = '<p class="empty">I couldn’t find any fields. Paste the table as ChatGPT gave it (with the | lines or copied from the chat).</p>'; return; }
@@ -1861,8 +1874,7 @@ document.getElementById('readBtn').addEventListener('click', () => {
   res.innerHTML = '';
   const kind = mode;
   const title = kind === 'product' ? (parsed.out.description || 'New product').slice(0, 60) : (parsed.out.companyName || 'New supplier');
-  job = {kind, parsed, title};
-  document.getElementById('readBtn').disabled = true;
+  job = {kind, parsed, title}; saveWork();
   managerTask({kind:'job', job, label: kind === 'product' ? 'a new product' : 'a new supplier', worker:'recs',
     steps: kind === 'product' ? ['Reading ChatGPT’s table…', 'Cleaning the values…', 'Matching the supplier…', 'Checking for duplicates…', 'Filling in the form…']
                               : ['Reading ChatGPT’s table…', 'Cleaning the values…', 'Checking for duplicates…', 'Checking email and website…', 'Filling in the form…'],
@@ -2163,7 +2175,7 @@ function saveSupplier(o, dup, dupOf){
    ===================================================================== */
 const REQS = [];
 let reqId = 0;
-function setReq(r, text, done){ r.status = text; r.done = !!done; renderReqs(); }
+function setReq(r, text, done){ r.status = text; r.done = !!done; renderReqs(); saveWork(); }
 function renderReqs(){
   const ul = document.getElementById('reqList'); ul.innerHTML = '';
   if (!REQS.length){ ul.innerHTML = '<li class="empty">No requests yet.</li>'; return; }
@@ -2209,6 +2221,7 @@ for (const k of ORDER){
 const ATTN = {};
 const unseenUrgent = () => F.filter(f => !f.done && f.sev === 'urgent' && !f.seen);
 function refreshAttention(){
+  saveWork();
   for (const k of ORDER) ATTN[k] = 0;
   ATTN.mgr = REPORTS.filter(r => !r.seen).length;   // the \u201c!\u201d only shows for answers to what Gian asked or handed over
 }
@@ -3610,8 +3623,49 @@ function lookupRoute(t){
   return a && LK ? {k:LOOK_OWNER[LK], why:LOOK_WHY[LK], think:'That’s for ' + TEAM[LOOK_OWNER[LK]].label + '.'} : null;
 }
 
+
+/* ---------- the team's work survives a page reload (and, in the BMS, leaving the Dashboard) ----------
+   Kept in this browser only: your requests, their answers, and supplier/product checks. */
+const WORK_KEY = 'ht-office-work';
+let workLoaded = false;   // never save before the saved work has been read back
+function saveWork(){
+  if (!workLoaded) return;
+  try {
+    const reqs = REQS.slice(0, 20).map(r => ({id:r.id, text:r.text, route:r.route, ref:r.ref, status:r.status, done:r.done, result:r.result, by:r.by}));
+    const reps = REPORTS.slice(0, 30).map(x => ({kind:x.item.kind, reqId:x.item.req ? x.item.req.id : null, job:x.item.kind === 'job' ? {kind:x.item.job.kind, parsed:x.item.job.parsed, title:x.item.job.title} : null, worker:x.worker, seen:x.seen, closed:x.closed, at:+x.at}));
+    const jb = job && !job.report ? {kind:job.kind, parsed:job.parsed, title:job.title} : null;
+    localStorage.setItem(WORK_KEY, JSON.stringify({reqId, reqs, reps, job:jb}));
+  } catch (e){}
+}
+function restoreWork(){
+  let s = null; try { s = JSON.parse(localStorage.getItem(WORK_KEY) || 'null'); } catch (e){}
+  workLoaded = true;
+  if (!s) return;
+  reqId = s.reqId || 0;
+  const byId = {};
+  for (const x of (s.reqs || []).slice().reverse()){ const r = Object.assign({}, x); REQS.unshift(r); byId[r.id] = r; }
+  for (const x of (s.reps || []).slice().reverse()){
+    const base = {worker:x.worker, seen:x.seen, closed:x.closed, at:new Date(x.at)};
+    if (x.kind === 'req'){ if (byId[x.reqId]) REPORTS.unshift(Object.assign(base, {item:{kind:'req', req:byId[x.reqId]}})); }
+    else if (x.job){ const j = Object.assign({}, x.job), rep = Object.assign(base, {item:{kind:'job', job:j}}); j.report = rep; REPORTS.unshift(rep); }
+  }
+  // requests that were still in progress: answer them now, from the data as it is now
+  for (const r of REQS) if (!r.done){
+    const w = people[(r.route && r.route.k) || 'sales'] || M;
+    finishItem({kind:'req', req:r}, w); setReq(r, 'Done — finished while you were away', true);
+  }
+  // a supplier/product check still in progress: finish it now
+  if (s.job){ const j = Object.assign({}, s.job); job = j; finishItem({kind:'job', job:j}, people.recs); }
+  else {
+    const open = REPORTS.find(x => x.item.kind === 'job' && !x.closed);
+    if (open){ job = open.item.job; setStatus('<b>Done.</b> Records &amp; Backup checked “' + esc(job.title) + '”. Click the Manager’s <b class="ex">!</b> (in his office) or <button class="btn" type="button" id="openJob">Open result</button>'); document.getElementById('openJob').addEventListener('click', () => openJob(open.item.job)); }
+  }
+  saveWork();
+}
+
 rethink();
 /* start */
+restoreWork();
 renderDash();
 refreshAttention(); renderInbox(); renderReqs();
 document.getElementById('mainStage').appendChild(document.querySelector('.scroller'));
