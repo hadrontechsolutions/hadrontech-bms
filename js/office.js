@@ -1,6 +1,7 @@
 /* ============================================================
    office.js — the Office: the AI team (Manager + workers) shown in
-   office/office.html, inside this page.
+   office/office.html, on the Dashboard (between the quick actions and
+   "Needs your attention").
 
    READ-ONLY by design. This file only READS the BMS records
    (DB.dbGetAll) and hands a copy to the Office page. Nothing in the
@@ -54,29 +55,28 @@ async function officeRecordHash(no) {
 /** Only BMS pages may be opened from the Office (a hash path like /products/new). */
 const officeSafeHash = (h) => typeof h === 'string' && /^\/[a-z0-9\-\/]*$/i.test(h) && h.length < 80;
 
-/** Space left on screen below the breadcrumb: the Office sizes its scene to fit it, so nothing scrolls. */
+/** Screen height the Office may use: it sizes its scene so the whole office fits on screen. */
 function officeAvail() {
-  const f = document.getElementById('officeFrame');
-  return f ? Math.max(420, window.innerHeight - f.getBoundingClientRect().top - 12) : 0;
+  // the whole scene fits on screen once you scroll to it
+  return Math.max(420, window.innerHeight - 110);
 }
 function officeSendSize() {
   const f = document.getElementById('officeFrame');
   if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'office-size', avail: officeAvail() }, '*');
 }
 
-Router.route('/office', async () => {
-  Router.setBreadcrumb([{ label: 'Office' }]);
-  const content = document.getElementById('content');
-  content.innerHTML = `
-    <iframe id="officeFrame" src="office/office.html" title="Office — the Manager and his team" scrolling="no"
-      style="display:block;width:100%;height:${Math.max(420, window.innerHeight - 140)}px;border:0;background:transparent;overflow:hidden"></iframe>`;
-});
-window.addEventListener('resize', officeSendSize);
-/* a banner appearing or closing above the Office moves it: re-fit the scene */
-for (const id of ['backupBanner', 'storageRiskBanner']) {
-  const el = document.getElementById(id);
-  if (el) new MutationObserver(officeSendSize).observe(el, { childList: true, subtree: true, attributes: true });
+/** Shows the Office on the Dashboard, between the quick actions and "Needs your attention". */
+function mountOffice(slot) {
+  if (!slot) return;
+  slot.innerHTML = `
+    <div class="card office-card" style="padding:12px 12px 4px">
+      <iframe id="officeFrame" src="office/office.html" title="Office — the Manager and his team" scrolling="no"
+        style="display:block;width:100%;height:${Math.max(420, window.innerHeight - 120)}px;border:0;background:transparent;overflow:hidden"></iframe>
+    </div>`;
 }
+/* old links to #/office go to the Dashboard, where the Office now lives */
+Router.route('/office', () => Router.navigate('/dashboard'));
+window.addEventListener('resize', officeSendSize);
 
 window.addEventListener('message', async (e) => {
   const f = document.getElementById('officeFrame');
@@ -101,4 +101,4 @@ window.addEventListener('message', async (e) => {
   }
 });
 
-window.Office = { officeData, officeRecordHash };
+window.Office = { officeData, officeRecordHash, mount: mountOffice };

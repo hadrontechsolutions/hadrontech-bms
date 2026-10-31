@@ -119,6 +119,8 @@ Router.route('/dashboard', async () => {
       <button class="qa-btn" data-hash="/settings/backup">Backup Data</button>
     </div>
 
+    <div id="officeSlot"></div>
+
 
     <div class="card attention-card">
       <h3 class="section-title">Needs your attention${allClear ? ' — all clear ✓' : ''}</h3>
@@ -217,6 +219,7 @@ Router.route('/dashboard', async () => {
   `;
 
   content.querySelectorAll('[data-hash]').forEach(b => b.onclick = () => Router.navigate(b.dataset.hash));
+  if (window.Office) Office.mount(document.getElementById('officeSlot'));   // the AI team (js/office.js)
   const xb = document.getElementById('btnExpiryXlsx');
   if (xb) xb.onclick = async () => {
     const settings = await DB.getSettings();

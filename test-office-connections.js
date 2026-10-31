@@ -1,6 +1,5 @@
-/* Office (👥 in the menu, right below Dashboard): checks it is wired into the BMS and stays read-only.
-   - the menu link sits right below Dashboard and opens #/office
-   - the Office page loads office/office.html in a frame
+/* Office (on the Dashboard): checks it is wired into the BMS and stays read-only.
+   - the Dashboard shows office/office.html between the quick actions and Needs your attention
    - every record number the Office can show opens the right BMS page
    - collecting the data for the Office never writes to the BMS database */
 const fs = require('fs');
@@ -20,17 +19,16 @@ async function main() {
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
   await win.DB.openDB(); await win.DB.ensureCounters();
 
-  // menu
-  const links = [...doc.querySelectorAll('.app-sidebar .nav-link')];
-  ok(links[0].getAttribute('href') === '#/dashboard' && links[1].getAttribute('href') === '#/office', 'Office link is right below Dashboard');
-  ok(links[1].textContent.includes('Office'), 'menu label says Office');
+  // on the Dashboard, between the quick actions and "Needs your attention"
+  ok(![...doc.querySelectorAll('.app-sidebar .nav-link')].some(a => a.getAttribute('href') === '#/office'), 'no separate Office menu item');
   ok(fs.existsSync(path.join(APP, 'office', 'office.html')), 'office/office.html exists');
-
-  // page
-  win.location.hash = '#/office'; await win.Router.resolveRoute(); await wait(30);
+  win.location.hash = '#/dashboard'; await win.Router.resolveRoute(); await wait(60);
   const frame = doc.getElementById('officeFrame');
-  ok(frame && frame.getAttribute('src') === 'office/office.html', '#/office shows the Office frame');
-  ok(doc.querySelector('.nav-link.active') && doc.querySelector('.nav-link.active').getAttribute('href') === '#/office', 'Office is highlighted in the menu');
+  ok(frame && frame.getAttribute('src') === 'office/office.html', 'Dashboard shows the Office');
+  const qa = doc.querySelector('.quick-actions'), att = doc.querySelector('.attention-card'), slot = doc.getElementById('officeSlot');
+  ok(qa && att && slot && (qa.compareDocumentPosition(slot) & 4) && (slot.compareDocumentPosition(att) & 4), 'Office sits between the quick actions and Needs your attention');
+  win.location.hash = '#/office'; await win.Router.resolveRoute(); await wait(60);
+  ok(win.location.hash === '#/dashboard', 'old #/office links open the Dashboard');
 
   // one record of every kind
   const now = new Date().toISOString();
