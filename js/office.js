@@ -54,31 +54,40 @@ async function officeRecordHash(no) {
 /** Only BMS pages may be opened from the Office (a hash path like /products/new). */
 const officeSafeHash = (h) => typeof h === 'string' && /^\/[a-z0-9\-\/]*$/i.test(h) && h.length < 80;
 
-function officeFitFrame() {
+/** Space left on screen below the breadcrumb: the Office sizes its scene to fit it, so nothing scrolls. */
+function officeAvail() {
   const f = document.getElementById('officeFrame');
-  if (!f) return;
-  const top = f.getBoundingClientRect().top;
-  f.style.height = Math.max(480, window.innerHeight - top - 12) + 'px';
+  return f ? Math.max(420, window.innerHeight - f.getBoundingClientRect().top - 12) : 0;
+}
+function officeSendSize() {
+  const f = document.getElementById('officeFrame');
+  if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'office-size', avail: officeAvail() }, '*');
 }
 
 Router.route('/office', async () => {
   Router.setBreadcrumb([{ label: 'Office' }]);
   const content = document.getElementById('content');
   content.innerHTML = `
-    <div class="office-wrap">
-      <iframe id="officeFrame" src="office/office.html" title="Office — the Manager and his team"
-        style="display:block;width:100%;height:640px;border:1px solid #d9dee5;border-radius:10px;background:#fbf6ec"></iframe>
-    </div>`;
-  officeFitFrame();
+    <iframe id="officeFrame" src="office/office.html" title="Office — the Manager and his team" scrolling="no"
+      style="display:block;width:100%;height:${Math.max(420, window.innerHeight - 140)}px;border:0;background:transparent;overflow:hidden"></iframe>`;
 });
-window.addEventListener('resize', officeFitFrame);
+window.addEventListener('resize', officeSendSize);
+/* a banner appearing or closing above the Office moves it: re-fit the scene */
+for (const id of ['backupBanner', 'storageRiskBanner']) {
+  const el = document.getElementById(id);
+  if (el) new MutationObserver(officeSendSize).observe(el, { childList: true, subtree: true, attributes: true });
+}
 
 window.addEventListener('message', async (e) => {
   const f = document.getElementById('officeFrame');
   if (!f || e.source !== f.contentWindow) return;
   const m = e.data || {};
   try {
-    if (m.type === 'office-ready') {
+    if (m.type === 'office-height') {
+      if (m.h > 0) f.style.height = Math.round(m.h) + 'px';
+      if (!f.dataset.fitted) { f.dataset.fitted = '1'; setTimeout(officeSendSize, 300); }
+    } else if (m.type === 'office-ready') {
+      officeSendSize();
       f.contentWindow.postMessage({ type: 'office-data', at: new Date().toISOString(), data: await officeData() }, '*');
     } else if (m.type === 'office-open') {
       const hash = await officeRecordHash(m.no);
