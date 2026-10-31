@@ -218,6 +218,9 @@ button{font:inherit;cursor:pointer}
 .prodstatus{margin:8px 2px 0;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .prodstatus .ex{display:inline-block;background:#ffcd75;color:#1a1c2c;border:2px solid #1a1c2c;border-radius:3px;padding:0 5px;font-family:var(--display)}
 .pdb tr.hl td{background:color-mix(in srgb, #ffcd75 22%, transparent)}
+.pdb tr.hl.dup td{background:color-mix(in srgb, #b13e53 14%, transparent)}
+.pdb .pnote{display:block;font-weight:700;font-size:12px;color:var(--muted)}.pdb tr.dup .pnote{color:var(--urgent)}
+.dupwarn{border:2px solid var(--urgent);background:var(--urgent-bg)}.dupwarn h3{color:var(--urgent)}.dupwarn .pbtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .pdb td.chg{font-weight:700;box-shadow:inset 0 -2px 0 #ef7d57}
 #prodStageSlot .scroller{border-width:3px}
 .ex{display:inline-block;background:#ffcd75;color:#1a1c2c;border:2px solid #1a1c2c;border-radius:3px;padding:0 5px;font-family:var(--display);line-height:1.2}
@@ -848,6 +851,7 @@ function avatar(k){ const c = document.createElement('canvas'); const s = TEAM[k
 /* =====================================================================
    DASHBOARD UI
    ===================================================================== */
+window.__toast = msg => toast(msg);
 function toast(msg){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; const dl = document.getElementById('dlg'); (dl && dl.open ? dl : document.body).appendChild(t); setTimeout(() => t.remove(), 2200); }
 const SEV_TXT = {urgent:'Urgent', week:'This week', fyi:'FYI'};
 function copyFor(f, li){
@@ -2047,6 +2051,17 @@ function wireResult(res, checks, FIELDS, out){
   res.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => copyText(b.dataset.copy, 'Copied — paste it into the BMS field')));
   const ca = res.querySelector('#copyAll'); if (ca) ca.addEventListener('click', () => copyText(FIELDS.map(([id, l]) => l + '\t' + (out[id] ?? '')).join('\n'), 'All fields copied'));
 }
+/* "…as a new one anyway" on something that looks like a duplicate: warn first */
+function dupConfirm(kind, no, check, onUpdate, onNew){
+  const box = document.getElementById('prodDb');
+  box.innerHTML = '<div class="panel dupwarn" role="alert"><h3>⚠ This looks like a duplicate of <span class="nolink">' + esc(no) + '</span></h3><p class="sub">' + esc(check ? check.detail : '') + '</p>'
+    + '<p class="sub">Two records for the same ' + kind + ' split its history: quotes, prices and orders end up in two places.</p>'
+    + '<div class="pbtns"><button class="btn primary" type="button" data-dup="update">Update <span class="nolink">' + esc(no) + '</span> instead</button><button class="btn" type="button" data-dup="new">It’s a different ' + kind + ' — continue</button></div></div>';
+  box.querySelector('[data-dup="update"]').addEventListener('click', onUpdate);
+  box.querySelector('[data-dup="new"]').addEventListener('click', onNew);
+  box.scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block:'nearest'});
+  say(R, 'Wait — this one may already exist.'); setTimeout(() => say(R, null), 2500);
+}
 function renderProduct(parsed){
   const {out, notes, rows, blanksWithReason} = parsed, res = document.getElementById('prodResult');
   const {checks, dup} = checkProduct(out);
@@ -2058,7 +2073,12 @@ function renderProduct(parsed){
   h += '<button class="btn" type="button" id="copyAll">Copy all fields</button></div></div>' + checksPanel(checks, blanksWithReason) + '</div><div id="prodDb"></div>';
   res.innerHTML = h;
   wireResult(res, checks, PF, out);
-  res.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => saveProduct(out, b.dataset.save === 'update' ? dup : null)));
+  const dupCheck = checks.find(c => /^Looks like /.test(c.title));
+  res.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.save === 'update') return saveProduct(out, dup);
+    if (dup) return dupConfirm('product', dup.itemNo, dupCheck, () => saveProduct(out, dup), () => saveProduct(out, null, dup.itemNo));
+    saveProduct(out, null);
+  }));
   const cs = res.querySelector('#createSupBtn');
   if (cs) cs.addEventListener('click', () => {
     pendingProduct = parsed; setMode('supplier');
@@ -2078,14 +2098,20 @@ function renderSupplier(parsed){
   h += '<button class="btn" type="button" id="copyAll">Copy all fields</button></div></div>' + checksPanel(checks, blanksWithReason) + '</div><div id="prodDb"></div>';
   res.innerHTML = h;
   wireResult(res, checks, SF, out);
-  res.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => saveSupplier(out, b.dataset.save === 'update' ? dup : null)));
+  const dupCheck = checks.find(c => /^Looks like /.test(c.title));
+  res.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.save === 'update') return saveSupplier(out, dup);
+    if (dup) return dupConfirm('supplier', dup[2] || dup[0], dupCheck, () => saveSupplier(out, dup), () => saveSupplier(out, null, dup[2] || dup[0]));
+    saveSupplier(out, null);
+  }));
 }
-function previewTable(title, sub, cols, rows, shown, changed, isNew){
+function previewTable(title, sub, cols, rows, shown, changed, isNew, dupOf){
   let h = '<div class="panel"><div><h3>' + title + '</h3><p class="sub">' + sub + '</p></div><div class="tablewrap"><table class="tasks pdb"><thead><tr>' + cols.map(c => '<th>' + c[1] + '</th>').join('') + '</tr></thead><tbody>';
-  for (const p of rows) h += '<tr' + (p === shown ? ' class="hl"' : '') + '>' + cols.map(([k, , get]) => { const v = get ? get(p) : p[k]; const s = String(v ?? ''); return '<td' + (p === shown && (isNew || changed.has(k)) ? ' class="chg"' : '') + '>' + esc(s.length > 70 ? s.slice(0, 70) + '…' : s) + '</td>'; }).join('') + '</tr>';
+  for (const p of rows) h += '<tr' + (p === shown ? ' class="hl' + (isNew && dupOf ? ' dup' : '') + '"' : '') + '>' + cols.map(([k, , get], ci) => { const v = get ? get(p) : p[k]; const s = String(v ?? ''); const unsaved = p === shown && isNew && ci === 0;
+    return '<td' + (p === shown && (isNew || changed.has(k)) ? ' class="chg"' : '') + '>' + (unsaved ? '<span class="nolink">' + esc(s) + '</span><span class="pnote">not saved yet' + (dupOf ? ' · possible duplicate of <span class="nolink">' + esc(dupOf) + '</span>' : '') + '</span>' : esc(s.length > 70 ? s.slice(0, 70) + '…' : s)) + '</td>'; }).join('') + '</tr>';
   return h + '</tbody></table></div></div>';
 }
-function saveProduct(o, dup){
+function saveProduct(o, dup, dupOf){
   const sup = findSupplier(o.supplier);
   const rec = {itemNo: dup ? dup.itemNo : nextItemNo(), category:o.category || '', brand:o.brand || '', modelNo:o.modelNo || '', description:o.description || '', supplier: sup ? sup[0] : (o.supplier || ''),
     standardCost:o.standardCost || '', currency:o.currency || '', estimatedFreightCost:o.estimatedFreightCost || '', freightCoversQty:o.freightCoversQty || '', leadTime:o.leadTime || '', uom:o.uom || ''};
@@ -2096,7 +2122,7 @@ function saveProduct(o, dup){
   const cols = [['itemNo','Item No'], ['category','Category'], ['description','Description'], ['supplier','Default Supplier'], ['standardCost','Std Cost'], ['currency','Cur'], ['estimatedFreightCost','Freight'], ['freightCoversQty','Freight Qty'], ['leadTime','Lead Time']];
   const rows = CAT.products.filter(p => p !== shown).slice(-4).concat([shown]);
   const sub = (dup ? 'Changes for ' + shown.itemNo + ': ' + (changed.size ? [...changed].map(k => (cols.find(c => c[0] === k) || [k, k])[1]).join(', ') + ' changed (highlighted).' : 'nothing changed.') : 'New row ' + shown.itemNo + ' at the end of the list.') + (dup ? ' Preview only — nothing was saved. Make the change in the BMS with the button below.' : ' Preview only — nothing was saved. Enter it in the BMS with the button below; the BMS gives the final item number.');
-  document.getElementById('prodDb').innerHTML = (lastSupplierPreview || '') + previewTable('Products database — preview', sub, cols, rows, shown, changed, !dup) + '<p><button class="btn primary" type="button" data-bms-goto="' + (dup && dup.id ? '/products/' + dup.id + '/edit' : '/products/new') + '">' + (dup ? 'Open ' + esc(dup.itemNo) + ' in the BMS to update it' : 'Open New Product in the BMS') + '</button></p>';
+  document.getElementById('prodDb').innerHTML = (lastSupplierPreview || '') + previewTable('Products database — preview', sub, cols, rows, shown, changed, !dup, dupOf) + '<p><button class="btn primary" type="button" data-bms-goto="' + (dup && dup.id ? '/products/' + dup.id + '/edit' : '/products/new') + '">' + (dup ? 'Open ' + esc(dup.itemNo) + ' in the BMS to update it' : 'Open New Product in the BMS') + '</button></p>';
   lastSupplierPreview = '';
   document.querySelectorAll('#prodResult [data-save]').forEach(b => b.disabled = true);
   say(R, 'Here’s the preview.'); setTimeout(() => say(R, null), 2500);
@@ -2104,7 +2130,7 @@ function saveProduct(o, dup){
   document.getElementById('prodDb').scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block:'nearest'});
 }
 let lastSupplierPreview = '';
-function saveSupplier(o, dup){
+function saveSupplier(o, dup, dupOf){
   let rec;
   const changed = new Set();
   if (dup){ rec = dup; if (o.currency && o.currency !== dup[1]){ dup[1] = o.currency; changed.add('currency'); } if (o.country && o.country !== dup[3]){ dup[3] = o.country; changed.add('country'); } if (o.email && o.email !== dup[4]){ dup[4] = o.email; changed.add('email'); } if (o.contactPerson && o.contactPerson !== dup[5]){ dup[5] = o.contactPerson; changed.add('contact'); } }
@@ -2112,7 +2138,7 @@ function saveSupplier(o, dup){
   const cols = [['no','Supplier No', s => s[2]], ['name','Company Name', s => s[0]], ['currency','Currency', s => s[1]], ['country','Country', s => s[3]], ['email','Email', s => s[4]], ['contact','Contact Person', s => s[5]]];
   const rows = CAT.suppliers.filter(s => s !== rec).slice(-4).concat([rec]);
   const sub = (dup ? 'Changes for ' + rec[2] + (changed.size ? ': ' + [...changed].join(', ') + ' changed.' : ': nothing changed.') : 'New row ' + rec[2] + ' at the end of the list.') + (dup ? ' Preview only — nothing was saved. Make the change in the BMS with the button below.' : ' Preview only — nothing was saved. Enter it in the BMS with the button below; the BMS gives the final supplier number.');
-  const html = previewTable('Suppliers database — preview', sub, cols, rows, rec, changed, !dup) + (pendingProduct ? '' : '<p><button class="btn primary" type="button" data-bms-goto="' + (dup && dup.id ? '/suppliers/' + dup.id + '/edit' : '/suppliers/new') + '">' + (dup ? 'Open ' + esc(dup[2] || 'the supplier') + ' in the BMS to update it' : 'Open New Supplier in the BMS') + '</button></p>');
+  const html = previewTable('Suppliers database — preview', sub, cols, rows, rec, changed, !dup, dupOf) + (pendingProduct ? '' : '<p><button class="btn primary" type="button" data-bms-goto="' + (dup && dup.id ? '/suppliers/' + dup.id + '/edit' : '/suppliers/new') + '">' + (dup ? 'Open ' + esc(dup[2] || 'the supplier') + ' in the BMS to update it' : 'Open New Supplier in the BMS') + '</button></p>');
   document.getElementById('prodDb').innerHTML = html;
   document.querySelectorAll('#prodResult [data-save]').forEach(b => b.disabled = true);
   toast(rec[2] + (dup ? ' — preview ready (not saved)' : ' — preview ready (not saved)'));
@@ -3602,9 +3628,13 @@ packImg.src = PACK_SRC;
     if (e.source !== window.parent) return;
     const m = e.data || {};
     if (m.type === 'office-size'){ fitTo(m.avail); return; }
+    if (m.type === 'office-notfound'){ if (window.__toast) window.__toast(m.no + ' isn’t in the BMS — it isn’t saved yet, or it was deleted.'); return; }
     if (m.type === 'office-data' && !started){
       started = true;
-      try { window.__BIZ = bizFromData(m.data, m.at); window.__CAT = catFromData(m.data); __officeMain(); linkRecords(); setTimeout(() => window.fitTo && window.fitTo(), 60); }
+      try { window.__BIZ = bizFromData(m.data, m.at); window.__CAT = catFromData(m.data); __officeMain(); linkRecords(); setTimeout(() => window.fitTo && window.fitTo(), 60);
+        /* when a pop-up opens, ask the BMS to scroll the whole Office into view so the pop-up isn't cut off */
+        const dl = document.getElementById('dlg');
+        if (dl) new MutationObserver(() => { if (dl.open) window.parent.postMessage({type:'office-focus'}, '*'); }).observe(dl, {attributes:true, attributeFilter:['open']}); }
       catch (err){ console.error(err); document.body.insertAdjacentHTML('afterbegin', '<div style="background:#fde8e8;color:#8a1c1c;padding:10px 14px;font:14px system-ui">The Office could not read the BMS data: ' + String(err.message).replace(/</g, '&lt;') + '</div>'); }
     }
   });
@@ -3636,7 +3666,7 @@ function linkRecords(){
   const SKIP = new Set(['A', 'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'SCRIPT', 'STYLE', 'CANVAS', 'OPTION', 'LABEL']);
   const walk = root => {
     const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode: n => {
-      for (let p = n.parentNode; p && p !== root.parentNode; p = p.parentNode){ if (p.nodeType === 1 && (SKIP.has(p.tagName) || p.isContentEditable || p.classList.contains('bmslink'))) return NodeFilter.FILTER_REJECT; }
+      for (let p = n.parentNode; p && p !== root.parentNode; p = p.parentNode){ if (p.nodeType === 1 && (SKIP.has(p.tagName) || p.isContentEditable || p.classList.contains('bmslink') || p.classList.contains('nolink'))) return NodeFilter.FILTER_REJECT; }
       RE.lastIndex = 0; return RE.test(n.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP; }});
     const nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
     for (const n of nodes){

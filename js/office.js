@@ -86,13 +86,17 @@ window.addEventListener('message', async (e) => {
     if (m.type === 'office-height') {
       if (m.h > 0) f.style.height = Math.round(m.h) + 'px';
       if (!f.dataset.fitted) { f.dataset.fitted = '1'; setTimeout(officeSendSize, 300); }
+    } else if (m.type === 'office-focus') {
+      // a pop-up opened in the Office: bring the whole Office on screen (just below the top bar)
+      const r = f.getBoundingClientRect(), bar = (document.querySelector('.topbar') || { offsetHeight: 56 }).offsetHeight;
+      if (r.top < bar || r.bottom > window.innerHeight) window.scrollTo({ top: window.scrollY + r.top - bar - 8, behavior: 'smooth' });
     } else if (m.type === 'office-ready') {
       officeSendSize();
       f.contentWindow.postMessage({ type: 'office-data', at: new Date().toISOString(), data: await officeData() }, '*');
     } else if (m.type === 'office-open') {
       const hash = await officeRecordHash(m.no);
       if (hash) Router.navigate(hash);
-      else alert(`${m.no} is not in the BMS (it may have been deleted).`);
+      else f.contentWindow.postMessage({ type: 'office-notfound', no: m.no }, '*');   // the Office says so itself, no browser pop-up
     } else if (m.type === 'office-goto' && officeSafeHash(m.hash)) {
       Router.navigate(m.hash);
     }
