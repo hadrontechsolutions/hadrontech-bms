@@ -9,7 +9,7 @@
 :root{
   --bg:#eef1f5; --surface:#ffffff; --ink:#1a1c2c; --muted:#566c86; --line:#cfd8e2; --soft:#f5f7fa;
   --accent:#ffcd75; --accent-ink:#1a1c2c; --outline:#1a1c2c; --link:#29366f;
-  --mgr:#b13e53; --sales:#257179; --purch:#3b5dc9; --bill:#5d275d; --books:#41a6f6; --recs:#ef7d57; --analyst:#38b764; --sec:#c0577a;
+  --mgr:#b13e53; --sales:#257179; --purch:#3b5dc9; --bill:#5d275d; --books:#41a6f6; --recs:#ef7d57; --analyst:#38b764; --sec:#c0577a; --legal:#6a4c93;
   --urgent:#b13e53; --urgent-bg:#fbe3e7; --week:#8a5a00; --week-bg:#fff0cc; --fyi:#29366f; --fyi-bg:#e1eafb; --ok:#1f6b4a; --ok-bg:#dcf3e6;
   --s-busy:#ef7d57; --s-online:#38b764; --s-idle:#3b5dc9; --s-break:#566c86; --s-meet:#5d275d;
   --display:"Pixelify Sans", ui-monospace, "Courier New", monospace;
@@ -312,7 +312,7 @@ dialog#dlg[data-look="glass"] .flist li{background:color-mix(in srgb, var(--soft
   <header>
     <div>
       <h1><span>Hadrontech</span> Office</h1>
-      <p>Eight workers that check the BMS data every day. You only talk to the Manager: he hands your task to the person with the right skills and brings the result back to you.</p>
+      <p>Nine workers that check the BMS data every day. You only talk to the Manager: he hands your task to the person with the right skills and brings the result back to you.</p>
     </div>
     <div class="today">Today<b id="todayLbl"></b></div>
   </header>
@@ -609,9 +609,12 @@ const TEAM = {
     routine:['Checking the last backup…','Looking for duplicates…','Checking currencies…']},
   sec:{label:'Secretary', short:'SECRETARY', color:'var(--sec)', role:'Quick answers, reminders and meeting minutes',
     look:{head:'girlD', hair:P.R, hairHi:P.O, skin:P.Y, skinSh:P.O, coat:P.G, coatSh:P.T, shirt:P.W, pants:P.Q, shoes:P.k, skirt:true, long:true},
-    routine:['Checking your reminders…','Updating the calendar…','Filing notes…']}
+    routine:['Checking your reminders…','Updating the calendar…','Filing notes…']},
+  legal:{label:'Legal & Compliance', short:'LEGAL', color:'var(--legal)', role:'BIR filings, registrations and permits — on time',
+    look:{head:'boy', hair:P.k, hairHi:P.Q, skin:P.O, skinSh:P.R, coat:P.P, coatSh:P.k, shirt:P.W, tie:P.Y, pants:P.Q, shoes:P.k},
+    routine:['Checking the BIR calendar…','Reading our Certificate of Registration…','Checking permit dates…']}
 };
-const ORDER = ['mgr','sales','purch','bill','books','analyst','recs','sec'];
+const ORDER = ['mgr','sales','purch','bill','books','analyst','recs','sec','legal'];
 const STAFF_KEYS = ORDER.filter(k => k !== 'mgr');
 
 /* =====================================================================
@@ -1068,7 +1071,7 @@ addUnit('sales', 12, 82, 'chairG'); addUnit('purch', 52, 82, 'chairB');
 addUnit('bill', 112, 82, 'chairO'); addUnit('books', 152, 82, 'chairW');
 addUnit('analyst', 12, 138, 'chairY'); addUnit('recs', 52, 138, 'chairO');
 addUnit('sec', 112, 138, 'chairB');   // the Secretary sits where the lounge sofas used to be
-UNITS.spare = {key:'spare', kind:'cubicle', ux:152, py:138, chairX:159, chairY:145, stand:[164, A2], chair:'chairW', stack:0};   // empty desk beside her, ready for the next hire
+addUnit('legal', 152, 138, 'chairW');   // Legal & Compliance, beside the Secretary
 UNITS.mgr = {key:'mgr', kind:'boss', chairX:249, chairY:92, stand:[254, A1], chair:'chairD', stack:0};
 UNITS.guest = {key:'guest', kind:'guest', chairX:297, chairY:92, stand:[302, A1], chair:'chairD', stack:0};
 const SIDE_SPOT = [281, 124];
@@ -1916,7 +1919,8 @@ const SKILLS = {
   books:['expense','receipt','tax','bookkeeper','payslip','distribution','vat','3m','percentage tax','partner'],
   analyst:['report','analy','how are we','how is hadrontech','sales','profit','margin','trend','win rate','numbers','compare','review','performance'],
   recs:['product','supplier','record','database','backup','duplicate','category','currency','clean up','cleanup','item-'],
-  sec:['remind','reminder','reminders','paalala','ipaalala','calendar','schedule']
+  sec:['remind','reminder','reminders','paalala','ipaalala','calendar','schedule'],
+  legal:['legal','law','compliance','bir','permit','dti','registration','filing','deadline','penalty','books of accounts','rdo']
 };
 const SKILL_VERBS = {
   sales:['Checking the RFQ Tracker…','Looking at the quotations…','Checking reference emails…','Writing it up…'],
@@ -1926,6 +1930,7 @@ const SKILL_VERBS = {
   analyst:['Pulling the numbers…','Comparing periods…','Looking for patterns…','Writing it up…'],
   recs:['Searching the records…','Checking for duplicates…','Checking currencies…','Writing it up…'],
   sec:['Reading the date…','Finding the related RFQs and quotes…','Writing it in the calendar…'],
+  legal:['Reading our BIR and DTI certificates…','Checking the filing calendar…','Writing it up…'],
   mgr:['Thinking it over…','Checking the reports…','Writing my notes…']
 };
 const SKILL_RESULT = {
@@ -1935,11 +1940,13 @@ const SKILL_RESULT = {
   books:'I checked expenses and year-to-date figures for this. In the real BMS I’d show the totals for the exact period and anything the bookkeeper still needs.',
   analyst:'I ran the numbers for this. In the real BMS I’d show the figures for the exact dates, compared with the period before, plus 2–3 recommendations.',
   recs:'I checked the records for this. To add a new product or supplier, use the Add Supplier / Product tab: paste ChatGPT’s table and I’ll check it.',
+  legal:'I checked our BIR Certificate of Registration and DTI certificate for this.',
   sec:'I keep your reminders. Tell the Manager “remind me on Monday to …” and I’ll show a ! over my head on that day.',
   mgr:'I looked at this myself. In the real BMS I’d pull the reports involved and give you my recommendation with the reasons.'
 };
 function routeRequest(text){
   const t = ' ' + text.toLowerCase() + ' ';
+  if (isLegalText(text)) return {k:'legal', why:'it’s about our BIR filings, registrations or permits — Legal & Compliance keeps those', think:'That’s for Legal & Compliance.'};
   if (isReminderText(text)) return {k:'sec', why:'it’s a reminder — the Secretary keeps your reminders and shows a ! on the day', think:'A reminder — that’s for the Secretary.'};
   const topic = /\bpa(y|id|yment)|invoice|\bbir\b|collect|proforma|balance/.test(t) ? 'bill'
     : /deliver|ship|arriv|supplier po|purchase order|tracking|\beta\b|freight|forwarder/.test(t) ? 'purch'
@@ -1948,7 +1955,7 @@ function routeRequest(text){
     : /backup|duplicate|currency|record|database|clean ?up/.test(t) ? 'recs'
     : /priorit|focus|what should (i|we)|decide|today.?s plan/.test(t) ? 'mgr' : null;
   const JOB = {sales:'she keeps the RFQ Tracker and the quotations', purch:'he handles Supplier POs and deliveries', bill:'she tracks payments and invoices',
-    books:'he keeps the expenses and tax figures', analyst:'he has the numbers', recs:'she keeps the records clean', sec:'she keeps your reminders', mgr:'it’s a decision about priorities'};
+    books:'he keeps the expenses and tax figures', analyst:'he has the numbers', recs:'she keeps the records clean', sec:'she keeps your reminders', legal:'he keeps our BIR filings, registrations and permits', mgr:'it’s a decision about priorities'};
   const docNo = text.match(/HT-(Q|RFQ|SO|PO)-\d{4}-\d{4}/i);
   if (typeof lookupRoute === 'function' && !/discount|lower (the )?price|best price|profit|margin|how much (did|will|do|can|could|would) we (make|earn)/i.test(t)){ const lr = lookupRoute(text); if (lr) return lr; }
   if (!docNo && typeof detectIntent === 'function'){
@@ -2791,7 +2798,8 @@ const RULE_DEFS = [
   {id:'late', w:'purch', title:'Supplier deliveries on time', p:{}, text:() => 'Chase the supplier as soon as a Supplier PO passes its expected delivery date.'},
   {id:'nonvat', w:'books', title:'₱3M non-VAT limit', p:{pct:75}, text:p => 'Warn when this year’s sales pass ' + p.pct + '% of ₱3,000,000.'},
   {id:'expenses', w:'books', title:'Monthly profit check', p:{}, text:() => 'Each month, compare gross profit from delivered orders with the month’s expenses.'},
-  {id:'pct', w:'books', title:'Quarterly percentage tax', p:{}, text:() => 'Prepare the 3% percentage tax figures every quarter (confirm dates with the bookkeeper).'},
+  {id:'pct', w:'legal', title:'BIR filings on time', p:{}, text:() => 'File per our BIR Certificate of Registration: 2551Q (3% percentage tax) within 25 days after each quarter, 1701Q by May 15, Aug 15 and Nov 15, and 1701 by April 15. A deadline on a weekend or holiday is usually moved to the next working day — confirm with the bookkeeper.'},
+  {id:'regs', w:'legal', title:'Registrations and permits', p:{}, text:() => 'Keep the DTI business name, the business permit and the books of accounts valid, and display the BIR Certificate of Registration in the place of business.'},
   {id:'backup', w:'recs', title:'Fresh backups', p:{days:1}, text:p => 'Back up the BMS at least every ' + p.days + ' day(s).'},
   {id:'records', w:'recs', title:'Clean records', p:{}, text:() => 'Every quote has its reference email, product currency matches its supplier, no duplicate suppliers.'},
   {id:'insight', w:'analyst', title:'Numbers and patterns', p:{}, text:() => 'The Data Analyst reports pipeline, win rate, speed and markup — by customer.'}
@@ -2927,7 +2935,7 @@ function runBrain(){
   brainFind('expenses', 'books', gp - ex < 0 ? 'week' : 'fyi', mName + ' so far: gross profit ' + pesoX(gp) + ' − expenses ' + pesoX(ex) + ' = ' + pesoX(gp - ex),
     'Gross profit from ' + mOrders.length + ' Sales Order' + (mOrders.length === 1 ? '' : 's') + ' dated ' + mName + ' 1–' + T0.getDate() + ' (selling price minus landed cost on the quotation). Expenses: ' + mExp.length + ' entries in the same period.' + (gp - ex < 0 ? ' We need about ' + pesoX(ex - gp) + ' more gross profit this month to break even.' : ''), {key:'gp:' + mName + ':' + mOrders.length + ':' + mExp.length});
   if (mExp.length) brainFind('expenses', 'books', 'fyi', mName + ' expenses so far: ' + pesoX(mExp.reduce((s, e) => s + e.amt, 0)) + ' (' + mExp.length + ' entries)', 'Biggest: ' + mExp.slice().sort((a, b) => b.amt - a.amt).slice(0, 2).map(e => e.cat + ' ' + pesoX(e.amt)).join(', ') + '. Receipts are kept in your separate folder.', {key:'exp:' + mName + ':' + mExp.length});
-  brainFind('pct', 'books', 'fyi', 'Quarterly percentage tax: prepare this quarter’s sales figures', 'The 3% percentage tax is filed every quarter. Confirm the exact filing date with the bookkeeper.', {key:'pct:' + yr + 'Q' + (Math.floor(T0.getMonth() / 3) + 1)});
+  legalFindings();
 
   /* Records & Backup */
   const bk = ruleP('backup'), bAge = BIZ.backupDate ? ago(BIZ.backupDate) : 9999;
@@ -3036,6 +3044,7 @@ function brainTopics(){
 /* answers to typed requests, from the real data */
 function realAnswer(wk, text){
   const t = String(text || ''), L = t.toLowerCase();
+  if (wk === 'legal' || (wk !== 'sec' && isLegalText(t))) return legalAnswer(t);
   if (wk === 'sec' || isReminderText(t)) return reminderAnswer(t);
   const fmtF = f => f.title + (f.rule ? ' (rule: ' + ruleTitle(f.rule) + ')' : '');
   const mq = t.match(/HT-Q-\d{4}-\d{4}/i), ms = t.match(/HT-SO-\d{4}-\d{4}/i), mp = t.match(/HT-PO-\d{4}-\d{4}/i), mr = t.match(/HT-RFQ-\d{4}-\d{4}/i);
@@ -3113,7 +3122,10 @@ const SHEET = {
        works:['Everyone: clean records make every check work']},
   sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a ! over her head.',
        checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks decided in team meetings', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
-       works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']}
+       works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']},
+  legal:{job:'Keeps Hadrontech legal and on time: the BIR filing calendar from our Certificate of Registration (2551Q, 1701Q, 1701), books of accounts, the DTI business name, the business permit, and invoices under the Ease of Paying Taxes Act. A week before each deadline he gives the Secretary a reminder for you.',
+       checks:['BIR Certificate of Registration (Form 2303)', 'DTI Business Name certificate', 'Filing deadlines (moved off weekends and holidays)', 'Sales per quarter from the BMS, for the bookkeeper'], skills:'BIR deadlines, registrations, permits',
+       works:['Bookkeeping: the figures for each filing', 'Secretary: a reminder a week before each deadline', 'Billing: an invoice for every sale']}
 };
 let sheetKey = null;
 function openSheet(k){ sheetKey = k; openView('sheet'); dlgTitle.textContent = TEAM[k].label; }
@@ -3899,7 +3911,7 @@ VIEWS.reminders = function(){
     const e = document.createElement('li'); if (isDue) e.className = 'due';
     const late = daysUntil(r.date) < 0 ? ' — ' + (-daysUntil(r.date)) + ' day' + (daysUntil(r.date) === -1 ? '' : 's') + ' late' : '';
     e.innerHTML = '<div class="top"><span class="ft">' + esc(r.task) + '</span></div><div class="fd"><span class="when">' + esc(remWhen(r) + late) + '</span>'
-      + (r.src === 'meeting' ? ' · from ' + esc(r.text) : r.text && r.text !== r.task ? ' · you said: “' + esc(r.text) + '”' : '') + '</div>'
+      + (r.src === 'meeting' ? ' · from ' + esc(r.text) : r.src === 'legal' ? ' · from Legal & Compliance' : r.text && r.text !== r.task ? ' · you said: “' + esc(r.text) + '”' : '') + '</div>'
       + (r.links.length ? '<ul class="links">' + r.links.map(no => '<li>' + esc(remLinkLine(no)) + '</li>').join('') + '</ul>' : '') + '<div class="fa"></div>';
     const fa = e.querySelector('.fa'), b = (t, fn, primary) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn' + (primary ? ' primary' : ''); x.textContent = t; x.addEventListener('click', fn); fa.appendChild(x); return x; };
     if (isDue){
@@ -3936,6 +3948,106 @@ VIEWS.reminders = function(){
   const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Reminders are kept in the Office on this computer only — not in the BMS or its backups. On the day, a ! shows over the Secretary’s head.'; dlgBody.appendChild(p);
   sec('Done recently', done, false);
 };
+
+
+/* =====================================================================
+   LEGAL & COMPLIANCE — from our BIR Certificate of Registration (Form 2303, OCN generated Sep 7, 2026)
+   and DTI Business Name certificate (No. 8469239). The TIN and home address are deliberately not kept here.
+   ===================================================================== */
+const REG = {
+  name:'HADRONTECH INDSOL INDUSTRIAL EQUIPMENT TRADING', owner:'Gretchen Caballero Sicat', type:'Single proprietorship (resident citizen)',
+  rdo:'RDO 54B – West Cavite (Revenue Region 9A – CABAMIRO)', city:'General Trias, Cavite', bizReg:'2026-09-06', taxStart:'2026-09-07', annualFrom:'2027-01-01',
+  line:'Online selling (industrial equipment) — PSIC 47913, retail sale via internet', eightPct:false,
+  dtiNo:'8469239', dtiFrom:'2026-09-07', dtiTo:'2031-09-07'
+};
+const QNAME = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'];
+const workdayOnOrAfter = iso => (typeof isWorkday === 'function' && !isWorkday(iso)) ? nextWorkday(iso) : iso;
+/** Every filing we must make, from the COR (with the due date moved off weekends and holidays). */
+function legalDeadlines(){
+  const out = [], start = REG.taxStart, y0 = 2026, y1 = new Date().getFullYear() + 1;
+  const push = (form, what, period, due, extra) => { const d = workdayOnOrAfter(due); out.push(Object.assign({form, what, period, due:d, rawDue:due, moved:d !== due}, extra || {})); };
+  for (let y = y0; y <= y1; y++){
+    for (let q = 0; q < 4; q++){
+      const qEnd = isoOf(new Date(y, q * 3 + 3, 0)), qStart = isoOf(new Date(y, q * 3, 1));
+      if (qEnd < start) continue;
+      push('2551Q', '3% percentage tax', QNAME[q] + ' ' + y, isoOf(addDays(new Date(y, q * 3 + 3, 0), 25)), {from: qStart > start ? qStart : start, to: qEnd});
+      if (q < 3) push('1701Q', 'quarterly income tax', QNAME[q] + ' ' + y, isoOf(new Date(y, [4, 7, 10][q], 15)), {from: y + '-01-01' > start ? y + '-01-01' : start, to: qEnd});
+    }
+    if (y + '-12-31' >= start) push('1701', 'annual income tax', 'year ' + y, isoOf(new Date(y + 1, 3, 15)), {from: y + '-01-01' > start ? y + '-01-01' : start, to: y + '-12-31'});
+  }
+  return out.sort((a, b) => a.due.localeCompare(b.due));
+}
+function salesBetween(from, to){ const os = BIZ.orders.filter(o => o.date >= from && o.date <= to && o.st !== 'Cancelled' && o.st !== 'Draft'); return {n: os.length, total: os.reduce((s, o) => s + o.total, 0)}; }
+const firstIncomeTaxDue = () => legalDeadlines().find(d => d.form === '1701Q' || d.form === '1701');
+function legalFindings(){
+  const today = isoOf(T0), dl = legalDeadlines();
+  for (const d of dl){
+    const left = Math.round((new Date(d.due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 864e5), s = salesBetween(d.from, d.to);
+    const fig = 'Sales Orders dated ' + fD(d.from) + ' – ' + fD(d.to) + ': ' + pesoX(s.total) + ' (' + s.n + ').';
+    const moved = d.moved ? ' The usual date (' + fD(d.rawDue) + ') falls on a ' + (holidayOn(d.rawDue) ? holidayOn(d.rawDue)[0] : 'weekend') + ', so it moves to the next working day — confirm with the bookkeeper.' : '';
+    if (left >= 0 && left <= 21) brainFind('pct', 'legal', left <= 7 ? 'urgent' : 'week', d.form + ' (' + d.what + ', ' + d.period + ') is due ' + fD(d.due) + ' — ' + (left === 0 ? 'today' : left + ' day' + (left === 1 ? '' : 's') + ' left'),
+      fig + moved + ' Give the figures to the bookkeeper.', {key:'legal:' + d.form + ':' + d.period, overdue: 0});
+    else if (left < 0 && left >= -30) brainFind('pct', 'legal', 'week', 'Was the ' + d.form + ' (' + d.what + ', ' + d.period + ') filed? It was due ' + fD(d.due), fig + ' If it was filed, mark this done. If not, file it as soon as possible — late filing has penalties.', {key:'legal:' + d.form + ':' + d.period});
+  }
+  const fi = firstIncomeTaxDue();
+  if (fi && fi.due >= today){
+    const left = Math.round((new Date(fi.due + 'T00:00:00') - T0) / 864e5);
+    brainFind('regs', 'legal', left <= 14 ? 'urgent' : 'week', 'Register our books of accounts before ' + fD(fi.due) + ' (' + left + ' days left)',
+      'Our BIR Certificate of Registration says new businesses register their books of accounts before the first income tax return is due — that’s the ' + fi.form + ' for ' + fi.period + '. If they’re already registered, mark this done.', {key:'regs:books'});
+  }
+  brainFind('regs', 'legal', 'fyi', 'No business (Mayor’s) permit on file in the Office', 'Our DTI certificate says it “is not a license to engage in any kind of business”. The business permit from ' + REG.city + ' is separate — tell me its number and expiry date so I can watch the renewal.', {key:'regs:permit'});
+  const dtiLeft = Math.round((new Date(REG.dtiTo + 'T00:00:00') - T0) / 864e5);
+  brainFind('regs', 'legal', dtiLeft <= 90 ? 'urgent' : 'fyi', 'DTI business name valid until ' + fD(REG.dtiTo), REG.name + ' (Business Name No. ' + REG.dtiNo + '). ' + (dtiLeft <= 90 ? 'Renew it now.' : 'I’ll remind you before it expires.'), {key:'regs:dti:' + REG.dtiTo});
+}
+/** A week before each filing, Legal & Compliance gives the Secretary a reminder (once per filing). */
+function legalReminders(){
+  if (typeof REM === 'undefined') return;
+  const today = todayIso();
+  for (const d of legalDeadlines()){
+    if (d.due < today) continue;
+    let when = isoOf(addDays(new Date(d.due + 'T00:00:00'), -7)); if (!isWorkday(when)) when = prevWorkday(when) || today; if (when < today) when = today;
+    if (Math.round((new Date(d.due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 864e5) > 45) continue;
+    const key = 'legal:' + d.form + ':' + d.period; if (REM.some(r => r.key === key)) continue;
+    REM.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), key, src:'legal', text:'Legal & Compliance', task: d.form + ' — ' + d.what + ' for ' + d.period + ' is due ' + dayName(d.due) + '. Give the bookkeeper the figures.', date: when, time:null, links:[], created: new Date().toISOString(), done:null});
+  }
+  const fi = firstIncomeTaxDue();
+  if (fi && fi.due >= today && !REM.some(r => r.key === 'regs:books')){
+    let when = isoOf(addDays(new Date(fi.due + 'T00:00:00'), -7)); if (!isWorkday(when)) when = prevWorkday(when) || today; if (when < today) when = today;
+    REM.push({id: Date.now().toString(36) + 'b', key:'regs:books', src:'legal', text:'Legal & Compliance', task:'Register our books of accounts before ' + dayName(fi.due) + ' (before the first income tax return).', date: when, time:null, links:[], created: new Date().toISOString(), done:null});
+  }
+  remSave();
+}
+function isLegalText(t){
+  const L = ' ' + String(t || '').toLowerCase() + ' ';
+  if (/how much|amount|estimate|compute|magkano/.test(L)) return false;   // the figures stay with Bookkeeping
+  return /\blegal|\blaw\b|laws|compliance|\bbir\b|2551|1701|\bitr\b|tax (deadline|filing|return|form)|file (our|the|my) tax|filing|deadline.*tax|tax.*deadline|\bpermit|\bdti\b|business name|registration|registered|certificate of registration|\bcor\b|books of accounts|\brdo\b|penalt|requirement|what (tax|taxes)|which (tax|taxes)|taxes do we|tax types/.test(L);
+}
+function legalAnswer(t){
+  const L = String(t).toLowerCase(), today = todayIso(), dl = legalDeadlines(), next = dl.filter(d => d.due >= today);
+  const line = d => '• ' + d.form + ' — ' + d.what + ' for ' + d.period + ': due ' + dayName(d.due) + (d.moved ? ' (moved from ' + fD(d.rawDue) + ', a ' + (holidayOn(d.rawDue) ? holidayOn(d.rawDue)[0] : 'weekend') + ')' : '');
+  const src = '\n(From our BIR Certificate of Registration and DTI certificate. Confirm dates and forms with the bookkeeper.)';
+  if (/\bdti\b|business name/.test(L)) return 'Business name: ' + REG.name + ' (DTI Business Name No. ' + REG.dtiNo + '), registered to ' + REG.owner + '. Valid ' + fD(REG.dtiFrom) + ' to ' + fD(REG.dtiTo) + '.\nThe DTI certificate is not a license to do business — the business permit from ' + REG.city + ' is separate.' + src;
+  if (/permit/.test(L)) return 'We don’t have the business (Mayor’s) permit in the Office yet. It comes from ' + REG.city + ' and is renewed every year. Tell me its number and expiry date and I’ll watch the renewal.' + src;
+  if (/books of accounts/.test(L)){ const fi = firstIncomeTaxDue(); return 'New businesses must register their books of accounts before the first income tax return is due' + (fi ? ': that’s the ' + fi.form + ' for ' + fi.period + ', due ' + dayName(fi.due) : '') + '. A new set of manual books must be registered before it is used.' + src; }
+  if (/\brdo\b|registration|registered|\bcor\b|certificate|\btin\b/.test(L)) return REG.name + ' — ' + REG.type + ', registered to ' + REG.owner + '.\nBIR: ' + REG.rdo + '. Business registered ' + fD(REG.bizReg) + '; tax types from ' + fD(REG.taxStart) + '. Line of business: ' + REG.line + '.\nNon-VAT, 3% percentage tax (the 8% income tax option was not taken).\nThe TIN is on the Certificate of Registration — I don’t keep it in the Office. Keep the COR displayed in the place of business.' + src;
+  if (/what (tax|taxes|forms)|which (tax|taxes|forms)|tax types/.test(L)) return 'From our BIR Certificate of Registration:\n• 2551Q — 3% percentage tax, quarterly, within 25 days after each quarter (from ' + fD(REG.taxStart) + ')\n• 1701Q — income tax, quarterly: May 15, Aug 15, Nov 15 (from ' + fD(REG.taxStart) + ')\n• 1701 — annual income tax, by April 15 (first one covers 2026, filed by ' + fD(workdayOnOrAfter('2027-04-15')) + ')\nWe are non-VAT and did not take the 8% option, so we pay the 3% percentage tax and graduated income tax rates.' + src;
+  const soon = next.slice(0, 4);
+  if (/legal|law|compliance|requirement/.test(L)){
+    const fi = firstIncomeTaxDue();
+    return 'Our legal checklist (' + REG.name + '):\n'
+      + '✓ BIR Certificate of Registration — ' + REG.rdo + ', non-VAT, 3% percentage tax. Keep it displayed in the place of business.\n'
+      + '✓ DTI business name No. ' + REG.dtiNo + ' — valid until ' + fD(REG.dtiTo) + '.\n'
+      + '? Business (Mayor’s) permit from ' + REG.city + ' — not on file in the Office yet; it is renewed every year.\n'
+      + (fi && fi.due >= today ? '! Books of accounts — register before ' + dayName(fi.due) + ' (before the first income tax return).\n' : '')
+      + '• Invoices — every sale needs a BIR-registered invoice (Billing checks each delivery).\n'
+      + 'Next filings:\n' + soon.slice(0, 3).map(line).join('\n') + src;
+  }
+  const past = dl.filter(d => d.due < today && d.due >= isoOf(addDays(new Date(), -30)));
+  return 'Next BIR filings:\n' + soon.map(line).join('\n')
+    + (past.length ? '\nRecently due — please confirm they were filed:\n' + past.map(line).join('\n') : '')
+    + (firstIncomeTaxDue() && firstIncomeTaxDue().due >= today ? '\nAlso: register our books of accounts before ' + dayName(firstIncomeTaxDue().due) + '.' : '')
+    + '\nI give the Secretary a reminder a week before each one.' + src;
+}
 
 /* ---------- the team's work survives a page reload (and, in the BMS, leaving the Dashboard) ----------
    Kept in this browser only: your requests, their answers, and supplier/product checks. */
@@ -3979,6 +4091,7 @@ function restoreWork(){
 rethink();
 /* start */
 restoreWork();
+legalReminders(); refreshAttention();
 renderDash();
 refreshAttention(); renderInbox(); renderReqs();
 document.getElementById('mainStage').appendChild(document.querySelector('.scroller'));
