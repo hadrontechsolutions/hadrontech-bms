@@ -1949,7 +1949,7 @@ function routeRequest(text){
   if (isLegalText(text)) return {k:'legal', why:'it’s about our BIR filings, registrations or permits — Legal & Compliance keeps those', think:'That’s for Legal & Compliance.'};
   if (isReminderText(text)) return {k:'sec', why:'it’s a reminder — the Secretary keeps your reminders and shows a ! on the day', think:'A reminder — that’s for the Secretary.'};
   const topic = /\bpa(y|id|yment)|invoice|\bbir\b|collect|proforma|balance/.test(t) ? 'bill'
-    : /deliver|ship|arriv|supplier po|purchase order|tracking|\beta\b|freight|forwarder/.test(t) ? 'purch'
+    : /deliver|\bship(ment|ping|ped)?\b|\barriv|supplier po|purchase order|tracking|\beta\b|freight|forwarder/.test(t) ? 'purch'
     : /profit|margin|markup|trend|win rate|how are we|how is hadrontech|compare|performance|how much (did|will|do|can|could|would) we (make|earn|gain|get)|\bearn|\bkita\b|kumita|tubo|income/.test(t) ? 'analyst'
     : /expense|tax|receipt|bookkeep|payslip|3m limit/.test(t) ? 'books'
     : /backup|duplicate|currency|record|database|clean ?up/.test(t) ? 'recs'
@@ -3347,10 +3347,18 @@ const INTENTS = [
   {id:'followups', w:'sales', why:'it’s about follow-ups — the Sales Coordinator keeps them', re:/follow.?up|i-?follow/i, general:true,
    a:() => { const l = F.filter(f => !f.done && (f.rule === 'followup' || f.rule === 'cadence')).sort((a, b) => planScore(b) - planScore(a));
      return (l.length ? pl(l.length, 'quote') + ' to follow up today (' + fD(isoD(T0)) + '):\n' + l.map(f => '• ' + f.title + (f.ref ? ' — ref: “' + f.ref + '”' : '') + ' (' + (f.amt ? peso(f.amt) : '') + ', ' + (f.who === 'willie' ? 'ask Sir Willie' : 'you') + ')').join('\n') + '\nEach has a ready “Copy for ChatGPT” follow-up in Today’s Plan. Already did one? Press Mark done and I’ll remember.' : 'No follow-ups due today.') + '\nNote: the BMS doesn’t record follow-ups, so these use our rules: first follow-up ' + ruleP('followup').days + ' days after sending, then by win chance.' + SRC(); }},
-  {id:'focus', w:'mgr', why:'it’s about what to do first — that’s my call', re:/what should (i|we) (do|focus|work)|priorit|what('?s| is) (urgent|important)|today'?s plan|unahin/i,
-   a:() => { const open = F.filter(f => !f.done && f.sev !== 'fyi').sort((a, b) => planScore(b) - planScore(a)).slice(0, 5);
-     if (!open.length) return 'Nothing urgent or due this week. Good day to clean up the expired quotes.' + SRC();
-     return 'Today (' + fD(isoD(T0)) + '), in this order:\n' + open.map((f, i) => (i + 1) + '. ' + f.title + (f.ref ? ' — ref: “' + f.ref + '”' : '') + ' (' + [f.sev === 'urgent' ? 'urgent' : 'this week', f.amt ? peso(f.amt) + ' at stake' : '', f.overdue > 0 ? f.overdue + ' days overdue' : '', 'rule: ' + ruleTitle(f.rule)].filter(Boolean).join(', ') + ')').join('\n') + SRC(); }},
+  {id:'focus', w:'mgr', why:'it’s about what to do first — that’s my call', re:/what should (i|we) (do|focus|work)|priorit|what('?s| is) (urgent|important)|today'?s (plan|tasks|agenda|priorities|to.?do)|on (our|my|the) plate|what('?s| is| do (we|i) have)( for| on)? today|what (do|should) (we|i) do today|agenda (for )?today|anything (for|to do) today|to.?do (list )?(for )?today|where (should|do) (i|we) start|needs? (my|our) attention|ano(ng)? (gagawin|trabaho)|unahin/i,
+   a:() => { const all = F.filter(f => !f.done && f.sev !== 'fyi').sort((a, b) => planScore(b) - planScore(a)), groups = groupFindings(all), top = groups.slice(0, 5);
+     const rem = typeof remDue === 'function' ? remDue() : [], legal = typeof legalActions === 'function' ? legalActions().filter(a => a.kind === 'check').length : 0;
+     if (!top.length && !rem.length) return 'Nothing urgent or due this week for ' + fD(isoD(T0)) + '. Good day to clean up the expired quotes.' + SRC();
+     const ref = f => f.ref ? ' — ref: “' + f.ref + '”' : '';
+     return 'On our plate today (' + fD(isoD(T0)) + '), most important first — ' + top.length + ' of ' + groups.length + ' open items:\n'
+       + top.map((g, i) => { const f = g[0], no = recKeyOf(f);
+           return (i + 1) + '. ' + f.title + ref(f) + ' (' + [f.sev === 'urgent' ? 'urgent' : 'this week', f.amt ? peso(f.amt) + ' at stake' : '', f.overdue > 0 ? f.overdue + ' day' + (f.overdue > 1 ? 's' : '') + ' overdue' : '', 'for ' + PEOPLE[f.who]].filter(Boolean).join(', ') + ')'
+             + (g.length > 1 ? '\n   Also on ' + no + ': ' + g.slice(1).map(x => String(x.title).replace(no, '').replace(/^[\s—:-]+/, '').trim()).join('; ') : ''); }).join('\n')
+       + (rem.length ? '\nReminders for today (Secretary): ' + rem.map(r => r.task).join('; ') + '.' : '')
+       + (legal ? '\nLegal & Compliance: ' + legal + ' checklist item' + (legal > 1 ? 's' : '') + ' still need your answer — click Legal.' : '')
+       + (groups.length > 5 ? '\nThe rest (' + (groups.length - 5) + ') is in Today’s Plan.' : '') + SRC(); }},
   {id:'new', w:'mgr', why:'a round-up of what changed — I’ll collect it from everyone', re:/what'?s new|anything new|since yesterday|what happened|ano(ng)? bago|update me|catch me up/i,
    a:t => { const p = parsePeriod(t, 'recent'), ev = [];
      for (const r of BIZ.rfqs) if (inP(r.date, p)) ev.push([r.date, 'RFQ entered: ' + r.no + ' “' + r.ref + '” (' + shortCust(r.cust) + ')' + (r.quote ? ' → quoted in ' + r.quote : ' — not quoted yet')]);
@@ -3426,7 +3434,7 @@ const INTENTS = [
   {id:'enduser', w:'analyst', why:'it’s about end-users — the Data Analyst', re:/end.?users?/i,
    a:() => { const by = {}; for (const q of BIZ.quotes){ const e = normEU(q.end); (by[e] = by[e] || {n:0, open:0, amt:0}); by[e].n++; if (q.st === 'Sent' && until(q.valid) >= 0){ by[e].open++; by[e].amt += q.total; } }
      return 'Quotes by end-user (all time):\n' + Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([k, v]) => '• ' + k + ': ' + v.n + ' quotes, ' + v.open + ' open (' + peso(v.amt) + ')').join('\n') + SRC(); }},
-  {id:'late', w:'purch', general:true, why:'it’s about deliveries — Purchasing tracks Supplier POs', re:/late|in transit|delivered yet|arriv|supplier pos?|deliver(y|ies)|shipment/i,
+  {id:'late', w:'purch', general:true, why:'it’s about deliveries — Purchasing tracks Supplier POs', re:/\blate\b|in transit|delivered yet|\barriv|supplier pos?|deliver(y|ies)|shipment/i,
    a:() => { const open = BIZ.spos.filter(s => s.st !== 'Received');
      return (open.length ? open.map(s => '• ' + s.no + ' from ' + s.sup + ': ' + s.st + (s.eta ? ', expected ' + fD(s.eta) + (until(s.eta) < 0 ? ' — ' + (-until(s.eta)) + ' days LATE' : '') : '')).join('\n') : 'Nothing in transit: all ' + BIZ.spos.length + ' Supplier POs are received (' + BIZ.spos.map(s => s.no).join(', ') + ').') + SRC(); }},
   {id:'backup', w:'recs', why:'it’s about backups — Records & Backup', re:/backup/i,
