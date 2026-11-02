@@ -320,7 +320,7 @@ dialog#dlg[data-look="glass"] .flist li{background:color-mix(in srgb, var(--soft
 
   <div class="mainarea">
     <div id="mainStage"></div>
-    <div class="mainbar" id="mainBar"><p class="hint">Click the <b>Manager</b> in his office to give him a task. He shows a yellow <b class="ex">!</b> when something is ready for you. Click the <b>Secretary</b> for your reminders, or any other worker to see their character sheet.</p></div>
+    <div class="mainbar" id="mainBar"><p class="hint">Click the <b>Manager</b> in his office to give him a task. He shows a yellow <b class="ex">!</b> when something is ready for you. Click the <b>Secretary</b> for your reminders and <b>Legal</b> for what needs action, or any other worker to see their character sheet.</p></div>
   </div>
   <dialog id="dlg" aria-labelledby="dlgTitle" data-look="cream">
     <div class="dlghead"><button type="button" class="btn" id="dlgBack">← Menu</button><h2 id="dlgTitle">Manager</h2><button type="button" class="btn" id="dlgClose" aria-label="Close">✕</button></div>
@@ -1604,7 +1604,7 @@ let nextMeeting = performance.now() + (reduce ? 3000 : 6000);
 const free = a => !a.away && !a.amb && a.seated && a.seated.key === a.key;
 async function ambient(a){
   // the Secretary stays at her desk while a reminder is waiting for you, so her ! stays put
-  const id = ++a.act, r = a.key === 'sec' && remDue().length ? Math.random() * .74 : Math.random();
+  const id = ++a.act, r = (a.key === 'sec' && remDue().length) || (a.key === 'legal' && legalActions().length) ? Math.random() * .74 : Math.random();
   if (r < .5){ setState(a, 'online'); if (Math.random() < .5){ say(a, pick(a.routine)); await wait(2400); if (a.act === id) say(a, null); } await wait(rnd(3500, 7000)); }
   else if (r < .62){ setState(a, 'stretch'); await wait(1800); if (a.act === id) setState(a, 'idle'); await wait(rnd(2000, 4000)); }
   else if (r < .74){ setState(a, 'idle'); a.pose = 'sip'; await wait(rnd(2500, 4500)); if (a.act === id) a.pose = 'rest'; await wait(rnd(1500, 3000)); }
@@ -2286,8 +2286,9 @@ const MARKS = {};
 for (const k of ORDER){
   const m = document.createElement('button'); m.type = 'button'; m.className = 'donemark'; m.textContent = '!'; m.hidden = true;
   m.setAttribute('aria-label', 'The Manager has something for you'); ov.appendChild(m); MARKS[k] = m;
-  m.addEventListener('click', () => openView(k === 'sec' ? 'reminders' : 'new'));
+  m.addEventListener('click', () => openView(k === 'sec' ? 'reminders' : k === 'legal' ? 'legal' : 'new'));
   if (k === 'sec') m.setAttribute('aria-label', 'The Secretary has a reminder for you today');
+  if (k === 'legal') m.setAttribute('aria-label', 'Legal & Compliance needs your action');
 }
 const ATTN = {};
 const unseenUrgent = () => F.filter(f => !f.done && f.sev === 'urgent' && !f.seen);
@@ -2296,7 +2297,7 @@ function refreshAttention(){
   for (const k of ORDER) ATTN[k] = 0;
   ATTN.mgr = REPORTS.filter(r => !r.seen).length;   // the \u201c!\u201d only shows for answers to what Gian asked or handed over
 }
-const markVisible = k => k === 'mgr' ? M.seated === UNITS.mgr && ATTN.mgr > 0 : k === 'sec' ? people.sec.seated === UNITS.sec && remDue().length > 0 : false;
+const markVisible = k => k === 'mgr' ? M.seated === UNITS.mgr && ATTN.mgr > 0 : k === 'sec' ? people.sec.seated === UNITS.sec && remDue().length > 0 : k === 'legal' ? people.legal.seated === UNITS.legal && legalActions().length > 0 : false;
 let inboxKey = null;
 function openWorker(k){
   if (k !== 'mgr') return;
@@ -2306,7 +2307,7 @@ cv.addEventListener('click', e => {
   const r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
   const u = UNITS.mgr;
   if (x > u.chairX - 10 && x < u.chairX + 22 && y > u.chairY - 22 && y < u.chairY + 24) openWorker('mgr');
-  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ if (k === 'sec') openView('reminders'); else openSheet(k); break; } }
+  else for (const k of STAFF_KEYS){ const v = UNITS[k]; if (x > v.chairX - 8 && x < v.chairX + 20 && y > v.chairY - 20 && y < v.chairY + 22){ if (k === 'sec') openView('reminders'); else if (k === 'legal') openView('legal'); else openSheet(k); break; } }
 });
 function section(box, title, sub){ const h = document.createElement('h3'); h.textContent = title; box.appendChild(h); if (sub){ const p = document.createElement('p'); p.className = 'sub'; p.textContent = sub; box.appendChild(p); } const ul = document.createElement('ul'); ul.className = 'flist'; box.appendChild(ul); return ul; }
 function renderInbox(){
@@ -2382,7 +2383,7 @@ const MENU = [
   {id:'ops', title:'Orders, payments & deliveries', desc:'Supplier POs, late shipments, 100% advance, BIR invoices'},
   {id:'how', title:'How is Hadrontech doing?', desc:'The Data Analyst’s review and the latest decisions'}
 ];
-const TITLES = {reminders:'Secretary — your reminders', menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
+const TITLES = {legal:'Legal & Compliance — what needs action', reminders:'Secretary — your reminders', menu:'Manager', new:'What’s new', meeting:'Meeting in progress', plan:'Today’s Plan', quotes:'Help with my quotes', win:'Win chances & customer status check', rules:'Our rulebook', task:'Give me a task', team:'The team', rfq:'Review an RFQ & find suppliers', add:'Add a supplier or product', ops:'Orders, payments & deliveries', how:'How is Hadrontech doing?', ask:'Second opinion from ChatGPT', decisions:'Decisions & tasks', result:'Records & Backup’s result'};
 
 function openView(v){
   moveBack();
@@ -3123,7 +3124,7 @@ const SHEET = {
   sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a ! over her head.',
        checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks decided in team meetings', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
        works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']},
-  legal:{job:'Keeps Hadrontech legal and on time: the BIR filing calendar from our Certificate of Registration (2551Q, 1701Q, 1701), books of accounts, the DTI business name, the business permit, and invoices under the Ease of Paying Taxes Act. A week before each deadline he gives the Secretary a reminder for you.',
+  legal:{job:'Keeps Hadrontech legal and on time: the BIR filing calendar from our Certificate of Registration (2551Q, 1701Q, 1701), books of accounts, the DTI business name, the business permit, and invoices under the Ease of Paying Taxes Act. A week before each deadline he gives the Secretary a reminder for you. He shows a ! when something needs your action — click him for the checklist.',
        checks:['BIR Certificate of Registration (Form 2303)', 'DTI Business Name certificate', 'Filing deadlines (moved off weekends and holidays)', 'Sales per quarter from the BMS, for the bookkeeper'], skills:'BIR deadlines, registrations, permits',
        works:['Bookkeeping: the figures for each filing', 'Secretary: a reminder a week before each deadline', 'Billing: an invoice for every sale']}
 };
@@ -3979,25 +3980,156 @@ function legalDeadlines(){
 }
 function salesBetween(from, to){ const os = BIZ.orders.filter(o => o.date >= from && o.date <= to && o.st !== 'Cancelled' && o.st !== 'Draft'); return {n: os.length, total: os.reduce((s, o) => s + o.total, 0)}; }
 const firstIncomeTaxDue = () => legalDeadlines().find(d => d.form === '1701Q' || d.form === '1701');
+/* ---------- Legal knowledge base: what a non-VAT sole proprietorship trading industrial equipment must do ----------
+   Researched Nov 2026 from BIR issuances and practitioner guides (sources on each item). Confirm with the bookkeeper. */
+const LEGAL_KB = [
+  {id:'books', area:'BIR', title:'Register our books of accounts',
+   ask:'Are our books of accounts registered with the BIR (stamped at RDO 54B, or loose-leaf through ORUS)?',
+   what:'As a non-VAT sole proprietor we keep 4 books: General Journal, General Ledger, Cash Receipts Journal and Cash Disbursements Journal. Our Certificate of Registration says to register them before the first income tax return is due.',
+   due:() => { const f = firstIncomeTaxDue(); return f ? f.due : null; }, penalty:'₱1,000 to ₱50,000 for unregistered or missing books.',
+   src:[['Our BIR Certificate of Registration', ''], ['Taxify — Books of Accounts 2026', 'https://taxify.ph/blog/bir-books-of-accounts-guide-2026/']]},
+  {id:'invoices', area:'BIR', title:'Use BIR-registered invoices for every sale',
+   ask:'Do we have BIR-registered invoices (printed with an Authority to Print, or a registered system), and do we issue one for every sale?',
+   what:'Under the Ease of Paying Taxes Act (RR 7-2024) the invoice is the main document for every sale; official receipts can’t be used in place of invoices. The invoice shows our name, TIN and address, the buyer, quantity, unit price, description and the tax.',
+   penalty:'₱1,000 to ₱50,000 for failing to issue an invoice, plus possible criminal penalties.',
+   src:[['RR 7-2024 summary (Batas Natin)', 'https://batasnatin.com/laws/eopt-act-ra-11976-invoicing-rules-revenue-regulations-no-7-2024-summary'], ['Grant Thornton — invoicing under RR 7-2024', 'https://www.grantthornton.com.ph/insights/articles-and-updates1/tax-notes/clarification-on-the-invoicing-requirements-per-rr-no-7-2024-as-amended-by-rr-no-11-2024/']]},
+  {id:'nil', area:'BIR', title:'File every return, even with no sales',
+   ask:'Do we file every 2551Q and 1701Q on time, even in a quarter with no sales?',
+   what:'Our Certificate of Registration says returns must be filed “whether with or without business operation”. A missed “nil” return is one of the most common penalties for new businesses.',
+   penalty:'A compromise penalty for each late return (about ₱1,000 each under the old schedule; halved for micro taxpayers under EOPT), plus 10% surcharge and interest if tax is due.',
+   src:[['Our BIR Certificate of Registration', ''], ['Comply.ph — common mistakes of new businesses', 'https://comply.ph/blog/common-bir-registration-mistakes-new-businesses-make'], ['Grant Thornton — reduced penalties for micro taxpayers', 'https://www.grantthornton.com.ph/insights/articles-and-updates1/tax-notes/eopt-is-here-revised-rules-on-taxpayer-classification-and-reduced-penalties-for-micro-and-small-taxpayers/']]},
+  {id:'display', area:'BIR', title:'Display the BIR Certificate of Registration',
+   ask:'Is our BIR Certificate of Registration displayed where we do business?',
+   what:'The certificate itself says it “must be exhibited conspicuously in the place of business”.',
+   penalty:'Compromise penalty if not displayed during a BIR visit.', src:[['Our BIR Certificate of Registration', '']]},
+  {id:'permit', area:'City', title:'Business (Mayor’s) permit from General Trias',
+   ask:'Do we have a business permit (and barangay clearance) from General Trias for this business?',
+   what:'The DTI certificate “is not a license to engage in any kind of business”. The city business permit is separate, needs a barangay clearance first, and is renewed every January (usually by January 20).',
+   due:() => { const y = new Date().getFullYear(), d = (new Date().getMonth() === 0 && new Date().getDate() <= 20) ? y : y + 1; return workdayOnOrAfter(d + '-01-20'); }, dueLabel:'renewal',
+   penalty:'Late renewal: commonly a 25% surcharge plus 2% interest a month, and possible closure — rates vary by city.',
+   src:[['Aureada Law — 2026 compliance checklist', 'https://www.aureadalaw.com/post/2026-bir-annual-compliance-checklist-philippines-inventory-list-loose-leaf-alphalist-and-itr-d'], ['Triple i — renewing business permits', 'https://www.tripleiconsulting.com/how-to-renew-your-business-permits-in-the-philippines/']]},
+  {id:'employer', area:'Employees', title:'Employer duties (only if someone is on payroll)',
+   ask:'Do we have anyone on payroll (an employee, not a partner sharing profit)?',
+   what:'An employer registers with SSS, PhilHealth and Pag-IBIG and remits every month (SSS and Pag-IBIG by the 15th for business names starting E–L like ours; PhilHealth within 20 days), withholds tax on salaries (BIR 1601-C monthly; 1604-C and 2316 by January 31), pays the 13th month by December 24, and reports to DOLE.',
+   penalty:'Unremitted contributions carry penalties and interest, and can lead to criminal cases.',
+   src:[['KAMI — Philippine HR compliance calendar 2026', 'https://kamiworkforce.com/ph/blog/philippine-hr-compliance-calendar-2026/']], naText:'No one on payroll'},
+  {id:'ewt', area:'BIR', title:'Withholding tax on rent or professional fees',
+   ask:'Do we pay rent for an office/warehouse, or fees to professionals (e.g. a bookkeeper) as the business?',
+   what:'A business that pays rent or professional fees may have to withhold expanded withholding tax, file it with the BIR and give the payee a Form 2307. Ask the bookkeeper whether this applies to us.',
+   penalty:'Failure to withhold makes us liable for the tax not withheld, plus penalties.',
+   src:[['Comply.ph — common mistakes of new businesses', 'https://comply.ph/blog/common-bir-registration-mistakes-new-businesses-make'], ['Aureada Law — 2026 compliance checklist', 'https://www.aureadalaw.com/post/2026-bir-annual-compliance-checklist-philippines-inventory-list-loose-leaf-alphalist-and-itr-d']], naText:'We don’t pay rent or fees'},
+  {id:'inventory', area:'BIR', title:'Annual inventory list (trading businesses)',
+   ask:'Do we keep goods in stock at year end? (We mostly buy to order.)',
+   what:'Merchandising/trading businesses submit an annual inventory list to the BIR, due about January 30. Practitioners advise confirming whether a “no inventory” list is still needed.',
+   due:() => workdayOnOrAfter((new Date().getMonth() === 0 && new Date().getDate() <= 30 ? new Date().getFullYear() : new Date().getFullYear() + 1) + '-01-30'),
+   penalty:'Penalties for late or missing submission.', src:[['Aureada Law — 2026 compliance checklist', 'https://www.aureadalaw.com/post/2026-bir-annual-compliance-checklist-philippines-inventory-list-loose-leaf-alphalist-and-itr-d']]},
+  {id:'import', area:'Customs', title:'Importing goods ourselves',
+   ask:'Do we import goods ourselves (we pay customs), or do suppliers deliver to us with duties paid?',
+   what:'Shipments under ₱10,000 are generally free of duties and VAT. Above that, a goods declaration is needed: the importer must be registered with the BIR and Bureau of Customs, usually through a customs broker. Regulated items need permits before shipping.',
+   penalty:'Without the right registration or permits goods can be held, fined or forfeited, plus storage charges.',
+   src:[['PortCalls — importation FAQ', 'https://portcalls.com/frequently-asked-questions-on-importation/']], naText:'Suppliers deliver duties paid'},
+  {id:'online', area:'DTI', title:'Online selling rules (Internet Transactions Act)',
+   ask:'Do we sell online to end users (a website or marketplace shop), not only B2B quotations?',
+   what:'Our BIR registration says “online selling”. Online merchants selling to consumers must show the business name, address, contact details and clear prices, and register with the DTI E-Commerce Bureau. B2B quotations to KEYEC may not be covered — confirm.',
+   penalty:'Administrative fines of ₱20,000 to ₱1,000,000 for violations.', src:[['NDV Law — Internet Transactions Act', 'https://ndvlaw.com/regulations-affecting-e-marketplaces-online-or-digital-retailers-and-stores-under-the-internet-transactions-act-of-2023/']], naText:'B2B only'},
+  {id:'records', area:'BIR', title:'Keep books and records for 10 years',
+   ask:'Are invoices, books and supplier documents kept safely (paper or scanned)?',
+   what:'Books and accounting records must be kept for 10 years from the last entry. The BIR can audit up to 3 years back (10 for fraud).',
+   penalty:'₱1,000 to ₱50,000 for failing to preserve records.', src:[['Taxify — Books of Accounts 2026', 'https://taxify.ph/blog/bir-books-of-accounts-guide-2026/']]},
+  {id:'changes', area:'BIR', title:'Tell the BIR about changes (Form 1905)',
+   ask:'Has anything changed since registration — address, trade name, line of business, or closing a branch?',
+   what:'Our Certificate of Registration says to file BIR Form 1905 right away for a transfer, closure or any change in registration. Our COR lists “online selling (industrial equipment)” — ask the bookkeeper if that fits our B2B quotation business.',
+   penalty:'Penalties for not updating registration.', src:[['Our BIR Certificate of Registration', '']], naText:'Nothing changed'}
+];
+const LEGAL_KEY = 'ht-office-legal';
+let LEGAL = (() => { try { return Object.assign({status:{}, filed:{}}, JSON.parse(localStorage.getItem(LEGAL_KEY) || '{}')); } catch (e){ return {status:{}, filed:{}}; } })();
+const legalSave = () => { try { localStorage.setItem(LEGAL_KEY, JSON.stringify(LEGAL)); } catch (e){} };
+const LEGAL_STATUS = {done:'Done', notyet:'Not yet', unsure:'Not sure — ask the bookkeeper', na:'Doesn’t apply'};
+/** What needs action now: checklist items not done, filings due within 7 days, and recent filings not confirmed. */
+function legalActions(){
+  const today = todayIso(), out = [];
+  for (const k of LEGAL_KB){ const st = LEGAL.status[k.id]; if (st === 'done' || st === 'na') continue; out.push({kind:'check', item:k, st}); }
+  for (const d of legalDeadlines()){
+    const key = 'legal:' + d.form + ':' + d.period; if (LEGAL.filed[key]) continue;
+    const left = daysUntil(d.due);
+    if (left >= 0 && left <= 7) out.push({kind:'due', d, key, left});
+    else if (left < 0 && left >= -30) out.push({kind:'late', d, key, left});
+  }
+  return out;
+}
+
+function legalSays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('legal')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
+VIEWS.legal = function(){
+  dlgTitle.textContent = 'Legal & Compliance — what needs action';
+  const acts = legalActions(), dueNow = acts.filter(a => a.kind !== 'check'), checks = acts.filter(a => a.kind === 'check');
+  legalSays(acts.length ? '<b>' + acts.length + ' thing' + (acts.length > 1 ? 's' : '') + ' need' + (acts.length > 1 ? '' : 's') + ' your action</b> to keep us clear of penalties. Answer each one — when it’s done, my <b>!</b> goes away.' : '<b>All clear.</b> Nothing needs your action right now. I’ll show a <b>!</b> when something does.');
+  const again = () => { legalSave(); rethink(); openView('legal'); };
+  const srcLine = k => k.src.map(([t, u]) => u ? '<a href="' + esc(u) + '" target="_blank" rel="noopener">' + esc(t) + '</a>' : esc(t)).join(' · ');
+  const list = (title, sub) => { const h = document.createElement('h3'); h.textContent = title; dlgBody.appendChild(h); if (sub){ const p = document.createElement('p'); p.className = 'sub'; p.textContent = sub; dlgBody.appendChild(p); } const ul = document.createElement('ul'); ul.className = 'flist remlist'; dlgBody.appendChild(ul); return ul; };
+  const btns = (li, defs) => { const fa = document.createElement('div'); fa.className = 'fa'; for (const [t, fn, primary] of defs){ const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (primary ? ' primary' : ''); b.textContent = t; b.addEventListener('click', fn); fa.appendChild(b); } li.appendChild(fa); };
+  if (dueNow.length){
+    const ul = list('Filings', 'Mark a filing done once the return is filed (even a “nil” return with no sales).');
+    for (const a of dueNow){
+      const d = a.d, s = salesBetween(d.from, d.to), li = document.createElement('li'); li.className = 'due';
+      li.innerHTML = '<div class="top"><span class="ft">' + esc(d.form + ' — ' + d.what + ', ' + d.period) + '</span></div><div class="fd"><span class="when">' + (a.kind === 'late' ? 'Was due ' + esc(dayName(d.due)) + ' — please confirm it was filed' : 'Due ' + esc(dayName(d.due)) + (a.left === 0 ? ' — today' : ' — ' + a.left + ' day' + (a.left > 1 ? 's' : '') + ' left')) + '</span>'
+        + (d.moved ? ' · moved from ' + esc(fD(d.rawDue)) + ' (' + esc(holidayOn(d.rawDue) ? holidayOn(d.rawDue)[0] : 'weekend') + ')' : '') + '</div>'
+        + '<div class="fd">For the bookkeeper: Sales Orders dated ' + esc(fD(d.from)) + ' – ' + esc(fD(d.to)) + ': ' + esc(pesoX(s.total)) + ' (' + s.n + '). If late: 10% surcharge and interest (micro-taxpayer rates) plus a compromise penalty.</div>';
+      btns(li, [['Filed', () => { LEGAL.filed[a.key] = todayIso(); toast('Noted — ' + d.form + ' for ' + d.period + ' filed.'); again(); }, true]]);
+      ul.appendChild(li);
+    }
+  }
+  if (checks.length){
+    const ul = list('Checklist for a new business', 'Answer each one. “Not sure” puts it on the list of questions for your bookkeeper below.');
+    for (const a of checks){
+      const k = a.item, li = document.createElement('li'), due = k.due ? k.due() : null;
+      li.innerHTML = '<div class="top"><span class="ft">' + esc(k.title) + '</span><span class="chip">' + esc(k.area) + '</span>' + (a.st ? '<span class="sev week">' + esc(LEGAL_STATUS[a.st]) + '</span>' : '<span class="sev urgent">Needs your answer</span>') + '</div>'
+        + '<div class="fd"><b>' + esc(k.ask) + '</b></div><div class="fd">' + esc(k.what) + (due ? ' <span class="when">' + (k.dueLabel === 'renewal' ? 'Next renewal: ' : 'Deadline: ') + esc(dayName(due)) + '.</span>' : '') + '</div>'
+        + '<div class="fd"><b>If not done:</b> ' + esc(k.penalty) + '</div><div class="fd also">Source: ' + srcLine(k) + '</div>';
+      btns(li, [['Done', () => { LEGAL.status[k.id] = 'done'; again(); }, true], ['Not yet', () => { LEGAL.status[k.id] = 'notyet'; again(); }], ['Not sure', () => { LEGAL.status[k.id] = 'unsure'; again(); }], [k.naText || 'Doesn’t apply', () => { LEGAL.status[k.id] = 'na'; again(); }]]);
+      ul.appendChild(li);
+    }
+  }
+  const unsure = LEGAL_KB.filter(k => LEGAL.status[k.id] === 'unsure');
+  if (unsure.length){
+    const ul = list('Questions for your bookkeeper', 'Ask these, then come back and answer Done / Not yet / Doesn’t apply.');
+    for (const k of unsure){ const li = document.createElement('li'); li.innerHTML = '<div class="top"><span class="ft">' + esc(k.ask) + '</span></div>'; ul.appendChild(li); }
+  }
+  const next = legalDeadlines().filter(d => d.due >= todayIso() && !LEGAL.filed['legal:' + d.form + ':' + d.period] && daysUntil(d.due) > 7).slice(0, 4);
+  if (next.length){
+    const ul = list('Coming up', 'I give the Secretary a reminder a week before each one.');
+    for (const d of next){ const li = document.createElement('li'); li.innerHTML = '<div class="top"><span class="ft">' + esc(d.form + ' — ' + d.what + ', ' + d.period) + '</span></div><div class="fd"><span class="when">Due ' + esc(dayName(d.due)) + '</span>' + (d.moved ? ' · moved from ' + esc(fD(d.rawDue)) : '') + '</div>'; ul.appendChild(li); }
+  }
+  const done = LEGAL_KB.filter(k => LEGAL.status[k.id] === 'done' || LEGAL.status[k.id] === 'na');
+  if (done.length){
+    const det = document.createElement('details'); det.className = 'more'; const sm = document.createElement('summary'); sm.textContent = 'Answered (' + done.length + ') — change an answer'; det.appendChild(sm);
+    const ul = document.createElement('ul'); ul.className = 'flist';
+    for (const k of done){ const li = document.createElement('li'); li.innerHTML = '<div class="top"><span class="ft">' + esc(k.title) + '</span><span class="sev done">' + esc(LEGAL.status[k.id] === 'na' ? (k.naText || 'Doesn’t apply') : 'Done') + '</span></div>'; btns(li, [['Change', () => { delete LEGAL.status[k.id]; again(); }]]); ul.appendChild(li); }
+    det.appendChild(ul); dlgBody.appendChild(det);
+  }
+  const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Researched from BIR rules, our certificates and practitioner guides (Nov 2026). I’m not a lawyer or accountant — confirm with your bookkeeper. Your answers are kept in the Office on this computer.'; dlgBody.appendChild(p);
+};
+
 function legalFindings(){
   const today = isoOf(T0), dl = legalDeadlines();
   for (const d of dl){
     const left = Math.round((new Date(d.due + 'T00:00:00') - new Date(today + 'T00:00:00')) / 864e5), s = salesBetween(d.from, d.to);
     const fig = 'Sales Orders dated ' + fD(d.from) + ' – ' + fD(d.to) + ': ' + pesoX(s.total) + ' (' + s.n + ').';
     const moved = d.moved ? ' The usual date (' + fD(d.rawDue) + ') falls on a ' + (holidayOn(d.rawDue) ? holidayOn(d.rawDue)[0] : 'weekend') + ', so it moves to the next working day — confirm with the bookkeeper.' : '';
+    if (LEGAL.filed['legal:' + d.form + ':' + d.period]) continue;
     if (left >= 0 && left <= 21) brainFind('pct', 'legal', left <= 7 ? 'urgent' : 'week', d.form + ' (' + d.what + ', ' + d.period + ') is due ' + fD(d.due) + ' — ' + (left === 0 ? 'today' : left + ' day' + (left === 1 ? '' : 's') + ' left'),
       fig + moved + ' Give the figures to the bookkeeper.', {key:'legal:' + d.form + ':' + d.period, overdue: 0});
     else if (left < 0 && left >= -30) brainFind('pct', 'legal', 'week', 'Was the ' + d.form + ' (' + d.what + ', ' + d.period + ') filed? It was due ' + fD(d.due), fig + ' If it was filed, mark this done. If not, file it as soon as possible — late filing has penalties.', {key:'legal:' + d.form + ':' + d.period});
   }
   const fi = firstIncomeTaxDue();
-  if (fi && fi.due >= today){
+  if (fi && fi.due >= today && LEGAL.status.books !== 'done'){
     const left = Math.round((new Date(fi.due + 'T00:00:00') - T0) / 864e5);
     brainFind('regs', 'legal', left <= 14 ? 'urgent' : 'week', 'Register our books of accounts before ' + fD(fi.due) + ' (' + left + ' days left)',
-      'Our BIR Certificate of Registration says new businesses register their books of accounts before the first income tax return is due — that’s the ' + fi.form + ' for ' + fi.period + '. If they’re already registered, mark this done.', {key:'regs:books'});
+      'Our BIR Certificate of Registration says new businesses register their books of accounts before the first income tax return is due — that’s the ' + fi.form + ' for ' + fi.period + '. Penalty for unregistered books: ₱1,000 to ₱50,000. Click Legal & Compliance to answer.', {key:'regs:books'});
   }
-  brainFind('regs', 'legal', 'fyi', 'No business (Mayor’s) permit on file in the Office', 'Our DTI certificate says it “is not a license to engage in any kind of business”. The business permit from ' + REG.city + ' is separate — tell me its number and expiry date so I can watch the renewal.', {key:'regs:permit'});
+  const open = LEGAL_KB.filter(k => k.id !== 'books' && LEGAL.status[k.id] !== 'done' && LEGAL.status[k.id] !== 'na');
+  if (open.length) brainFind('regs', 'legal', 'week', 'Legal checklist: ' + open.length + ' item' + (open.length > 1 ? 's' : '') + ' need your answer', open.map(k => k.title).join(' · ') + '. Click Legal & Compliance (he shows a !) to answer each one.', {key:'regs:checklist:' + open.map(k => k.id).join(',')});
   const dtiLeft = Math.round((new Date(REG.dtiTo + 'T00:00:00') - T0) / 864e5);
-  brainFind('regs', 'legal', dtiLeft <= 90 ? 'urgent' : 'fyi', 'DTI business name valid until ' + fD(REG.dtiTo), REG.name + ' (Business Name No. ' + REG.dtiNo + '). ' + (dtiLeft <= 90 ? 'Renew it now.' : 'I’ll remind you before it expires.'), {key:'regs:dti:' + REG.dtiTo});
+  if (dtiLeft <= 120) brainFind('regs', 'legal', dtiLeft <= 90 ? 'urgent' : 'week', 'DTI business name expires ' + fD(REG.dtiTo), REG.name + ' (Business Name No. ' + REG.dtiNo + '). Renew it before it expires.', {key:'regs:dti:' + REG.dtiTo});
 }
 /** A week before each filing, Legal & Compliance gives the Secretary a reminder (once per filing). */
 function legalReminders(){
@@ -4032,14 +4164,19 @@ function legalAnswer(t){
   if (/\brdo\b|registration|registered|\bcor\b|certificate|\btin\b/.test(L)) return REG.name + ' — ' + REG.type + ', registered to ' + REG.owner + '.\nBIR: ' + REG.rdo + '. Business registered ' + fD(REG.bizReg) + '; tax types from ' + fD(REG.taxStart) + '. Line of business: ' + REG.line + '.\nNon-VAT, 3% percentage tax (the 8% income tax option was not taken).\nThe TIN is on the Certificate of Registration — I don’t keep it in the Office. Keep the COR displayed in the place of business.' + src;
   if (/what (tax|taxes|forms)|which (tax|taxes|forms)|tax types/.test(L)) return 'From our BIR Certificate of Registration:\n• 2551Q — 3% percentage tax, quarterly, within 25 days after each quarter (from ' + fD(REG.taxStart) + ')\n• 1701Q — income tax, quarterly: May 15, Aug 15, Nov 15 (from ' + fD(REG.taxStart) + ')\n• 1701 — annual income tax, by April 15 (first one covers 2026, filed by ' + fD(workdayOnOrAfter('2027-04-15')) + ')\nWe are non-VAT and did not take the 8% option, so we pay the 3% percentage tax and graduated income tax rates.' + src;
   const soon = next.slice(0, 4);
+  if (/what (do|should) (we|i) (need|have) to do|action|to.?do|penalt|avoid/.test(L)){
+    const acts = legalActions();
+    return (acts.length ? 'To stay clear of penalties, these need action:\n' + acts.map(a => a.kind === 'check' ? '• ' + a.item.title + (a.st ? ' (' + LEGAL_STATUS[a.st] + ')' : ' — needs your answer') + '. If not done: ' + a.item.penalty : '• ' + a.d.form + ' for ' + a.d.period + (a.kind === 'late' ? ' — was due ' : ' — due ') + dayName(a.d.due) + (a.kind === 'late' ? ', confirm it was filed' : '')).join('\n') : 'Nothing needs action right now.')
+      + '\nClick Legal & Compliance (he shows a ! when something needs you) to answer each item.' + src;
+  }
   if (/legal|law|compliance|requirement/.test(L)){
     const fi = firstIncomeTaxDue();
     return 'Our legal checklist (' + REG.name + '):\n'
       + '✓ BIR Certificate of Registration — ' + REG.rdo + ', non-VAT, 3% percentage tax. Keep it displayed in the place of business.\n'
       + '✓ DTI business name No. ' + REG.dtiNo + ' — valid until ' + fD(REG.dtiTo) + '.\n'
-      + '? Business (Mayor’s) permit from ' + REG.city + ' — not on file in the Office yet; it is renewed every year.\n'
-      + (fi && fi.due >= today ? '! Books of accounts — register before ' + dayName(fi.due) + ' (before the first income tax return).\n' : '')
-      + '• Invoices — every sale needs a BIR-registered invoice (Billing checks each delivery).\n'
+      + (LEGAL.status.permit === 'done' ? '✓' : '?') + ' Business (Mayor’s) permit from ' + REG.city + ' — renewed every January (usually by Jan 20).\n'
+      + (LEGAL.status.books === 'done' ? '✓ Books of accounts registered\n' : fi && fi.due >= today ? '! Books of accounts — register before ' + dayName(fi.due) + ' (before the first income tax return).\n' : '')
+      + LEGAL_KB.filter(k => !['books','permit'].includes(k.id)).map(k => (LEGAL.status[k.id] === 'done' ? '✓ ' : LEGAL.status[k.id] === 'na' ? '– ' : '? ') + k.title + (LEGAL.status[k.id] ? ' (' + (LEGAL.status[k.id] === 'na' ? (k.naText || 'doesn’t apply') : LEGAL_STATUS[LEGAL.status[k.id]]) + ')' : ' — needs your answer') + '\n').join('')
       + 'Next filings:\n' + soon.slice(0, 3).map(line).join('\n') + src;
   }
   const past = dl.filter(d => d.due < today && d.due >= isoOf(addDays(new Date(), -30)));
