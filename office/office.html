@@ -1600,7 +1600,8 @@ let nextMeeting = performance.now() + (reduce ? 3000 : 6000);
 /* ambient office life */
 const free = a => !a.away && !a.amb && a.seated && a.seated.key === a.key;
 async function ambient(a){
-  const id = ++a.act, r = Math.random();
+  // the Secretary stays at her desk while a reminder is waiting for you, so her ! stays put
+  const id = ++a.act, r = a.key === 'sec' && remDue().length ? Math.random() * .74 : Math.random();
   if (r < .5){ setState(a, 'online'); if (Math.random() < .5){ say(a, pick(a.routine)); await wait(2400); if (a.act === id) say(a, null); } await wait(rnd(3500, 7000)); }
   else if (r < .62){ setState(a, 'stretch'); await wait(1800); if (a.act === id) setState(a, 'idle'); await wait(rnd(2000, 4000)); }
   else if (r < .74){ setState(a, 'idle'); a.pose = 'sip'; await wait(rnd(2500, 4500)); if (a.act === id) a.pose = 'rest'; await wait(rnd(1500, 3000)); }
@@ -1934,12 +1935,12 @@ const SKILL_RESULT = {
   books:'I checked expenses and year-to-date figures for this. In the real BMS I’d show the totals for the exact period and anything the bookkeeper still needs.',
   analyst:'I ran the numbers for this. In the real BMS I’d show the figures for the exact dates, compared with the period before, plus 2–3 recommendations.',
   recs:'I checked the records for this. To add a new product or supplier, use the Add Supplier / Product tab: paste ChatGPT’s table and I’ll check it.',
-  sec:'I keep your reminders. Tell the Manager “remind me on Monday to …” and I’ll show a 🔔 over my head on that day.',
+  sec:'I keep your reminders. Tell the Manager “remind me on Monday to …” and I’ll show a ! over my head on that day.',
   mgr:'I looked at this myself. In the real BMS I’d pull the reports involved and give you my recommendation with the reasons.'
 };
 function routeRequest(text){
   const t = ' ' + text.toLowerCase() + ' ';
-  if (isReminderText(text)) return {k:'sec', why:'it’s a reminder — the Secretary keeps your reminders and shows a 🔔 on the day', think:'A reminder — that’s for the Secretary.'};
+  if (isReminderText(text)) return {k:'sec', why:'it’s a reminder — the Secretary keeps your reminders and shows a ! on the day', think:'A reminder — that’s for the Secretary.'};
   const topic = /\bpa(y|id|yment)|invoice|\bbir\b|collect|proforma|balance/.test(t) ? 'bill'
     : /deliver|ship|arriv|supplier po|purchase order|tracking|\beta\b|freight|forwarder/.test(t) ? 'purch'
     : /profit|margin|markup|trend|win rate|how are we|how is hadrontech|compare|performance|how much (did|will|do|can|could|would) we (make|earn|gain|get)|\bearn|\bkita\b|kumita|tubo|income/.test(t) ? 'analyst'
@@ -2274,7 +2275,7 @@ for (const k of ORDER){
   const m = document.createElement('button'); m.type = 'button'; m.className = 'donemark'; m.textContent = '!'; m.hidden = true;
   m.setAttribute('aria-label', 'The Manager has something for you'); ov.appendChild(m); MARKS[k] = m;
   m.addEventListener('click', () => openView(k === 'sec' ? 'reminders' : 'new'));
-  if (k === 'sec'){ m.textContent = '🔔'; m.classList.add('bell'); m.setAttribute('aria-label', 'The Secretary has a reminder for you today'); }
+  if (k === 'sec') m.setAttribute('aria-label', 'The Secretary has a reminder for you today');
 }
 const ATTN = {};
 const unseenUrgent = () => F.filter(f => !f.done && f.sev === 'urgent' && !f.seen);
@@ -2283,7 +2284,7 @@ function refreshAttention(){
   for (const k of ORDER) ATTN[k] = 0;
   ATTN.mgr = REPORTS.filter(r => !r.seen).length;   // the \u201c!\u201d only shows for answers to what Gian asked or handed over
 }
-const markVisible = k => k === 'mgr' ? M.seated === UNITS.mgr && ATTN.mgr > 0 : k === 'sec' ? remDue().length > 0 : false;
+const markVisible = k => k === 'mgr' ? M.seated === UNITS.mgr && ATTN.mgr > 0 : k === 'sec' ? people.sec.seated === UNITS.sec && remDue().length > 0 : false;
 let inboxKey = null;
 function openWorker(k){
   if (k !== 'mgr') return;
@@ -3105,7 +3106,7 @@ const SHEET = {
   recs:{job:'Keeps the BMS clean and safe: backups, reference emails, currencies, duplicates and missing information.',
        checks:['Backup date', 'Quotations without reference emails', 'Product vs supplier currency', 'Supplier names'], skills:'data quality, backups',
        works:['Everyone: clean records make every check work']},
-  sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a 🔔 over her head.',
+  sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a ! over her head.',
        checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks decided in team meetings', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
        works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']}
 };
@@ -3791,7 +3792,7 @@ function reminderAnswer(text){
   return (r.date ? 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') : 'Done — it’s on your list without a date. Click me any time to see it or give it a date') + ':\n“' + r.task + '”'
     + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. Click the Secretary to change the date.')
     + (r.links.length ? '\nI linked: ' + r.links.map(no => { const q = quoteByNo(no), f = BIZ.rfqs.find(x => x.no === no); return no + ' (“' + ((f && f.ref) || (q && q.ref) || '') + '”)'; }).join(', ') + '.' : '')
-    + (r.date ? '\nOn that day you’ll see a 🔔 over my head. Click me to see it.' : '');
+    + (r.date ? '\nOn that day you’ll see a ! over my head. Click me to see it.' : '');
 }
 
 /* the Manager asks for a date when a reminder has none */
@@ -3871,7 +3872,7 @@ VIEWS.reminders = function(){
   });
   dlgBody.appendChild(f);
   const ask = document.createElement('div'); dlgBody.appendChild(ask);
-  const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Reminders are kept in the Office on this computer only — not in the BMS or its backups. On the day, a 🔔 shows over the Secretary’s head.'; dlgBody.appendChild(p);
+  const p = document.createElement('p'); p.className = 'sub'; p.textContent = 'Reminders are kept in the Office on this computer only — not in the BMS or its backups. On the day, a ! shows over the Secretary’s head.'; dlgBody.appendChild(p);
   sec('Done recently', done, false);
 };
 
