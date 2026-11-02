@@ -2079,7 +2079,7 @@ function finishItem(item, w){
     setStatus('<b>Done.</b> Records &amp; Backup gave it to the Manager. Click the Manager’s <b class="ex">!</b> (in his office) or <button class="btn" type="button" id="openJob">Open result</button>');
     document.getElementById('openJob').addEventListener('click', () => openJob(item.job));
   }
-  if (item.req){ item.req.result = (typeof realAnswer === 'function' ? realAnswer(item.answerAs || w.key, item.req.text) : null) || SKILL_RESULT[item.answerAs || w.key]; item.req.by = w.key; setReq(item.req, 'Done — waiting for you in the Manager’s office', true); }
+  if (item.req){ item.req.result = (item.req.when !== undefined && (item.answerAs || w.key) === 'sec' ? reminderAnswer(item.req.text, item.req.when) : typeof realAnswer === 'function' ? realAnswer(item.answerAs || w.key, item.req.text) : null) || SKILL_RESULT[item.answerAs || w.key]; item.req.by = w.key; setReq(item.req, 'Done — waiting for you in the Manager’s office', true); }
   refreshAttention();
 }
 function openJob(j){
@@ -2236,9 +2236,9 @@ function renderReqs(){
     ul.appendChild(li);
   }
 }
-function sendRequest(text){
+function sendRequest(text, when){
   const route = routeRequest(text);
-  const r = {id: ++reqId, text, route, ref: refFor(text)};
+  const r = {id: ++reqId, text, route, ref: refFor(text)}; if (when !== undefined) r.when = when;
   REQS.unshift(r); setReq(r, 'Waiting for the Manager');
   managerTask({kind:'req', req:r, worker:route.k, label:'a request'});
 }
@@ -2247,10 +2247,15 @@ document.getElementById('reqForm').addEventListener('submit', e => {
   e.preventDefault();
   const inp = document.getElementById('reqInput'), text = inp.value.trim(); if (!text) return;
   inp.value = '';
-  if (reminderNeedsDate(text)) return askWhen(reqAsk, text, 'mgr', when => {
-    sendRequest(withWhen(text, when)); reqAsk.innerHTML = '';
-    toast(when ? 'Got it — the Secretary will remind you on ' + dayName(when) + '.' : 'Got it — the Secretary will keep it on your list without a date.');
-  });
+  const go = (iso, from) => {
+    sendRequest(text, iso === undefined ? undefined : iso === null ? {date:null} : {date: iso, from: from || null}); reqAsk.innerHTML = '';
+    if (iso !== undefined) toast(iso ? 'Got it — the Secretary will remind you on ' + dayName(iso) + '.' : 'Got it — the Secretary will keep it on your list without a date.');
+  };
+  if (reminderNeedsDate(text)) return askWhen(reqAsk, text, 'mgr', (iso, from) => go(iso, from));
+  if (isReminderText(text) && /\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/i.test(text)){
+    const w = parseWhen(text);
+    if (w.found && w.date && holidayOn(w.date)) return confirmDate(reqAsk, w.date, 'mgr', (iso, from) => go(iso, from));
+  }
   reqAsk.innerHTML = '';
   sendRequest(text);
 });
@@ -3781,18 +3786,66 @@ function remDue(){
   return REM.filter(r => !r.done && r.date && (r.date < today || (r.date === today && (!r.time || r.time <= hhmm))));
 }
 const remWhen = r => !r.date ? 'No date' : dayName(r.date) + (r.time ? ' at ' + new Date('2000-01-01T' + r.time).toLocaleTimeString('en-PH', {hour:'numeric', minute:'2-digit'}) : '');
-function reminderAnswer(text){
+function reminderAnswer(text, when){
   const L = String(text).toLowerCase();
   if (!/\bremind (me|us|gian|po)\b|\bset an? (reminder|alarm)\b|paalala|don'?t let me forget/.test(L)){
     const open = REM.filter(r => !r.done).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
     if (!open.length) return 'You have no reminders. Tell me “remind me on Monday to …” and I’ll write it down.';
     return 'Your reminders (' + open.length + '):\n' + open.map(r => '• ' + remWhen(r) + ' — ' + r.task + (r.links.length ? ' (' + r.links.join(', ') + ')' : '')).join('\n') + '\nClick the Secretary to change or delete them.';
   }
-  const {r, found} = addReminder(text), n = r.date ? daysUntil(r.date) : null;
+  let w = null;
+  if (when !== undefined && when !== null && typeof when === 'object'){ w = parseWhen(text); w.date = when.date; w.found = true; }
+  const {r, found} = addReminder(text, w || undefined), n = r.date ? daysUntil(r.date) : null;
+  const holNote = when && when.from ? '\n' + dayName(when.from) + ' is ' + holidayName(when.from) + ', so I set it for the ' + (when.date > when.from ? 'next' : 'last') + ' working day' + (when.date > when.from ? '' : ' before it') + '.'
+    : r.date && holidayOn(r.date) ? '\nNote: that day is ' + holidayName(r.date) + ' — you chose to keep it.' : '';
   return (r.date ? 'Done — I’ll remind you on ' + remWhen(r) + (n === 0 ? ' (today)' : n === 1 ? ' (tomorrow)' : ' (in ' + n + ' days)') : 'Done — it’s on your list without a date. Click me any time to see it or give it a date') + ':\n“' + r.task + '”'
-    + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. Click the Secretary to change the date.')
+    + holNote + (found ? '' : '\nYou didn’t say when, so I set it for tomorrow. Click the Secretary to change the date.')
     + (r.links.length ? '\nI linked: ' + r.links.map(no => { const q = quoteByNo(no), f = BIZ.rfqs.find(x => x.no === no); return no + ' (“' + ((f && f.ref) || (q && q.ref) || '') + '”)'; }).join(', ') + '.' : '')
     + (r.date ? '\nOn that day you’ll see a ! over my head. Click me to see it.' : '');
+}
+
+
+/* ---------- Philippine non-working holidays ----------
+   2026: Proclamation No. 1006 (s. 2025); Eid'l Fitr (Mar 20) and Eid'l Adha (May 27, Proclamation No. 1264) declared separately.
+   2027: Proclamation No. 1427 (s. 2026); Eid'l Fitr and Eid'l Adha will be declared separately later — add them when announced.
+   Special working days (e.g. EDSA Anniversary, Feb 25) are working days, so they are not listed. */
+const PH_HOLIDAYS = {
+  '2026-01-01':['New Year’s Day','regular holiday'], '2026-02-17':['Chinese New Year','special non-working day'], '2026-03-20':['Eid’l Fitr','regular holiday'],
+  '2026-04-02':['Maundy Thursday','regular holiday'], '2026-04-03':['Good Friday','regular holiday'], '2026-04-04':['Black Saturday','special non-working day'],
+  '2026-04-09':['Araw ng Kagitingan','regular holiday'], '2026-05-01':['Labor Day','regular holiday'], '2026-05-27':['Eid’l Adha','regular holiday'],
+  '2026-06-12':['Independence Day','regular holiday'], '2026-08-21':['Ninoy Aquino Day','special non-working day'], '2026-08-31':['National Heroes Day','regular holiday'],
+  '2026-11-01':['All Saints’ Day','special non-working day'], '2026-11-02':['All Souls’ Day','special non-working day'], '2026-11-30':['Bonifacio Day','regular holiday'],
+  '2026-12-08':['Feast of the Immaculate Conception','special non-working day'], '2026-12-24':['Christmas Eve','special non-working day'], '2026-12-25':['Christmas Day','regular holiday'],
+  '2026-12-30':['Rizal Day','regular holiday'], '2026-12-31':['Last Day of the Year','special non-working day'],
+  '2027-01-01':['New Year’s Day','regular holiday'], '2027-02-06':['Chinese New Year','special non-working day'], '2027-03-25':['Maundy Thursday','regular holiday'],
+  '2027-03-26':['Good Friday','regular holiday'], '2027-03-27':['Black Saturday','special non-working day'], '2027-04-09':['Araw ng Kagitingan','regular holiday'],
+  '2027-05-01':['Labor Day','regular holiday'], '2027-06-12':['Independence Day','regular holiday'], '2027-08-21':['Ninoy Aquino Day','special non-working day'],
+  '2027-08-30':['National Heroes Day','regular holiday'], '2027-11-01':['All Saints’ Day','special non-working day'], '2027-11-02':['All Souls’ Day','special non-working day'],
+  '2027-11-30':['Bonifacio Day','regular holiday'], '2027-12-08':['Feast of the Immaculate Conception','special non-working day'], '2027-12-24':['Christmas Eve','special non-working day'],
+  '2027-12-25':['Christmas Day','regular holiday'], '2027-12-30':['Rizal Day','regular holiday'], '2027-12-31':['Last Day of the Year','special non-working day']
+};
+const holidayOn = iso => (iso && PH_HOLIDAYS[iso]) || null;
+const isWorkday = iso => { const d = new Date(iso + 'T00:00:00').getDay(); return d !== 0 && d !== 6 && !PH_HOLIDAYS[iso]; };
+function nextWorkday(iso){ let d = new Date(iso + 'T00:00:00'); do { d = addDays(d, 1); } while (!isWorkday(isoOf(d))); return isoOf(d); }
+function prevWorkday(iso){ let d = new Date(iso + 'T00:00:00'); do { d = addDays(d, -1); } while (!isWorkday(isoOf(d))); return isoOf(d) >= todayIso() ? isoOf(d) : null; }
+function addWorkdays(from, n){ let d = new Date(from.getFullYear(), from.getMonth(), from.getDate()); while (n > 0){ d = addDays(d, 1); if (isWorkday(isoOf(d))) n--; } return isoOf(d); }
+const holidayName = iso => { const h = holidayOn(iso); return h ? h[0] + ' (' + h[1] + ')' : ''; };
+/* the target date is a holiday: the Manager (or Secretary) asks before saving */
+function confirmDate(host, iso, who, onPick){
+  if (!iso || !holidayOn(iso)) return onPick(iso, null);
+  const nx = nextWorkday(iso), pv = prevWorkday(iso);
+  host.innerHTML = '';
+  const say = document.createElement('div'); say.className = 'msay'; say.appendChild(avatar(who));
+  const p = document.createElement('p');
+  p.innerHTML = '<b>' + esc(dayName(iso)) + ' is ' + esc(holidayName(iso)) + '.</b> Would you like me to remind you on <b>' + esc(dayName(nx)) + '</b> instead — the next working day?';
+  say.appendChild(p); host.appendChild(say);
+  const row = document.createElement('div'); row.className = 'pbtns'; row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px';
+  const btn = (label, primary, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (primary ? ' primary' : ''); b.textContent = label; b.addEventListener('click', fn); row.appendChild(b); };
+  btn('Yes — ' + dayName(nx).replace(/, \d{4}$/, '') + ' (next working day)', true, () => { host.innerHTML = ''; onPick(nx, iso); });
+  if (pv) btn(dayName(pv).replace(/, \d{4}$/, '') + ' (the working day before)', false, () => { host.innerHTML = ''; onPick(pv, iso); });
+  btn('No — keep ' + dayName(iso).replace(/, \d{4}$/, ''), false, () => { host.innerHTML = ''; onPick(iso, null); });
+  host.appendChild(row);
+  host.scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block:'nearest'});
 }
 
 /* the Manager asks for a date when a reminder has none */
@@ -3800,17 +3853,24 @@ const reminderNeedsDate = t => isReminderText(t) && /\bremind (me|us|gian|po)\b|
 const withWhen = (text, iso) => text + (iso ? ' — on ' + new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : ' (no date)');
 function askWhen(host, text, who, onPick){
   const t = new Date(), mon = addDays(t, ((1 - t.getDay() + 7) % 7) || 7), follow = /follow|email|e-mail|reply|quote|quotation/i.test(text);
-  const choices = [['Today', isoOf(t)], ['Tomorrow', isoOf(addDays(t, 1))]];
-  if (follow) choices.push(['In 2 days — our follow-up rule', isoOf(addDays(t, 2))]);
-  choices.push([mon.toLocaleDateString('en-PH', {weekday:'long'}) + ', ' + mon.toLocaleDateString('en-PH', {month:'short', day:'numeric'}), isoOf(mon)], ['In a week', isoOf(addDays(t, 7))]);
+  const short = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric'});
+  const raw = [['Today', isoOf(t)], ['Tomorrow', isoOf(addDays(t, 1))]];
+  if (follow) raw.push(['In 2 working days — our follow-up rule', addWorkdays(t, 2)]);
+  raw.push([mon.toLocaleDateString('en-PH', {weekday:'long'}) + ', ' + mon.toLocaleDateString('en-PH', {month:'short', day:'numeric'}), isoOf(mon)], ['In a week', isoOf(addDays(t, 7))]);
+  const choices = [], seen = new Set();
+  for (const [label, iso] of raw){
+    const h = holidayOn(iso), d = h ? nextWorkday(iso) : iso;   // a holiday is replaced by the next working day
+    if (seen.has(d)) continue; seen.add(d);
+    choices.push([h ? short(d) + ' — ' + short(iso) + ' is ' + h[0] : label, d]);
+  }
   host.innerHTML = '';
   const say = document.createElement('div'); say.className = 'msay'; say.appendChild(avatar(who));
-  const p = document.createElement('p'); p.innerHTML = '<b>When should I remind you?</b> You didn’t give a date for “' + esc(reminderTask(text, [])) + '”. Do you have one in mind?' + (follow ? ' Our rule is to follow up within 2 days.' : '');
+  const p = document.createElement('p'); p.innerHTML = '<b>When should I remind you?</b> You didn’t give a date for “' + esc(reminderTask(text, [])) + '”. Do you have one in mind?' + (follow ? ' Our rule is to follow up within 2 working days.' : '');
   say.appendChild(p); host.appendChild(say);
   const row = document.createElement('div'); row.className = 'pbtns'; row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px';
-  for (const [label, iso] of choices){ const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (label.startsWith('In 2 days') ? ' primary' : ''); b.textContent = label; b.addEventListener('click', () => onPick(iso)); row.appendChild(b); }
+  for (const [label, iso] of choices){ const b = document.createElement('button'); b.type = 'button'; b.className = 'btn' + (/follow-up rule/.test(label) ? ' primary' : ''); b.textContent = label; b.addEventListener('click', () => onPick(iso)); row.appendChild(b); }
   const d = document.createElement('input'); d.type = 'date'; d.className = 'btn'; d.min = isoOf(t); d.title = 'Pick a date'; d.setAttribute('aria-label', 'Pick a date');
-  d.addEventListener('change', () => { if (d.value) onPick(d.value); }); row.appendChild(d);
+  d.addEventListener('change', () => { if (d.value) confirmDate(host, d.value, who, (iso, from) => onPick(iso, from)); }); row.appendChild(d);
   const n = document.createElement('button'); n.type = 'button'; n.className = 'btn'; n.textContent = 'No date — just keep it on my list'; n.addEventListener('click', () => onPick(null)); row.appendChild(n);
   host.appendChild(row);
   host.scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block:'nearest'});
@@ -3849,7 +3909,7 @@ VIEWS.reminders = function(){
     }
     if (!isDue && !r.done){
       const d = document.createElement('input'); d.type = 'date'; d.value = r.date; d.title = 'Change the date'; d.className = 'btn';
-      d.addEventListener('change', () => { if (d.value){ r.date = d.value; again(); } }); fa.appendChild(d);
+      d.addEventListener('change', () => { if (!d.value) return; const host = document.createElement('div'); e.appendChild(host); confirmDate(host, d.value, 'sec', iso => { r.date = iso; again(); }); }); fa.appendChild(d);
     }
     b('Delete', () => { REM = REM.filter(x => x !== r); toast('Reminder deleted.'); again(); });
     return e;
@@ -3868,6 +3928,7 @@ VIEWS.reminders = function(){
     const w = parseWhen(t.value); if (dt.value){ w.date = dt.value; w.found = true; }
     const save = w2 => { const {r} = addReminder(t.value, w2); toast(r.date ? 'The Secretary will remind you on ' + remWhen(r) + '.' : 'Kept on your list without a date.'); again(); };
     if (!w.found) return askWhen(ask, t.value, 'sec', iso => save(Object.assign(w, {date: iso, found: true})));
+    if (w.date && holidayOn(w.date)) return confirmDate(ask, w.date, 'sec', iso => save(Object.assign(w, {date: iso})));
     save(w);
   });
   dlgBody.appendChild(f);
@@ -3883,7 +3944,7 @@ let workLoaded = false;   // never save before the saved work has been read back
 function saveWork(){
   if (!workLoaded) return;
   try {
-    const reqs = REQS.slice(0, 20).map(r => ({id:r.id, text:r.text, route:r.route, ref:r.ref, status:r.status, done:r.done, result:r.result, by:r.by}));
+    const reqs = REQS.slice(0, 20).map(r => ({id:r.id, text:r.text, route:r.route, ref:r.ref, status:r.status, done:r.done, result:r.result, by:r.by, when:r.when}));
     const reps = REPORTS.slice(0, 30).map(x => ({kind:x.item.kind, reqId:x.item.req ? x.item.req.id : null, job:x.item.kind === 'job' ? {kind:x.item.job.kind, parsed:x.item.job.parsed, title:x.item.job.title} : null, worker:x.worker, seen:x.seen, closed:x.closed, at:+x.at}));
     const jb = job && !job.report ? {kind:job.kind, parsed:job.parsed, title:job.title} : null;
     localStorage.setItem(WORK_KEY, JSON.stringify({reqId, reqs, reps, job:jb}));
