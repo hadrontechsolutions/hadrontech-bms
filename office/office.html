@@ -1543,8 +1543,7 @@ function logDecision(t, d){
     + (task ? '<p><b>Task:</b> ' + esc(task.text) + ' — ' + esc(PEOPLE[task.who]) + ', due ' + (task.due ? fmt(day(task.due)) : 'today') + '</p>' : '')
     + '<small>Manager reviews this decision on ' + fmt(day(t.review)) + ' to check if it worked.</small>';
   const ref = refFor((task ? task.text : '') + ' ' + t.say.map(x => x[1]).join(' '));
-  DECISIONS.push({no: decisionNo, t, d, task, ref, seen:false});
-  if (task && typeof secretaryMinutes === 'function') secretaryMinutes(t, d, task);
+  DECISIONS.push({no: decisionNo, t, d, task, ref, seen:false});   // a task is added to the Secretary's list only when Gian clicks “Add to my reminders”
   if (ref) li.insertBefore(refLine({ref}), li.querySelector('p'));
   dl.prepend(li);
   refreshAttention();
@@ -2344,6 +2343,12 @@ function renderInbox(){
       li.innerHTML = '<div class="top"><span class="ft">#' + d.no + ' ' + esc(d.t.title) + '</span><span class="sev ' + ({approve:'done', reject:'urgent', data:'fyi', notnow:'week'}[d.d.kind]) + '">' + d.d.label + '</span></div><div class="fd">' + esc(reasoning(d.t, d.d)) + '</div>'
         + (d.task ? '<div class="fd"><b>Task:</b> ' + esc(d.task.text) + ' — ' + esc(PEOPLE[d.task.who]) + '</div>' : '');
       if (d.ref) li.appendChild(refLine(d));
+      if (d.task){   // Gian decides what becomes a reminder
+        const fa = document.createElement('div'); fa.className = 'fa'; const b = document.createElement('button'); b.type = 'button'; b.className = 'btn';
+        const show = () => { const on = meetingTaskListed(d.t, d.task); b.textContent = on ? 'On the Secretary’s list ✓' : 'Add to my reminders'; b.disabled = on; };
+        show(); b.addEventListener('click', () => { const r = secretaryMinutes(d.t, d.d, d.task, d.no); if (r) toast('The Secretary will remind you on ' + dayName(r.date) + '.'); show(); refreshAttention(); });
+        fa.appendChild(b); li.appendChild(fa);
+      }
       ul.appendChild(li); d.seen = true;
     }
   }
@@ -3121,8 +3126,8 @@ const SHEET = {
   recs:{job:'Keeps the BMS clean and safe: backups, reference emails, currencies, duplicates and missing information.',
        checks:['Backup date', 'Quotations without reference emails', 'Product vs supplier currency', 'Supplier names'], skills:'data quality, backups',
        works:['Everyone: clean records make every check work']},
-  sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and puts every task from a meeting on her list, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a ! over her head.',
-       checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks decided in team meetings', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
+  sec:{job:'Takes load off the Manager: answers your quick questions herself (she checks with the right worker), keeps your reminders, takes the meeting minutes and adds a meeting’s task to her list when you click “Add to my reminders” in What’s new, and tidies the Manager’s lists so each quotation or order shows once. On a reminder’s day she shows a ! over her head.',
+       checks:['Your quick questions (contacts, prices, status, who sells what)', 'Your reminders and their dates', 'Tasks from team meetings that you added', 'Today’s Plan and What’s new — one item per quotation or order'], skills:'quick answers, dates, reminders, minutes',
        works:['Manager: she handles the quick questions so he only gets decisions', 'Every worker: she asks them for the facts behind your question']},
   legal:{job:'Keeps Hadrontech legal and on time: the BIR filing calendar from our Certificate of Registration (2551Q, 1701Q, 1701), books of accounts, the DTI business name, the business permit, and invoices under the Ease of Paying Taxes Act. A week before each deadline he gives the Secretary a reminder for you. He shows a ! when something needs your action — click him for the checklist.',
        checks:['BIR Certificate of Registration (Form 2303)', 'DTI Business Name certificate', 'Filing deadlines (moved off weekends and holidays)', 'Sales per quarter from the BMS, for the bookkeeper'], skills:'BIR deadlines, registrations, permits',
@@ -3902,12 +3907,15 @@ function remPrompt(r){
     + 'Keep it brief. If it is for several suppliers, write one email I can send to each, with a placeholder for the supplier name. Ask for their quotation (price, lead time, validity) if they have not sent it yet.';
 }
 /* minutes: a task decided in a team meeting becomes one reminder (never twice for the same task) */
-function secretaryMinutes(t, d, task){
-  const key = 'meet:' + t.id + ':' + task.text;
-  if (REM.some(r => r.key === key && (!r.done || (Date.now() - new Date(r.done)) < 30 * 864e5))) return;
-  REM.push({id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), key, src:'meeting', text:'meeting #' + decisionNo + ' “' + t.title + '” (' + d.label + ')',
-    task: task.text + (task.who && task.who !== 'gian' ? ' — for ' + PEOPLE[task.who] : ''), date: isoOf(addDays(new Date(), task.due || 0)), time:null, links: reminderLinks(task.text), created: new Date().toISOString(), done:null});
-  remSave();
+const meetKey = (t, task) => 'meet:' + t.id + ':' + task.text;
+const meetingTaskListed = (t, task) => REM.some(r => r.key === meetKey(t, task) && (!r.done || (Date.now() - new Date(r.done)) < 30 * 864e5));
+function secretaryMinutes(t, d, task, no){
+  const key = meetKey(t, task);
+  if (meetingTaskListed(t, task)) return null;
+  let date = isoOf(addDays(new Date(), task.due || 0)); if (holidayOn(date)) date = nextWorkday(date);
+  const r = {id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), key, src:'meeting', text:'meeting #' + (no || decisionNo) + ' “' + t.title + '” (' + d.label + ')',
+    task: task.text + (task.who && task.who !== 'gian' ? ' — for ' + PEOPLE[task.who] : ''), date, time:null, links: reminderLinks(task.text), created: new Date().toISOString(), done:null};
+  REM.push(r); remSave(); return r;
 }
 function secretarySays(text){ const d = document.createElement('div'); d.className = 'msay'; d.appendChild(avatar('sec')); const p = document.createElement('p'); p.innerHTML = text; d.appendChild(p); dlgBody.appendChild(d); return d; }
 VIEWS.reminders = function(){
